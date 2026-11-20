@@ -363,14 +363,16 @@ internal static class BarberCabinetData
     /// <param name="isPublished">Опубликована.</param>
     /// <param name="isBlocked">Скрыта администратором.</param>
     /// <param name="status">Допуск к публикации.</param>
+    /// <param name="id">Идентификатор кадра; по умолчанию один и тот же — для одиночных проверок.</param>
     /// <returns>Фотография карточки.</returns>
     public static BarberProfilePhotoResponse Photo(
         string? description = null,
         bool isPublished = true,
         bool isBlocked = false,
-        PhotoModerationStatus status = PhotoModerationStatus.Approved) =>
+        PhotoModerationStatus status = PhotoModerationStatus.Approved,
+        Guid? id = null) =>
         new(
-            Guid.Parse("9e100000-0000-4000-8000-0000000000b8"),
+            id ?? Guid.Parse("9e100000-0000-4000-8000-0000000000b8"),
             "/media/photo.jpg",
             "/media/photo.jpg?size=md",
             description,
@@ -700,6 +702,24 @@ internal sealed class FakeBarberProfileApi : IBarberProfileApi
     public Func<Guid, Guid, Task> RemoveSpecialization { get; set; } =
         static (_, _) => Task.CompletedTask;
 
+    public Func<Guid, PortfolioPhotoUpload, Task<Guid>> UploadPhoto { get; set; } =
+        static (_, _) => Task.FromResult(Guid.Parse("9e100000-0000-4000-8000-0000000000c8"));
+
+    public Func<Guid, Guid, Task> RemovePhoto { get; set; } =
+        static (_, _) => Task.CompletedTask;
+
+    public Func<Guid, Guid, string?, Task> UpdatePhotoDescription { get; set; } =
+        static (_, _, _) => Task.CompletedTask;
+
+    public Func<Guid, IReadOnlyList<Guid>, Task> ReorderPhotos { get; set; } =
+        static (_, _) => Task.CompletedTask;
+
+    public Func<Guid, Guid, Task> PublishPhoto { get; set; } =
+        static (_, _) => Task.CompletedTask;
+
+    public Func<Guid, Guid, Task> UnpublishPhoto { get; set; } =
+        static (_, _) => Task.CompletedTask;
+
     public int OwnCalls { get; private set; }
 
     public int SalonCalls { get; private set; }
@@ -721,6 +741,18 @@ internal sealed class FakeBarberProfileApi : IBarberProfileApi
     public List<(Guid ProfileId, Guid SpecializationId)> SpecializationAdds { get; } = [];
 
     public List<(Guid ProfileId, Guid SpecializationId)> SpecializationRemovals { get; } = [];
+
+    public List<(Guid ProfileId, PortfolioPhotoUpload Photo)> PhotoUploads { get; } = [];
+
+    public List<(Guid ProfileId, Guid PhotoId)> PhotoRemovals { get; } = [];
+
+    public List<(Guid ProfileId, Guid PhotoId, string? Description)> PhotoDescriptions { get; } = [];
+
+    public List<(Guid ProfileId, IReadOnlyList<Guid> PhotoIds)> PhotoReorders { get; } = [];
+
+    public List<(Guid ProfileId, Guid PhotoId)> PhotoPublications { get; } = [];
+
+    public List<(Guid ProfileId, Guid PhotoId)> PhotoUnpublications { get; } = [];
 
     public async Task<BarberProfileResponse> GetOwnAsync(
         Guid barberProfileId,
@@ -837,6 +869,67 @@ internal sealed class FakeBarberProfileApi : IBarberProfileApi
         SpecializationRemovals.Add((barberProfileId, specializationId));
 
         await RemoveSpecialization(barberProfileId, specializationId);
+    }
+
+    public async Task<Guid> UploadPhotoAsync(
+        Guid barberProfileId,
+        PortfolioPhotoUpload photo,
+        CancellationToken cancellationToken = default)
+    {
+        PhotoUploads.Add((barberProfileId, photo));
+
+        return await UploadPhoto(barberProfileId, photo);
+    }
+
+    public async Task RemovePhotoAsync(
+        Guid barberProfileId,
+        Guid photoId,
+        CancellationToken cancellationToken = default)
+    {
+        PhotoRemovals.Add((barberProfileId, photoId));
+
+        await RemovePhoto(barberProfileId, photoId);
+    }
+
+    public async Task UpdatePhotoDescriptionAsync(
+        Guid barberProfileId,
+        Guid photoId,
+        string? description,
+        CancellationToken cancellationToken = default)
+    {
+        PhotoDescriptions.Add((barberProfileId, photoId, description));
+
+        await UpdatePhotoDescription(barberProfileId, photoId, description);
+    }
+
+    public async Task ReorderPhotosAsync(
+        Guid barberProfileId,
+        IReadOnlyList<Guid> photoIds,
+        CancellationToken cancellationToken = default)
+    {
+        PhotoReorders.Add((barberProfileId, photoIds));
+
+        await ReorderPhotos(barberProfileId, photoIds);
+    }
+
+    public async Task PublishPhotoAsync(
+        Guid barberProfileId,
+        Guid photoId,
+        CancellationToken cancellationToken = default)
+    {
+        PhotoPublications.Add((barberProfileId, photoId));
+
+        await PublishPhoto(barberProfileId, photoId);
+    }
+
+    public async Task UnpublishPhotoAsync(
+        Guid barberProfileId,
+        Guid photoId,
+        CancellationToken cancellationToken = default)
+    {
+        PhotoUnpublications.Add((barberProfileId, photoId));
+
+        await UnpublishPhoto(barberProfileId, photoId);
     }
 }
 

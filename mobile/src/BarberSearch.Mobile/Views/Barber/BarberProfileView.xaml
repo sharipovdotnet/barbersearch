@@ -9,9 +9,10 @@
     x:DataType="vm:BarberCabinetProfileViewModel">
 
     <!--
-        Раздел «Профиль»: карточка, фотографии (только чтение), прайс и специализации.
-        Формы правки — отдельные экраны поверх кабинета, поэтому раздел не держит полей
-        ввода: он показывает агрегат и поднимает события, а страница переходит по маршруту.
+        Раздел «Профиль»: карточка, фотографии, прайс и специализации.
+        Правка — отдельные экраны поверх кабинета, поэтому раздел не держит полей ввода:
+        он показывает агрегат и переходит по маршруту. Сетка фото только показывает кадры,
+        а загрузка, подпись, порядок и публикация живут на экране одного фото.
 
         Правка профиля и услуги — зарегистрированные дочерние страницы: раздел передаёт
         им параметры и гасит себя перед переходом, а маршруты живут в AppShell.
@@ -349,26 +350,44 @@
                     </VerticalStackLayout>
                 </Border>
 
-                <!-- Фотографии: только чтение, загрузка и порядок остаются вебу. -->
+                <!-- Фотографии: загрузка, порядок, подпись и публикация — как в вебе. -->
                 <Border
                     Padding="16"
                     Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
                     StrokeShape="RoundRectangle 10">
                     <VerticalStackLayout Spacing="8">
-                        <Label
-                            FontFamily="GeistSemiBold"
-                            FontSize="16"
-                            Text="{loc:Translate Key='Фотографии'}" />
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <Label
+                                FontFamily="GeistSemiBold"
+                                FontSize="16"
+                                Text="{loc:Translate Key='Фотографии'}"
+                                VerticalTextAlignment="Center" />
+                            <Button
+                                Grid.Column="1"
+                                Clicked="OnAddPhotoClicked"
+                                IsEnabled="{Binding CanAddPhoto}"
+                                Text="{loc:Translate Key='Добавить фото'}" />
+                        </Grid>
+
                         <Label
                             FontSize="12"
                             LineBreakMode="WordWrap"
-                            Text="{loc:Translate Key='Фотографии добавляются и упорядочиваются на сайте.'}"
+                            Text="{loc:Translate Key='Работы видны в вашей карточке. Первое фото показывается первым.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <!-- Предел портфолио: кнопка добавления гаснет, а строка объясняет почему. -->
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding IsPhotoLimitReached}"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='В портфолио уже 10 фото. Удалите одно, чтобы добавить новое.'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
                         <Label
                             FontSize="12"
                             IsVisible="True"
                             LineBreakMode="WordWrap"
-                            Text="{loc:Translate Key='Фотографий нет. Работы добавляются на сайте.'}"
+                            Text="{loc:Translate Key='Фотографий нет. Добавьте работы, чтобы клиенты видели ваш стиль.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
                             <Label.Triggers>
                                 <DataTrigger
@@ -379,6 +398,24 @@
                                 </DataTrigger>
                             </Label.Triggers>
                         </Label>
+
+                        <!-- Фото открывается нажатием: подсказка нужна только при непустой сетке. -->
+                        <Label
+                            FontSize="12"
+                            IsVisible="False"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='Нажмите на фото, чтобы изменить его.'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
+                            <Label.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding HasPhotos}"
+                                    TargetType="Label"
+                                    Value="True">
+                                    <Setter Property="IsVisible" Value="True" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+
                         <FlexLayout
                             x:Name="PhotoTilesHost"
                             AlignItems="Start"
@@ -390,6 +427,9 @@
                                         Margin="0,0,8,8"
                                         Spacing="4"
                                         WidthRequest="104">
+                                        <VerticalStackLayout.GestureRecognizers>
+                                            <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnPhotoTapped" />
+                                        </VerticalStackLayout.GestureRecognizers>
                                         <Border
                                             HeightRequest="104"
                                             Padding="0"
@@ -644,7 +684,7 @@
                                     VerticalOptions="Center" />
                             </HorizontalStackLayout>
 
-                            <!-- Справочник не ответил: причина и повтор. -->
+                            <!-- Справочник не ответил: причина и строка автоповтора, без кнопки. -->
                             <VerticalStackLayout IsVisible="True" Spacing="8">
                                 <VerticalStackLayout.Triggers>
                                     <DataTrigger
@@ -658,12 +698,11 @@
                                     LineBreakMode="WordWrap"
                                     Text="{Binding SpecializationError}"
                                     TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
-                                <Button
-                                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
-                                    Command="{Binding RetrySpecializationsCommand}"
-                                    HorizontalOptions="Start"
-                                    Text="{loc:Translate Key='Повторить'}"
-                                    TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                                <Label
+                                    FontSize="12"
+                                    IsVisible="{Binding IsSpecializationAutoRetrying}"
+                                    Text="{loc:Translate Key='Пробуем снова…'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                             </VerticalStackLayout>
 
                             <VerticalStackLayout IsVisible="{Binding HasAvailableSpecializations}" Spacing="8">

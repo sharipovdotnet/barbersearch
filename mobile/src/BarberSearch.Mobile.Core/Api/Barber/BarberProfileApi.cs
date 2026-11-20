@@ -1,13 +1,17 @@
 using System.Globalization;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using BarberSearch.Contracts.BarberProfiles.AddBarberProfileSalon;
 using BarberSearch.Contracts.BarberProfiles.AddBarberProfileService;
 using BarberSearch.Contracts.BarberProfiles.CreateBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfileSalons;
+using BarberSearch.Contracts.BarberProfiles.ReorderBarberProfilePhotos;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfileService;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Contracts.PortfolioPhotos.UpdatePortfolioPhotoDescription;
 
 namespace BarberSearch.Mobile.Core.Api.Barber;
 
@@ -16,8 +20,9 @@ namespace BarberSearch.Mobile.Core.Api.Barber;
 /// </summary>
 /// <remarks>
 /// Дочерние сущности адресуются через профиль (<c>api/barber-profiles/{id}/...</c>): они
-/// правятся только через агрегат-корень, и маршрут это отражает. Все записи, кроме создания,
-/// отвечают <c>204</c>, поэтому их тело не читается. <c>X-CSRF-TOKEN</c> не отправляется:
+/// правятся только через агрегат-корень, и маршрут это отражает. Записи отвечают <c>204</c>,
+/// поэтому их тело не читается; <c>201</c> есть только у создания профиля и у загрузки
+/// фотографии — там клиенту нужен идентификатор из ответа. <c>X-CSRF-TOKEN</c> не отправляется:
 /// клиент Bearer, а не cookie.
 /// </remarks>
 public sealed class BarberProfileApi : IBarberProfileApi
@@ -300,6 +305,168 @@ public sealed class BarberProfileApi : IBarberProfileApi
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
+    public async Task<Guid> UploadPhotoAsync(
+        Guid barberProfileId,
+        PortfolioPhotoUpload photo,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureProfileId(barberProfileId);
+        ArgumentNullException.ThrowIfNull(photo);
+
+        using var form = new MultipartFormDataContent();
+
+        var fileContent = new ByteArrayContent(photo.Content);
+
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(photo.ContentType);
+        form.Add(fileContent, "file", photo.FileName);
+
+        // Пустая подпись — не отсутствие поля: сервер ждёт часть description всегда и сам
+        // превращает пустую строку в null.
+        form.Add(
+            new StringContent(photo.Description ?? string.Empty, Encoding.UTF8),
+            "description");
+
+        using var httpRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            BuildPhotoPath(barberProfileId, "upload"))
+        {
+            Content = form,
+        };
+
+        using var response = await _httpClient
+            .SendAsync(httpRequest, cancellationToken)
+            .ConfigureAwait(false);
+
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+
+        var created = await response.Content
+            .ReadFromJsonAsync<CreatedResourceResponse>(ApiJson.Options, cancellationToken)
+            .ConfigureAwait(false);
+
+        return created is null || created.Id == Guid.Empty
+            ? throw new InvalidOperationException("The API returned an empty photo response.")
+            : created.Id;
+    }
+
+    /// <inheritdoc />
+    public async Task RemovePhotoAsync(
+        Guid barberProfileId,
+        Guid photoId,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureProfileId(barberProfileId);
+        EnsurePhotoId(photoId);
+
+        using var response = await _httpClient
+            .DeleteAsync(BuildPhotoPath(barberProfileId, photoId), cancellationToken)
+            .ConfigureAwait(false);
+
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task UpdatePhotoDescriptionAsync(
+        Guid barberProfileId,
+        Guid photoId,
+        string? description,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureProfileId(barberProfileId);
+        EnsurePhotoId(photoId);
+
+        // Пробелы по краям не подпись: пустое после Trim значение уходит как null, чтобы
+        // сервер не сохранял строку из одних пробелов.
+        var normalized = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+
+        using var httpRequest = new HttpRequestMessage(
+            HttpMethod.Put,
+            BuildPhotoPath(barberProfileId, string.Concat(
+                photoId.ToString("D", CultureInfo.InvariantCulture),
+                "/description")))
+        {
+            Content = JsonContent.Create(
+                new UpdatePortfolioPhotoDescriptionRequest(normalized),
+                options: ApiJson.Options),
+        };
+
+        using var response = await _httpClient
+            .SendAsync(httpRequest, cancellationToken)
+            .ConfigureAwait(false);
+
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task ReorderPhotosAsync(
+        Guid barberProfileId,
+        IReadOnlyList<Guid> photoIds,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureProfileId(barberProfileId);
+        ArgumentNullException.ThrowIfNull(photoIds);
+
+        using var httpRequest = new HttpRequestMessage(
+            HttpMethod.Put,
+            BuildPhotoPath(barberProfileId, "order"))
+        {
+            Content = JsonContent.Create(
+                new ReorderBarberProfilePhotosRequest(photoIds),
+                options: ApiJson.Options),
+        };
+
+        using var response = await _httpClient
+            .SendAsync(httpRequest, cancellationToken)
+            .ConfigureAwait(false);
+
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task PublishPhotoAsync(
+        Guid barberProfileId,
+        Guid photoId,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureProfileId(barberProfileId);
+        EnsurePhotoId(photoId);
+
+        using var response = await _httpClient
+            .PostAsync(
+                BuildPhotoPath(
+                    barberProfileId,
+                    string.Concat(
+                        photoId.ToString("D", CultureInfo.InvariantCulture),
+                        "/publication")),
+                content: null,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task UnpublishPhotoAsync(
+        Guid barberProfileId,
+        Guid photoId,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureProfileId(barberProfileId);
+        EnsurePhotoId(photoId);
+
+        using var response = await _httpClient
+            .DeleteAsync(
+                BuildPhotoPath(
+                    barberProfileId,
+                    string.Concat(
+                        photoId.ToString("D", CultureInfo.InvariantCulture),
+                        "/publication")),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Собирает адрес профиля или его дочернего ресурса.
     /// </summary>
@@ -313,6 +480,20 @@ public sealed class BarberProfileApi : IBarberProfileApi
                 barberProfileId.ToString("D", CultureInfo.InvariantCulture),
                 "/",
                 tail);
+
+    /// <summary>
+    /// Собирает адрес портфолио или его части.
+    /// </summary>
+    private static string BuildPhotoPath(Guid barberProfileId, string tail) =>
+        BuildProfilePath(barberProfileId, string.Concat("photos/", tail));
+
+    /// <summary>
+    /// Собирает адрес конкретной фотографии.
+    /// </summary>
+    private static string BuildPhotoPath(Guid barberProfileId, Guid photoId) =>
+        BuildPhotoPath(
+            barberProfileId,
+            photoId.ToString("D", CultureInfo.InvariantCulture));
 
     /// <summary>
     /// Собирает адрес услуги в прайсе.
@@ -342,6 +523,19 @@ public sealed class BarberProfileApi : IBarberProfileApi
             throw new ArgumentException(
                 "The barber profile identifier must not be empty.",
                 nameof(barberProfileId));
+        }
+    }
+
+    /// <summary>
+    /// Отсекает пустой идентификатор фотографии до запроса.
+    /// </summary>
+    private static void EnsurePhotoId(Guid photoId)
+    {
+        if (photoId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "The photo identifier must not be empty.",
+                nameof(photoId));
         }
     }
 

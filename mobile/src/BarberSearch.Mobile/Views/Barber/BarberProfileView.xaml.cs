@@ -23,10 +23,11 @@ namespace BarberSearch.Mobile.Views.Barber;
 /// раздел передаёт им параметры, а страницы и переходы создаёт Shell.
 /// </para>
 /// <para>
-/// Фотографии — только чтение, и адрес картинки — дело экрана: Core не знает базового
-/// адреса API. Поэтому сетка строится здесь из <see cref="BarberProfilePhotoItem"/> через
-/// <see cref="MediaUrl"/>, а готовые плитки лежат в локальной коллекции, а не в ViewModel:
-/// второго состояния карточки не появляется.
+/// Адрес картинки — дело экрана: Core не знает базового адреса API. Поэтому сетка
+/// строится здесь из <see cref="BarberProfilePhotoItem"/> через <see cref="MediaUrl"/>,
+/// а готовые плитки лежат в локальной коллекции, а не в ViewModel: второго состояния
+/// карточки не появляется. Сами действия над кадром живут на отдельном экране
+/// (<see cref="BarberPhotoPage"/>): раздел передаёт ему снимок списка и переходит.
 /// </para>
 /// <para>
 /// Выбор специализации в пикере — единственное локальное состояние: у ViewModel нет
@@ -43,6 +44,7 @@ public partial class BarberProfileView : ContentView
     private readonly ObservableCollection<BarberProfilePhotoTile> _photoTiles = [];
 
     private Guid? _selectedSpecializationId;
+    private bool _isNavigating;
 
     /// <summary>
     /// Создаёт раздел, подписывается на события ViewModel и строит сетку фотографий.
@@ -143,7 +145,9 @@ public partial class BarberProfileView : ContentView
     /// <returns>Задача перехода.</returns>
     private async Task OpenServiceEditorAsync(BarberServiceItem? item)
     {
-        if (_viewModel.BarberProfileId is not { } profileId)
+        var profileId = _viewModel.BarberProfileId;
+
+        if (profileId == Guid.Empty)
         {
             return;
         }
@@ -174,7 +178,9 @@ public partial class BarberProfileView : ContentView
     /// </remarks>
     private async void OnPreviewRequested(object? sender, EventArgs e)
     {
-        if (_viewModel.BarberProfileId is not { } profileId)
+        var profileId = _viewModel.BarberProfileId;
+
+        if (profileId == Guid.Empty)
         {
             return;
         }
@@ -190,7 +196,9 @@ public partial class BarberProfileView : ContentView
     /// </summary>
     private async void OnShareProfileRequested(object? sender, EventArgs e)
     {
-        if (_viewModel.BarberProfileId is not { } profileId)
+        var profileId = _viewModel.BarberProfileId;
+
+        if (profileId == Guid.Empty)
         {
             return;
         }
@@ -211,6 +219,80 @@ public partial class BarberProfileView : ContentView
         catch (Exception)
         {
             // Системный лист недоступен: профиль остаётся на экране, причина не блокирует работу.
+        }
+    }
+
+    /// <summary>
+    /// Открывает загрузку нового кадра портфолио.
+    /// </summary>
+    /// <param name="sender">Кнопка «Добавить фото».</param>
+    /// <param name="e">Аргументы события.</param>
+    private async void OnAddPhotoClicked(object? sender, EventArgs e) =>
+        await OpenPhotoAsync(item: null);
+
+    /// <summary>
+    /// Открывает выбранный кадр портфолио: подпись, порядок, публикация и удаление.
+    /// </summary>
+    /// <param name="sender">Контейнер плитки.</param>
+    /// <param name="e">Параметр нажатия — плитка фотографии.</param>
+    private async void OnPhotoTapped(object? sender, TappedEventArgs e)
+    {
+        if (e.Parameter is not BarberProfilePhotoTile tile)
+        {
+            return;
+        }
+
+        var item = _viewModel.Photos.FirstOrDefault(photo => photo.Id == tile.PhotoId);
+
+        if (item is null)
+        {
+            return;
+        }
+
+        await OpenPhotoAsync(item);
+    }
+
+    /// <summary>
+    /// Переход на экран фото: раздел передаёт снимок списка, чтобы экран знал соседей.
+    /// </summary>
+    /// <remarks>
+    /// Флаг <c>_isNavigating</c> гасит второе нажатие: два перехода подряд положили бы
+    /// на стек две страницы одной фотографии. Раздел перед переходом засыпает — Shell
+    /// не поднимает <c>OnDisappearing</c> у страницы, поверх которой открыли следующую.
+    /// </remarks>
+    /// <param name="item">Кадр для правки; <c>null</c> — загрузка нового.</param>
+    /// <returns>Задача перехода.</returns>
+    private async Task OpenPhotoAsync(BarberProfilePhotoItem? item)
+    {
+        var profileId = _viewModel.BarberProfileId;
+
+        if (_isNavigating || profileId == Guid.Empty || Shell.Current is not { } shell)
+        {
+            return;
+        }
+
+        _isNavigating = true;
+
+        try
+        {
+            _viewModel.Deactivate();
+
+            var parameters = new Dictionary<string, object>
+            {
+                ["profileId"] = profileId,
+                ["photos"] = _viewModel.Photos.ToList(),
+            };
+
+            if (item is not null)
+            {
+                parameters["photoId"] = item.Id;
+            }
+
+            await shell.GoToAsync(BarberPhotoPage.Route, parameters);
+        }
+        finally
+        {
+            _isNavigating = false;
         }
     }
 
@@ -369,6 +451,7 @@ public partial class BarberProfileView : ContentView
                 var imageUrl = MediaUrl.Resolve(_apiOptions.BaseAddress, tileUrl);
                 var requiresBearer = !photo.IsVisibleToClients && IsApiMediaUrl(imageUrl);
                 var tile = new BarberProfilePhotoTile(
+                    photo.Id,
                     imageUrl,
                     photo.Caption,
                     photo.HasCaption,
@@ -442,13 +525,17 @@ public partial class BarberProfileView : ContentView
 }
 
 /// <summary>
-/// Плитка фотографии портфолио в кабинете: адрес картинки и подписи.
+/// Плитка фотографии портфолио в кабинете: идентификатор, адрес картинки и подписи.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Проекция нужна только разметке: <see cref="BarberProfilePhotoItem"/> отдаёт
 /// относительный адрес, а <c>Image</c> ждёт абсолютный. Тип лежит в приложении, потому
 /// что склейку с базой API делает экран, а не Core.
+/// </para>
+/// <para>
+/// Идентификатор кадра переезжает в плитку: по нажатию раздел находит исходную строку
+/// в <c>Photos</c> и передаёт её экрану фото — второй копии данных в плитке нет.
 /// </para>
 /// <para>
 /// Публичный кадр грузит платформа по адресу; неодобренный так получить нельзя — раздача
@@ -464,6 +551,7 @@ public sealed class BarberProfilePhotoTile : INotifyPropertyChanged
     /// <summary>
     /// Создаёт плитку из строки ответа.
     /// </summary>
+    /// <param name="photoId">Идентификатор фотографии.</param>
     /// <param name="imageUrl">Абсолютный адрес миниатюры.</param>
     /// <param name="caption">Подпись владельца либо «Без подписи».</param>
     /// <param name="hasCaption">Подпись заполнена.</param>
@@ -472,6 +560,7 @@ public sealed class BarberProfilePhotoTile : INotifyPropertyChanged
     /// Кадр доступен анонимно и его можно отдать загрузчику картинок платформы.
     /// </param>
     public BarberProfilePhotoTile(
+        Guid photoId,
         string imageUrl,
         string caption,
         bool hasCaption,
@@ -482,6 +571,7 @@ public sealed class BarberProfilePhotoTile : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(caption);
         ArgumentNullException.ThrowIfNull(statusText);
 
+        PhotoId = photoId;
         ImageUrl = imageUrl;
         Image = isVisibleToClients ? ImageSource.FromUri(new Uri(imageUrl)) : null;
         Caption = caption;
@@ -491,6 +581,11 @@ public sealed class BarberProfilePhotoTile : INotifyPropertyChanged
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>
+    /// Идентификатор фотографии: по нему нажатие находит строку в разделе.
+    /// </summary>
+    public Guid PhotoId { get; }
 
     /// <summary>
     /// Абсолютный адрес миниатюры.

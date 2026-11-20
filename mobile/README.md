@@ -7,7 +7,7 @@ grid, booking, the customer's bookings, favourites and — on Android — push r
 confirmed visit. An administrator also gets the moderation queues on the phone (see «Admin
 queues» below), and a barber gets the cabinet — bookings, schedule, salons and the public card
 (see «Кабинет мастера» below). The web keeps the professional surface that is not a phone job:
-importing old bookings, photo management, creating a salon and managing its barbers, and the
+importing old bookings, creating a salon and managing its barbers, and the
 notification settings; the rest of the admin section stays there too.
 
 ## Layout
@@ -327,14 +327,15 @@ recorded in `AGENT.md` §5.
 
 | Section | What it does |
 |---|---|
-| «Записи» | «Сегодня» (the day feed built from both scopes, with the free windows and the next client), «Ближайшие» and «История». Confirm, complete, no-show, cancel with a reason, reschedule, note and price; «Записать клиента» opens the create form; a client's phone is a `tel:` link. The active list re-reads itself every 30 seconds while the section is on screen. |
+| «Записи» | «Сегодня» (the day feed built from both scopes, with the free windows and the next client), «Ближайшие» and «История». Confirm, complete, no-show, cancel with a reason, reschedule, note and price; «Записать клиента» opens the create form from «Сегодня» and «Ближайшие», not from «История»; a client's phone is a `tel:` link. The active list re-reads itself every 30 seconds while the section is on screen. A failed next page keeps the rows and shows the reason; «Дальше» retries it. |
 | «Расписание» | The weekly template per salon, Monday to Sunday (working day or day off, hours), «Заполнить будни», one `PUT` for the whole week, the `409` conflict panel with the affected visits and «Всё равно сохранить», date exceptions and time offs. |
 | «Салоны» | The profile's attachments with their moderation status, the primary salon («Сделать основным»), a public-catalog search for a new place, and call / map / copy address / open this salon's schedule. |
-| «Профиль» | The card (name, grade, rating, experience, languages, payment, bio, late policy), the read-only photo grid, services and prices (add, edit, hide, restore), specializations, «Редактировать профиль», «Поделиться профилем» and «Открыть, как видят клиенты» — the last two only for a verified and active profile. |
+| «Профиль» | The card (name, grade, rating, experience, languages, payment, bio, late policy), the photo grid — tap a frame to upload, caption, reorder, hide, restore or delete it — services and prices (add, edit, hide, restore), specializations, «Редактировать профиль», «Поделиться профилем» and «Открыть, как видят клиенты» — the last two only for a verified and active profile. |
 
 Reads retry themselves while the screen or section is visible; writes show their reason and are
-never repeated silently (`AGENT.md` §5 lists both sides and the two picker catalogs that keep only
-the button).
+never repeated silently (`AGENT.md` §5 lists both sides and the one picker catalog that keeps only
+the button). A cabinet card has no «Повторить», and in «Записи» a failed next page keeps its reason
+and is retried by «Дальше».
 
 ### Screens over the cabinet
 
@@ -347,6 +348,7 @@ the button).
 | `barber-notifications` | The notification inbox, keyset pages, «Прочитать все» | `owner` (the cabinet page), `barberProfileId` |
 | `barber-profile-edit` | Edits the public card; grade stays read-only | `owner`, `profile` |
 | `barber-service-editor` | Adds a service from the directory or edits its price and duration; hide and restore stay in the section | `owner`, `barberProfileId`, optional `item` |
+| `barber-photo` | One portfolio frame: upload (file picker, JPEG ≤ 1600 px and ≤ 5 MB prepared on the phone, caption up to 2000 characters) or edit (caption, «Выше»/«Ниже», «Скрыть»/«Вернуть», «Удалить» behind a confirmation); the 10-photo limit disables adding | `profileId`, `photos` (snapshot), optional `photoId` |
 
 ### API
 
@@ -376,6 +378,11 @@ Writes:
   `PUT api/barber-profiles/{id}/salons/{salonId}/primary`.
 - `POST api/barber-profiles/{id}/services`, `PUT|DELETE api/barber-profiles/{id}/services/{hairServiceId}`;
   `POST|DELETE api/barber-profiles/{id}/specializations/{specializationId}`.
+- `POST api/barber-profiles/{id}/photos/upload` (multipart `file` + `description`),
+  `DELETE api/barber-profiles/{id}/photos/{photoId}`,
+  `PUT api/barber-profiles/{id}/photos/{photoId}/description`,
+  `PUT api/barber-profiles/{id}/photos/order` (the full id list),
+  `POST|DELETE api/barber-profiles/{id}/photos/{photoId}/publication`.
 - `POST api/barber/notifications/{id}/read`, `POST api/barber/notifications/read-all`.
 - `POST api/auth/refresh` — the pair is rotated right after the profile is created, because the
   access token has no `barber_profile_id` claim yet.
@@ -395,8 +402,12 @@ Writes:
   read, and a later refresh keeps the content on screen.
 - **Error and auto-retry** — the reason and «Пробуем снова…» while the loop runs; a cabinet card
   has no «Повторить», because the loop is the retry, and a failed attempt keeps the rows and the
-  reason until the answer. The two lazy picker catalogues keep their own «Повторить», because they
-  arm no loop.
+  reason until the answer. A failed row action leaves only the reason in the row (a `409` says
+  «Запись уже изменилась — обновите список.»); the list is reread by pull-to-refresh or the
+  30-second refresh. A failed next page keeps the rows and the reason, and «Дальше» retries it —
+  there is no second button. The specialization picker's catalogue arms its own loop while the
+  picker is open, so its card shows the reason and «Пробуем снова…»; the service editor's
+  hair-service catalogue keeps its own «Повторить», because it arms no loop.
 - **Empty** — no bookings in the day or the scope, no attached salon, no exceptions, no time off,
   no notifications, no photos; each keeps the web's wording.
 - **Session expired** — the sign-in card with «Войти»; the cabinet stays on the stack, only the
@@ -411,8 +422,6 @@ Writes:
 ### What the cabinet cannot do
 
 - Import old bookings (`/barber/import`) — a text/ICS parser and a bulk load stay on the web.
-- Upload, reorder or caption portfolio photos — the phone shows the read-only grid and says the
-  site does it.
 - Create a salon or manage its barbers.
 - Change notification or Telegram settings — the «Профиль» tab carries the global «Присылать
   напоминания» switch.

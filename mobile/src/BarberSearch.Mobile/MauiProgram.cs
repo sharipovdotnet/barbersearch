@@ -14,6 +14,7 @@ using BarberSearch.Mobile.Core.Configuration;
 using BarberSearch.Mobile.Core.Legal;
 using BarberSearch.Mobile.Core.Localization;
 using BarberSearch.Mobile.Core.Location;
+using BarberSearch.Mobile.Core.Media;
 using BarberSearch.Mobile.Core.Push;
 using BarberSearch.Mobile.Core.Theming;
 using BarberSearch.Mobile.Core.ViewModels;
@@ -24,6 +25,7 @@ using BarberSearch.Mobile.Localization;
 using BarberSearch.Mobile.Navigation;
 using BarberSearch.Mobile.Pages;
 using BarberSearch.Mobile.Push;
+using BarberSearch.Mobile.Services;
 using BarberSearch.Mobile.Theming;
 using BarberSearch.Mobile.Views.Barber;
 using BarberBookingsSectionView = BarberSearch.Mobile.Views.Barber.BarberBookingsView;
@@ -233,6 +235,10 @@ public static class MauiProgram
         // состояния, за интерфейсом Core, чтобы экран проверялся без геокодера платформы.
         builder.Services.AddSingleton<ICityLocator, MauiCityLocator>();
 
+        // Файл портфолио выбирает галерея устройства (FilePicker), а уменьшает и
+        // перекодирует приложение: сервер принимает JPEG до 5 МБ. Синглтон без состояния.
+        builder.Services.AddSingleton<IPortfolioPhotoPicker, MauiPortfolioPhotoPicker>();
+
         // Подсказки города — часть экрана «Поиск»: одна секция на один ViewModel, поэтому
         // transient рядом с ним, а не синглтон.
         builder.Services.AddTransient<CitySuggestions>();
@@ -288,9 +294,10 @@ public static class MauiProgram
         builder.Services.AddTransient<BarberProfileView>();
 
         // Дочерние экраны кабинета живут один визит и открываются поверх его стека:
-        // форма записи клиента, перенос, заметка, онбординг, инбокс, правка карточки
-        // и редактор услуги. Свои чтения каждый из них повторяет сам (AutoRetryLoop
-        // регистрируется transient выше), поэтому второго состояния между заходами нет.
+        // форма записи клиента, перенос, заметка, онбординг, инбокс, правка карточки,
+        // редактор услуги и экран одного фото портфолио. Свои чтения каждый из них
+        // повторяет сам (AutoRetryLoop регистрируется transient выше), поэтому второго
+        // состояния между заходами нет.
         builder.Services.AddTransient<BarberBookingCreateViewModel>();
         builder.Services.AddTransient<BarberBookingRescheduleViewModel>();
         builder.Services.AddTransient<BarberBookingNoteViewModel>();
@@ -298,6 +305,7 @@ public static class MauiProgram
         builder.Services.AddTransient<BarberNotificationsViewModel>();
         builder.Services.AddTransient<BarberProfileEditViewModel>();
         builder.Services.AddTransient<BarberServiceEditorViewModel>();
+        builder.Services.AddTransient<BarberPhotoViewModel>();
 
         builder.Services.AddTransient<BarberBookingCreatePage>();
         builder.Services.AddTransient<BarberBookingReschedulePage>();
@@ -306,6 +314,7 @@ public static class MauiProgram
         builder.Services.AddTransient<BarberNotificationsPage>();
         builder.Services.AddTransient<BarberProfileEditPage>();
         builder.Services.AddTransient<BarberServiceEditorPage>();
+        builder.Services.AddTransient<BarberPhotoPage>();
 
         builder.Services.AddTransient<SearchPage>();
         builder.Services.AddTransient<BarberPage>();

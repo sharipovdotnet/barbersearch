@@ -4,8 +4,10 @@ using System.Text.Json;
 using BarberSearch.Contracts.BarberProfiles.AddBarberProfileSalon;
 using BarberSearch.Contracts.BarberProfiles.AddBarberProfileService;
 using BarberSearch.Contracts.BarberProfiles.CreateBarberProfile;
+using BarberSearch.Contracts.BarberProfiles.ReorderBarberProfilePhotos;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfile;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfileService;
+using BarberSearch.Contracts.PortfolioPhotos.UpdatePortfolioPhotoDescription;
 using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.Salons;
 using BarberSearch.Mobile.Core.Api;
@@ -410,6 +412,214 @@ public sealed class BarberProfileApiTests
         Assert.Null(handler.LastRequestUri);
     }
 
+    [Fact]
+    public async Task UploadPhotoAsync_Multipart_SendsFileAndDescriptionAndReturnsId()
+    {
+        var handler = new StubHandler(
+            HttpStatusCode.Created,
+            $$"""{"id":"{{CreatedId:D}}"}""");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberProfileApi(httpClient);
+        byte[] bytes = [0xFF, 0xD8, 0xFF, 0xE0];
+
+        var id = await api.UploadPhotoAsync(
+            BarberProfileId,
+            new PortfolioPhotoUpload(bytes, "portfolio.jpg", "image/jpeg", "Работа"));
+
+        Assert.Equal(CreatedId, id);
+        Assert.Equal(HttpMethod.Post, handler.LastMethod);
+        Assert.Equal(
+            string.Concat(
+                "/api/barber-profiles/",
+                BarberProfileId.ToString("D"),
+                "/photos/upload"),
+            handler.LastRequestUri!.AbsolutePath);
+        Assert.StartsWith("multipart/form-data", handler.LastContentType, StringComparison.Ordinal);
+        Assert.Equal("file", handler.FileFieldName);
+        Assert.Equal("portfolio.jpg", handler.FileName);
+        Assert.Equal("image/jpeg", handler.FileContentType);
+        Assert.Equal(bytes, handler.FileBytes);
+        Assert.Equal("Работа", handler.MultipartFields["description"]);
+    }
+
+    [Fact]
+    public async Task UploadPhotoAsync_NoDescription_SendsEmptyDescriptionPart()
+    {
+        var handler = new StubHandler(
+            HttpStatusCode.Created,
+            $$"""{"id":"{{CreatedId:D}}"}""");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberProfileApi(httpClient);
+
+        await api.UploadPhotoAsync(
+            BarberProfileId,
+            new PortfolioPhotoUpload([1, 2, 3], "portfolio.jpg", "image/jpeg", null));
+
+        // Поле description присутствует всегда: сервер сам превращает пустую строку в null.
+        Assert.Equal(string.Empty, handler.MultipartFields["description"]);
+    }
+
+    [Fact]
+    public async Task UploadPhotoAsync_CreatedWithoutId_Throws()
+    {
+        var handler = new StubHandler(HttpStatusCode.Created, "{}");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberProfileApi(httpClient);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => api.UploadPhotoAsync(
+                BarberProfileId,
+                new PortfolioPhotoUpload([1], "portfolio.jpg", "image/jpeg", null)));
+    }
+
+    [Fact]
+    public async Task RemovePhotoAsync_ValidIds_DeletesPhotoPath()
+    {
+        var handler = new StubHandler(HttpStatusCode.NoContent, string.Empty);
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberProfileApi(httpClient);
+
+        await api.RemovePhotoAsync(BarberProfileId, SpecializationId);
+
+        Assert.Equal(HttpMethod.Delete, handler.LastMethod);
+        Assert.Equal(
+            string.Concat(
+                "/api/barber-profiles/",
+                BarberProfileId.ToString("D"),
+                "/photos/",
+                SpecializationId.ToString("D")),
+            handler.LastRequestUri!.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task UpdatePhotoDescriptionAsync_Trimmed_PutsNormalizedBody()
+    {
+        var handler = new StubHandler(HttpStatusCode.NoContent, string.Empty);
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberProfileApi(httpClient);
+
+        await api.UpdatePhotoDescriptionAsync(
+            BarberProfileId,
+            SpecializationId,
+            "  Подпись  ");
+
+        Assert.Equal(HttpMethod.Put, handler.LastMethod);
+        Assert.Equal(
+            string.Concat(
+                "/api/barber-profiles/",
+                BarberProfileId.ToString("D"),
+                "/photos/",
+                SpecializationId.ToString("D"),
+                "/description"),
+            handler.LastRequestUri!.AbsolutePath);
+
+        var parsed = JsonSerializer.Deserialize<UpdatePortfolioPhotoDescriptionRequest>(
+            handler.LastBody!,
+            ApiJson.Options);
+
+        Assert.NotNull(parsed);
+        Assert.Equal("Подпись", parsed.Description);
+    }
+
+    [Fact]
+    public async Task UpdatePhotoDescriptionAsync_Whitespace_SendsNull()
+    {
+        var handler = new StubHandler(HttpStatusCode.NoContent, string.Empty);
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberProfileApi(httpClient);
+
+        await api.UpdatePhotoDescriptionAsync(BarberProfileId, SpecializationId, "   ");
+
+        var parsed = JsonSerializer.Deserialize<UpdatePortfolioPhotoDescriptionRequest>(
+            handler.LastBody!,
+            ApiJson.Options);
+
+        Assert.NotNull(parsed);
+        Assert.Null(parsed.Description);
+    }
+
+    [Fact]
+    public async Task ReorderPhotosAsync_FullList_PutsOrderBody()
+    {
+        var handler = new StubHandler(HttpStatusCode.NoContent, string.Empty);
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberProfileApi(httpClient);
+        Guid[] photoIds = [SpecializationId, CreatedId];
+
+        await api.ReorderPhotosAsync(BarberProfileId, photoIds);
+
+        Assert.Equal(HttpMethod.Put, handler.LastMethod);
+        Assert.Equal(
+            string.Concat(
+                "/api/barber-profiles/",
+                BarberProfileId.ToString("D"),
+                "/photos/order"),
+            handler.LastRequestUri!.AbsolutePath);
+
+        var parsed = JsonSerializer.Deserialize<ReorderBarberProfilePhotosRequest>(
+            handler.LastBody!,
+            ApiJson.Options);
+
+        Assert.NotNull(parsed);
+        Assert.Equal(photoIds, parsed.PhotoIds);
+    }
+
+    [Fact]
+    public async Task PublishPhotoAsync_ValidIds_PostsPublicationPath()
+    {
+        var handler = new StubHandler(HttpStatusCode.NoContent, string.Empty);
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberProfileApi(httpClient);
+
+        await api.PublishPhotoAsync(BarberProfileId, SpecializationId);
+
+        Assert.Equal(HttpMethod.Post, handler.LastMethod);
+        Assert.Equal(
+            string.Concat(
+                "/api/barber-profiles/",
+                BarberProfileId.ToString("D"),
+                "/photos/",
+                SpecializationId.ToString("D"),
+                "/publication"),
+            handler.LastRequestUri!.AbsolutePath);
+        Assert.True(string.IsNullOrEmpty(handler.LastBody));
+    }
+
+    [Fact]
+    public async Task UnpublishPhotoAsync_ValidIds_DeletesPublicationPath()
+    {
+        var handler = new StubHandler(HttpStatusCode.NoContent, string.Empty);
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberProfileApi(httpClient);
+
+        await api.UnpublishPhotoAsync(BarberProfileId, SpecializationId);
+
+        Assert.Equal(HttpMethod.Delete, handler.LastMethod);
+        Assert.Equal(
+            string.Concat(
+                "/api/barber-profiles/",
+                BarberProfileId.ToString("D"),
+                "/photos/",
+                SpecializationId.ToString("D"),
+                "/publication"),
+            handler.LastRequestUri!.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task UploadPhotoAsync_EmptyProfileId_ThrowsWithoutRequest()
+    {
+        var handler = new StubHandler(HttpStatusCode.Created, "{}");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberProfileApi(httpClient);
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => api.UploadPhotoAsync(
+                Guid.Empty,
+                new PortfolioPhotoUpload([1], "portfolio.jpg", "image/jpeg", null)));
+
+        Assert.Null(handler.LastRequestUri);
+    }
+
     private static BarberProfileCreateRequest CreateRequest() => new(
         "Тимур",
         11,
@@ -514,15 +724,54 @@ public sealed class BarberProfileApiTests
 
         public string? LastBody { get; private set; }
 
+        public string? LastContentType { get; private set; }
+
+        public string? FileFieldName { get; private set; }
+
+        public string? FileName { get; private set; }
+
+        public string? FileContentType { get; private set; }
+
+        public byte[]? FileBytes { get; private set; }
+
+        public Dictionary<string, string> MultipartFields { get; } = new(StringComparer.Ordinal);
+
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             LastMethod = request.Method;
             LastRequestUri = request.RequestUri;
+            LastContentType = request.Content?.Headers.ContentType?.MediaType;
             LastBody = request.Content is null
                 ? null
                 : await request.Content.ReadAsStringAsync(cancellationToken);
+
+            // Тело читается здесь, пока запрос ещё жив: после возврата клиент disposed
+            // HttpRequestMessage и составные части формы уже недоступны.
+            if (request.Content is MultipartFormDataContent multipart)
+            {
+                foreach (var part in multipart)
+                {
+                    var disposition = part.Headers.ContentDisposition;
+
+                    if (string.Equals(
+                            disposition?.Name?.Trim('"'),
+                            "file",
+                            StringComparison.Ordinal))
+                    {
+                        FileFieldName = disposition?.Name?.Trim('"');
+                        FileName = disposition?.FileName?.Trim('"');
+                        FileContentType = part.Headers.ContentType?.MediaType;
+                        FileBytes = await part.ReadAsByteArrayAsync(cancellationToken);
+                    }
+                    else if (disposition?.Name is { } name)
+                    {
+                        MultipartFields[name.Trim('"')] =
+                            await part.ReadAsStringAsync(cancellationToken);
+                    }
+                }
+            }
 
             return new HttpResponseMessage(statusCode)
             {

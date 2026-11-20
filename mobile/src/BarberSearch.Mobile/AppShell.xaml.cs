@@ -90,6 +90,13 @@ public partial class AppShell : Shell
 			BarberCabinetRoutes.ServiceEditor,
 			new PageRouteFactory<BarberServiceEditorPage>(services));
 
+		// Фото портфолио открывается нажатием на плитку в «Профиле» кабинета и живёт
+		// поверх него: возврат оставляет и кабинет, и выбранный раздел на месте, а
+		// раздел перечитывает карточку на Pop.
+		Routing.RegisterRoute(
+			BarberPhotoPage.Route,
+			new PageRouteFactory<BarberPhotoPage>(services));
+
 		// Регистрация живёт там же, рядом с формой входа: возврат с неё оставляет вкладку
 		// «Профиль» на месте, а после успеха страница закрывается сама.
 		Routing.RegisterRoute(

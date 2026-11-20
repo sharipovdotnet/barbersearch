@@ -213,4 +213,125 @@ public interface IBarberProfileApi
         Guid barberProfileId,
         Guid specializationId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Загружает фотографию в портфолио мастера.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Файл уходит <c>multipart/form-data</c> двумя частями: <c>file</c> (байты, имя и
+    /// <c>Content-Type</c>) и <c>description</c> (подпись либо пустая строка). Пустую
+    /// подпись сервер сам превращает в <c>null</c>; отдельного «без подписи» в запросе нет.
+    /// </para>
+    /// <para>
+    /// Файл приходит уже подготовленным
+    /// (<see cref="BarberSearch.Mobile.Core.Media.IPortfolioPhotoPicker"/>):
+    /// JPEG до 1600 px по длинной стороне и до 5 МиБ. Клиент не перекодирует его повторно,
+    /// но и не доверяет себе: те же пределы проверяет домен, а его коды разбирает
+    /// <see cref="PortfolioPhotoErrors"/>.
+    /// </para>
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля мастера.</param>
+    /// <param name="photo">Подготовленный файл и подпись.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Идентификатор созданной фотографии из ответа <c>201</c>.</returns>
+    /// <exception cref="BarberSearchApiException">
+    /// Профиль чужой, лимит исчерпан, файл отклонён или хранилище недоступно.
+    /// </exception>
+    Task<Guid> UploadPhotoAsync(
+        Guid barberProfileId,
+        PortfolioPhotoUpload photo,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Удаляет фотографию из портфолио.
+    /// </summary>
+    /// <remarks>
+    /// Удаление физическое и необратимое: скрытая фотография остаётся в портфолио и
+    /// возвращается публикацией, а удалённую восстановить нельзя. Успех — <c>204</c>.
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля мастера.</param>
+    /// <param name="photoId">Удаляемая фотография.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <exception cref="BarberSearchApiException">Фотография не найдена или чужая.</exception>
+    Task RemovePhotoAsync(
+        Guid barberProfileId,
+        Guid photoId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Меняет подпись фотографии.
+    /// </summary>
+    /// <remarks>
+    /// <c>null</c> и пустая строка одинаково стирают подпись: сервер хранит отсутствие
+    /// текста как <c>null</c>. Пробелы по краям обрезаются до запроса, чтобы «   » не
+    /// сохранялось подписью из одних пробелов. Успех — <c>204</c>.
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля мастера.</param>
+    /// <param name="photoId">Фотография, чья подпись меняется.</param>
+    /// <param name="description">Новая подпись либо <c>null</c>, чтобы стереть её.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <exception cref="BarberSearchApiException">Фотография не найдена или подпись отклонена.</exception>
+    Task UpdatePhotoDescriptionAsync(
+        Guid barberProfileId,
+        Guid photoId,
+        string? description,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Сохраняет новый порядок фотографий одним запросом.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отправляется полный список идентификаторов в новом порядке: индекс элемента
+    /// становится <c>SortOrder</c>. Частичный список или дубли сервер отклоняет — иначе
+    /// порядок поехал бы, а два одиночных <c>PUT</c> при сбое посередине дали бы дубли
+    /// номеров. Поэтому обмен местами двух соседей тоже уходит целым списком.
+    /// </para>
+    /// <para>
+    /// Успех — <c>204</c>; после него экран перечитывает карточку, а не переставляет
+    /// строки сам.
+    /// </para>
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля мастера.</param>
+    /// <param name="photoIds">Все фотографии профиля в новом порядке.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <exception cref="BarberSearchApiException">Список не совпал с портфолио или фотография чужая.</exception>
+    Task ReorderPhotosAsync(
+        Guid barberProfileId,
+        IReadOnlyList<Guid> photoIds,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Возвращает фотографию в публикацию.
+    /// </summary>
+    /// <remarks>
+    /// Публичность решает владелец, но кадр показывается клиентам только после одобрения
+    /// модератором: публикация отклонённой или ожидающей проверки фотографии не обходит
+    /// допуск. Успех — <c>204</c>.
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля мастера.</param>
+    /// <param name="photoId">Публикуемая фотография.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <exception cref="BarberSearchApiException">Фотография не найдена или чужая.</exception>
+    Task PublishPhotoAsync(
+        Guid barberProfileId,
+        Guid photoId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Скрывает фотографию из публикации, оставляя её в портфолио.
+    /// </summary>
+    /// <remarks>
+    /// Это не удаление: кадр остаётся в кабинете вместе с подписью и порядком и
+    /// возвращается повторной публикацией. Успех — <c>204</c>.
+    /// </remarks>
+    /// <param name="barberProfileId">Идентификатор профиля мастера.</param>
+    /// <param name="photoId">Скрываемая фотография.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <exception cref="BarberSearchApiException">Фотография не найдена или чужая.</exception>
+    Task UnpublishPhotoAsync(
+        Guid barberProfileId,
+        Guid photoId,
+        CancellationToken cancellationToken = default);
 }

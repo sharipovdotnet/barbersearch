@@ -6,6 +6,7 @@ using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Barber;
 using BarberSearch.Mobile.Core.Formatting;
 using BarberSearch.Mobile.Core.Localization;
+using BarberSearch.Mobile.Core.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -30,7 +31,8 @@ namespace BarberSearch.Mobile.Core.ViewModels.Barber;
 /// <para>
 /// Чтение карточки лечится автоповтором, записи — нет: <c>DELETE</c> и <c>POST</c> не
 /// повторяются вслепую, решение остаётся за человеком. Справочник специализаций
-/// запрашивается лениво — только когда пикер впервые открыли.
+/// запрашивается лениво — только когда пикер впервые открыли — и тоже лечится
+/// автоповтором, но своим: он живёт, пока пикер открыт, и останавливается вместе с ним.
 /// </para>
 /// </remarks>
 public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IBarberCabinetSection
@@ -46,6 +48,7 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     private readonly IBarberSearchApi _searchApi;
     private readonly TimeProvider _timeProvider;
     private readonly AutoRetryLoop _autoRetry;
+    private readonly AutoRetryLoop _specializationsAutoRetry;
     private readonly List<SpecializationResponse> _allSpecializations = [];
 
     private ApiFailureKind _lastFailureKind;
@@ -61,11 +64,17 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     /// <param name="autoRetry">
     /// Цикл автоповтора карточки; <c>null</c> — собственный цикл с обычным расписанием.
     /// </param>
+    /// <param name="specializationsAutoRetry">
+    /// Цикл автоповтора справочника специализаций; <c>null</c> — собственный цикл.
+    /// Параметры необязательные и стоят последними, чтобы DI и тесты не зависели от
+    /// их порядка.
+    /// </param>
     public BarberCabinetProfileViewModel(
         IBarberProfileApi profileApi,
         IBarberSearchApi searchApi,
         TimeProvider timeProvider,
-        AutoRetryLoop? autoRetry = null)
+        AutoRetryLoop? autoRetry = null,
+        AutoRetryLoop? specializationsAutoRetry = null)
     {
         ArgumentNullException.ThrowIfNull(profileApi);
         ArgumentNullException.ThrowIfNull(searchApi);
@@ -77,12 +86,36 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
 
         _autoRetry = autoRetry ?? new AutoRetryLoop();
         _autoRetry.StateChanged += OnAutoRetryStateChanged;
+
+        _specializationsAutoRetry = specializationsAutoRetry ?? new AutoRetryLoop();
+        _specializationsAutoRetry.StateChanged += OnSpecializationsAutoRetryStateChanged;
+
+        // Лимит портфолио меняется вместе с коллекцией: добавление, очистка и перечитывание
+        // карточки одинаково должны переключить «Добавить фото» и подсказку о лимите.
+        Photos.CollectionChanged += (_, _) => NotifyPhotoLimitState();
     }
 
     /// <summary>
     /// Идентификатор профиля, которому принадлежит раздел.
     /// </summary>
-    public Guid? BarberProfileId { get; private set; }
+    /// <remarks>
+    /// <see cref="Guid.Empty"/>, пока раздел не инициализирован: страница проверяет это
+    /// значение вместо прежнего <c>null</c>, а дочерние экраны получают готовый
+    /// идентификатор без распаковки nullable.
+    /// </remarks>
+    public Guid BarberProfileId { get; private set; }
+
+    /// <summary>
+    /// Идентификатор для общего контракта раздела: <c>null</c> до инициализации.
+    /// </summary>
+    /// <remarks>
+    /// Публичное свойство отдаёт <see cref="Guid"/> — фото-странице нужен готовый ключ без
+    /// распаковки. Контракт <see cref="IBarberCabinetSection"/> исторически nullable, и
+    /// страница кабинета сравнивает его с профилем сессии; явная реализация сохраняет это
+    /// поведение, не возвращая nullable в публичную поверхность раздела.
+    /// </remarks>
+    Guid? IBarberCabinetSection.BarberProfileId =>
+        BarberProfileId == Guid.Empty ? null : BarberProfileId;
 
     /// <summary>
     /// Сырой ответ карточки; <c>null</c> до первого успешного чтения.
@@ -167,6 +200,12 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     /// </summary>
     [ObservableProperty]
     private bool _isSpecializationLoading;
+
+    /// <summary>
+    /// Справочник не ответил, и цикл уже пробует снова: строка «Пробуем снова…».
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSpecializationAutoRetrying;
 
     /// <summary>
     /// Причина сбоя справочника; живёт внутри пикера.
@@ -316,6 +355,16 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     public bool HasPhotos => Photos.Count > 0;
 
     /// <summary>
+    /// В портфолио можно добавить ещё одну фотографию.
+    /// </summary>
+    public bool CanAddPhoto => Photos.Count < PortfolioPhotoLimits.MaxPhotos;
+
+    /// <summary>
+    /// Достигнут предел портфолио: сначала нужно удалить кадр.
+    /// </summary>
+    public bool IsPhotoLimitReached => Photos.Count >= PortfolioPhotoLimits.MaxPhotos;
+
+    /// <summary>
     /// В справочнике есть что добавить.
     /// </summary>
     public bool HasAvailableSpecializations => AvailableSpecializations.Count > 0;
@@ -356,8 +405,10 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         }
 
         _autoRetry.Stop();
+        _specializationsAutoRetry.Stop();
 
         BarberProfileId = barberProfileId;
+        OnPropertyChanged(nameof(BarberProfileId));
         _lastFailureKind = ApiFailureKind.None;
         IsReady = false;
         IsFirstLoading = false;
@@ -367,6 +418,8 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         IsForbidden = false;
         IsNotFound = false;
         IsSignInRequired = false;
+        IsSpecializationPickerOpen = false;
+        SpecializationError = null;
         Profile = null;
         ClearCollections();
     }
@@ -380,21 +433,33 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     {
         _isPageVisible = true;
 
-        if (BarberProfileId is not { } profileId || profileId == Guid.Empty)
+        var profileId = BarberProfileId;
+
+        if (profileId == Guid.Empty)
         {
             return;
         }
 
         await LoadAsync(silent: Profile is not null, cancellationToken);
+
+        if (IsSpecializationPickerOpen && !_isCatalogLoaded)
+        {
+            StartSpecializationsAutoRetry(await LoadSpecializationsAsync(cancellationToken));
+        }
     }
 
     /// <summary>
-    /// Скрывает раздел: останавливает автоповтор, не сбрасывая карточку.
+    /// Скрывает раздел: останавливает оба автоповтора, не сбрасывая карточку.
     /// </summary>
+    /// <remarks>
+    /// Пикер остаётся открытым: вернувшийся раздел прочитает справочник заново и снова
+    /// вооружит его цикл, если сбой повторяемый.
+    /// </remarks>
     public void Deactivate()
     {
         _isPageVisible = false;
         _autoRetry.Stop();
+        _specializationsAutoRetry.Stop();
     }
 
     /// <summary>
@@ -406,6 +471,11 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     /// Завершается, когда цикл повтора чтения останавливается.
     /// </summary>
     internal Task ReadRetryCompletion => _autoRetry.Completion;
+
+    /// <summary>
+    /// Завершается, когда цикл повтора справочника останавливается: тесты ждут его вместо пауз.
+    /// </summary>
+    internal Task SpecializationsRetryCompletion => _specializationsAutoRetry.Completion;
 
     /// <summary>
     /// Применяет карточку, полученную дочерним экраном после сохранения.
@@ -486,11 +556,12 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         BarberServiceItem? item,
         CancellationToken cancellationToken)
     {
-        if (item is null || IsMutating || BarberProfileId is not { } profileId)
+        if (item is null || IsMutating || BarberProfileId == Guid.Empty)
         {
             return;
         }
 
+        var profileId = BarberProfileId;
         IsMutating = true;
         ActionError = null;
 
@@ -520,11 +591,12 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         BarberServiceItem? item,
         CancellationToken cancellationToken)
     {
-        if (item is null || IsMutating || BarberProfileId is not { } profileId)
+        if (item is null || IsMutating || BarberProfileId == Guid.Empty)
         {
             return;
         }
 
+        var profileId = BarberProfileId;
         IsMutating = true;
         ActionError = null;
 
@@ -560,11 +632,12 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         BarberSpecializationItem? item,
         CancellationToken cancellationToken)
     {
-        if (item is null || IsMutating || BarberProfileId is not { } profileId)
+        if (item is null || IsMutating || BarberProfileId == Guid.Empty)
         {
             return;
         }
 
+        var profileId = BarberProfileId;
         IsMutating = true;
         ActionError = null;
 
@@ -607,7 +680,7 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
             return;
         }
 
-        await LoadSpecializationsAsync(cancellationToken);
+        StartSpecializationsAutoRetry(await LoadSpecializationsAsync(cancellationToken));
     }
 
     /// <summary>
@@ -618,15 +691,35 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     {
         IsSpecializationPickerOpen = false;
         SpecializationError = null;
+        _specializationsAutoRetry.Stop();
     }
 
     /// <summary>
-    /// Повторяет чтение справочника после ошибки.
+    /// Одна попытка цикла: перечитывает справочник, не стирая причину до ответа.
     /// </summary>
     /// <param name="cancellationToken">Токен отмены.</param>
-    [RelayCommand]
-    private Task RetrySpecializationsAsync(CancellationToken cancellationToken) =>
-        LoadSpecializationsAsync(cancellationToken);
+    /// <returns>Вид сбоя: по нему решает цикл.</returns>
+    private Task<ApiFailureKind> RetrySpecializationsAsync(CancellationToken cancellationToken) =>
+        IsSpecializationPickerOpen && _isPageVisible
+            ? LoadSpecializationsAsync(cancellationToken, silent: true)
+            : Task.FromResult(ApiFailureKind.Terminal);
+
+    /// <summary>
+    /// Запускает цикл справочника, пока пикер открыт и сбой повторяемый.
+    /// </summary>
+    /// <param name="kind">Вид сбоя первого чтения.</param>
+    private void StartSpecializationsAutoRetry(ApiFailureKind kind)
+    {
+        if (!IsSpecializationPickerOpen
+            || !_isPageVisible
+            || !kind.IsRetryable()
+            || _specializationsAutoRetry.IsRunning)
+        {
+            return;
+        }
+
+        _specializationsAutoRetry.Start(RetrySpecializationsAsync);
+    }
 
     /// <summary>
     /// Добавляет специализацию из справочника.
@@ -640,11 +733,12 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     {
         if (specializationId == Guid.Empty
             || IsMutating
-            || BarberProfileId is not { } profileId)
+            || BarberProfileId == Guid.Empty)
         {
             return;
         }
 
+        var profileId = BarberProfileId;
         IsMutating = true;
         ActionError = null;
         SpecializationError = null;
@@ -689,7 +783,9 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         bool silent,
         CancellationToken cancellationToken)
     {
-        if (BarberProfileId is not { } profileId || profileId == Guid.Empty)
+        var profileId = BarberProfileId;
+
+        if (profileId == Guid.Empty)
         {
             return ApiFailureKind.None;
         }
@@ -848,16 +944,24 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     /// Перечитывает справочник специализаций.
     /// </summary>
     /// <param name="cancellationToken">Токен отмены.</param>
-    /// <returns>Задача чтения.</returns>
-    private async Task LoadSpecializationsAsync(CancellationToken cancellationToken)
+    /// <param name="silent">
+    /// Попытка цикла: причина остаётся на экране до ответа, индикатор загрузки не мигает.
+    /// </param>
+    /// <returns>Вид сбоя: по нему решает цикл.</returns>
+    private async Task<ApiFailureKind> LoadSpecializationsAsync(
+        CancellationToken cancellationToken,
+        bool silent = false)
     {
         if (IsSpecializationLoading)
         {
-            return;
+            return ApiFailureKind.None;
         }
 
-        IsSpecializationLoading = true;
-        SpecializationError = null;
+        if (!silent)
+        {
+            IsSpecializationLoading = true;
+            SpecializationError = null;
+        }
 
         try
         {
@@ -866,8 +970,11 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
             _allSpecializations.Clear();
             _allSpecializations.AddRange(items);
             _isCatalogLoaded = true;
+            SpecializationError = null;
 
             RebuildAvailableSpecializations();
+
+            return ApiFailureKind.None;
         }
         catch (Exception exception)
         {
@@ -880,6 +987,8 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
                     kind,
                     CatalogFailedText);
             }
+
+            return kind;
         }
         finally
         {
@@ -925,6 +1034,12 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     /// </summary>
     private void OnAutoRetryStateChanged(object? sender, EventArgs e) =>
         IsAutoRetrying = _autoRetry.IsRunning;
+
+    /// <summary>
+    /// Переключает строку «Пробуем снова…» в пикере вслед за состоянием его цикла.
+    /// </summary>
+    private void OnSpecializationsAutoRetryStateChanged(object? sender, EventArgs e) =>
+        IsSpecializationAutoRetrying = _specializationsAutoRetry.IsRunning;
 
     /// <summary>
     /// Текст сбоя записи: коды домена важнее кода HTTP.
@@ -1002,7 +1117,18 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         OnPropertyChanged(nameof(HasServices));
         OnPropertyChanged(nameof(HasSpecializations));
         OnPropertyChanged(nameof(HasPhotos));
+        OnPropertyChanged(nameof(CanAddPhoto));
+        OnPropertyChanged(nameof(IsPhotoLimitReached));
         OnPropertyChanged(nameof(HasAvailableSpecializations));
+    }
+
+    /// <summary>
+    /// Сообщает о лимите портфолио после изменения коллекции фотографий.
+    /// </summary>
+    private void NotifyPhotoLimitState()
+    {
+        OnPropertyChanged(nameof(CanAddPhoto));
+        OnPropertyChanged(nameof(IsPhotoLimitReached));
     }
 
     /// <summary>

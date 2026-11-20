@@ -44,6 +44,33 @@ public sealed class LocalizationTests
         Assert.Equal("Строка без перевода", Loc.T("Строка без перевода"));
     }
 
+    [Fact]
+    public void PortfolioPhotoTexts_English_UseWebWording()
+    {
+        using var _ = UseLocale(Locale.En);
+
+        Assert.Equal("Add photo", Loc.T("Добавить фото"));
+        Assert.Equal("New photo", Loc.T("Новое фото"));
+        Assert.Equal("Photo", Loc.T("Фотография"));
+        Assert.Equal("Photo 2 of 3", Loc.T("Фото {0} из {1}", "2", "3"));
+        Assert.Equal("Move up", Loc.T("Выше"));
+        Assert.Equal("Move down", Loc.T("Ниже"));
+        Assert.Equal("Save caption", Loc.T("Сохранить подпись"));
+        Assert.Equal("File", Loc.T("Файл"));
+        Assert.Equal("Caption", Loc.T("Подпись"));
+        Assert.Equal("Upload", Loc.T("Загрузить"));
+        Assert.Equal("Delete this photo?", Loc.T("Удалить фото?"));
+        Assert.Equal(
+            "The file is too large. 5 MB maximum.",
+            Loc.T("Файл слишком большой. Максимум — 5 МБ."));
+        Assert.Equal(
+            "Photo not found. Refresh the page.",
+            Loc.T("Фото не найдено. Обновите страницу."));
+        Assert.Equal(
+            "The server could not handle the request. Try again.",
+            Loc.T("Сервер не справился. Повторите попытку."));
+    }
+
     [Theory]
     [InlineData(1, "1 review")]
     [InlineData(2, "2 reviews")]

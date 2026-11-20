@@ -28,8 +28,7 @@ profiles awaiting verification and requests to become a professional.
 The professional cabinet is on the phone for a barber: one screen with four sections — client
 bookings, the weekly schedule, the places of work and the public card — opened from «Профиль».
 The web keeps the professional surface that is not a phone job: importing old bookings,
-uploading and ordering photos, creating a salon and managing its barbers, and the notification
-and Telegram settings. The rest of the admin section — statistics, the catalogue, salons,
+creating a salon and managing its barbers, and the notification and Telegram settings. The rest of the admin section — statistics, the catalogue, salons,
 users, bookings and the audit log — also stays on the web; §5 records what the phone got and
 why the remainder did not move.
 
@@ -505,14 +504,18 @@ in Core owns both base addresses.
   one, its button, and adds one muted line, «Пробуем снова…» (the only new catalog key), so the
   screen says the app is working instead of looking frozen. The cabinet's read error cards carry no
   such button: every cabinet read that shows an error card also arms the loop while its section is
-  visible, so a manual tap would only duplicate a retry already running, while the specialization
-  picker keeps it because its lazy catalogue has no loop. A silent attempt also has to keep what is
-  already shown: «Записи» gets `FirstPageMode.Retry`, which does not clear the message until the
-  answer — the old silent mode blanked the card into an empty screen for the length of every
-  request — and neither the rows nor the reason are erased by a failed attempt. This is a deliberate
-  deviation from §8, where the web only retries on a click, recorded here rather than left as an
-  omission; the remaining «Повторить» buttons keep their behaviour, because they are the write paths
-  or the reads that arm no loop.
+  visible, so a manual tap would only duplicate a retry already running. The specialization
+  picker's lazy catalogue used to be the exception because it had no loop; it now owns one that
+  runs while the picker is open and stops with it, keeping the reason until the answer, so the
+  picker's error card carries the reason and «Пробуем снова…» only. A silent attempt also has to
+  keep what is already shown: «Записи» gets `FirstPageMode.Retry`, which does not clear the message
+  until the answer — the old silent mode blanked the card into an empty screen for the length of
+  every request — and neither the rows nor the reason are erased by a failed attempt. This is a
+  deliberate deviation from §8, where the web only retries on a click, recorded here rather than
+  left as an omission; the remaining «Повторить» buttons keep their behaviour where they are the
+  write paths or the reads that arm no loop (the service editor's hair-service catalogue). The
+  cabinet rows and the «Записи» footer carry no such button: a failed action leaves only the reason
+  in its row, and a failed next page is retried by «Дальше» (the cabinet section spells both out).
   Two more rules keep a silent attempt honest. A retry repeats the request that failed rather than a
   fresh one built from the form or from the screen: the search remembers the filters of the failed
   attempt, coordinates included, because they are attached after the form is read — so a field edited
@@ -743,7 +746,16 @@ in Core owns both base addresses.
   refresh during an action and on a list where a second page was loaded, and a failed refresh
   keeps the rows. The buttons follow the server's rules: confirm a pending row, complete or mark a
   no-show after the start, cancel with a reason, reschedule an active visit that has not started,
-  write a note and change the price everywhere except a cancelled or no-show visit.
+  write a note and change the price everywhere except a cancelled or no-show visit. «Записать
+  клиента» is offered by the day and «Ближайшие» but not by «История»: a new visit lands in
+  «Ближайшие» anyway, and the past list is read, not appended to. The action starts the list in
+  the day (under the summary) and in «Ближайшие» (above the first card), so a visit can be added
+  without scrolling; the «Обновлено в …» line stays at the bottom, next to the pages and the
+  load-more reason. A failed action leaves only its reason in the row: a `409` says «Запись уже
+  изменилась — обновите список.», and the list is re-read by pull-to-refresh
+  (`RefreshView`/`RefreshCommand`) or by the 30-second refresh — there is no separate button. A
+  failed next page also keeps the rows and the reason, and the retry is «Дальше» in the pager, not
+  a second button.
 
 - **The salons section adds «Сделать основным» and three platform shortcuts.** The list is the
   profile's working set, not a shop window: every attachment comes back, including a salon
@@ -768,8 +780,30 @@ in Core owns both base addresses.
   `GET api/bookings/{id}`, and the list already shows the visit. «Поделиться профилем» uses the
   system share sheet with the public card URL (`{SiteBaseAddress}barbers/{id}`), and both the
   share and «Открыть, как видят клиенты» are drawn only for a verified and active profile: the
-  public route answers `404` for anything else. The photo grid is read-only and says so —
-  «Фотографии добавляются и упорядочиваются на сайте.».
+  public route answers `404` for anything else. The photo grid opens the photo screen described
+  in the next bullet.
+
+- **The photo grid opens one photo screen, and that screen owns every web action.** The cabinet
+  used to show the portfolio read-only and leave upload, captions and order to the web; a
+  barber's phone is now enough to add, edit and remove work. Tapping a tile (or «Добавить фото»)
+  pushes `BarberPhotoPage` over the cabinet. With a `photoId` it edits — caption, «Выше»/«Ниже»,
+  «Скрыть»/«Вернуть» and «Удалить» after a native confirmation; without one it uploads: file
+  picker, preview, caption with a 2000-character counter. The page receives a snapshot of the
+  photo list, so a reorder sends the full id array in one `PUT …/photos/order` — the web's own
+  rule, because two single `PUT`s can leave duplicate sort orders — and every successful
+  mutation pops back, where the section re-reads the card like any other cabinet child screen.
+  The web's permissions carry over: a blocked photo can only be deleted, its caption and order
+  are unavailable, and «Скрыть»/«Вернуть» exists only for an approved frame, since publication of a
+  pending one is decided by moderation. Ten is the domain limit: the add button goes off and
+  one muted line explains why.
+  The file is prepared on the phone, not on the server: `FilePicker` takes JPEG/PNG/WebP,
+  `PlatformImage` downsizes the long side to 1600 px, JPEG quality steps down until the bytes
+  fit 5 MiB (15 MiB source cap), and the app sends the prepared file as multipart `file` +
+  `description`. The picker sits behind `IPortfolioPhotoPicker` in Core, so the ViewModel and
+  its tests need no MAUI and no emulator; `PortfolioPhotoErrors` maps the web's domain codes to
+  the same Russian field and general lines, and the write rules stay the cabinet's (no silent
+  retry). No new package, colour or font enters the app. The account avatar remains out of
+  scope: this slice is the portfolio, not the person card.
 
 - **Five places where the cabinet deliberately does not repeat the web.** Cancel and price are
   native `DisplayPrompt`s instead of the web's dialogs: each asks for one value, the customer tab
@@ -788,12 +822,12 @@ in Core owns both base addresses.
   path to the same action would duplicate it.
 
 - **What the cabinet leaves on the web is the admin surface, not the daily work.** Booking
-  import (`/barber/import`) is a text/ICS parser and a bulk load; photo upload, reordering and
-  captions are a media admin with moderation; creating a salon and managing its barbers is a
-  form and an HR task; notification and Telegram settings are niche, and the «Профиль» tab
-  already carries the global «Присылать напоминания» switch, so a second settings screen would
-  duplicate one switch and own none of the push. The cabinet shows the read-only photo grid with
-  the web's hint instead of a disabled uploader. This is a recorded omission, not an oversight:
+  import (`/barber/import`) is a text/ICS parser and a bulk load; creating a salon and managing
+  its barbers is a form and an HR task; notification and Telegram settings are niche, and the
+  «Профиль» tab already carries the global «Присылать напоминания» switch, so a second settings
+  screen would duplicate one switch and own none of the push. Photo upload, captions and order
+  are no longer on this list: the photo screen above gives the barber the web's actions on the
+  phone. This is a recorded omission, not an oversight:
   §8's «the web is the reference» still means structure and wording for the screens that exist,
   not that every web action has a phone twin.
 
@@ -809,17 +843,18 @@ in Core owns both base addresses.
   attaching a salon and making it primary, the profile update, service add/update/hide/restore,
   specialization add/remove, mark-read and read-all, and the onboarding's `POST`, token refresh
   and salon attach — after any of these a silent repeat could book twice, hide a refusal or write
-  a second profile. Two reads stay outside the loop: the specialization picker's catalog and the
-  service editor's hair-service catalog are input aids inside an open picker, retried by their
-  own button (the editor's remarks record it; the city suggestions are the existing precedent),
-  and the bell's unread count is silent by design. Sections stop their loops in `Deactivate`
+  a second profile. One read stays outside the loop: the service editor's hair-service catalog is
+  an input aid inside an open picker, retried by its own button (the editor's remarks record it;
+  the city suggestions are the existing precedent), and the bell's unread count is silent by
+  design. The specialization picker's catalog, the other input aid, arms a loop of its own while
+  the picker is open and stops it with the picker. Sections stop their loops in `Deactivate`
   before a push; the child pages use `PageVisibility`.
 
 - **The cabinet is tested at the ViewModel layer, and that is where the coverage stops.** Tests
-  add 142 cases (1402 total): the gate (no session, `401`, a customer, a barber without a profile,
+  add 142 cases (1473 total): the gate (no session, `401`, a customer, a barber without a profile,
   a ready barber with the badge, a silent count failure), «Записи» (the two scopes, the day merge
   and its gaps, the action state machines for confirm, cancel, note and reschedule, the `409`
-  reload, the silent refresh and its refusals, a retry that keeps the rows), the schedule
+  reason, the silent refresh and its refusals, a retry that keeps the rows), the schedule
   (week load, dirty detection, fill-weekdays, one `PUT`, the `409` prompt and the forced resend of
   the same request, the 20-row cap, exceptions, time offs, salon switch and discard), the salons
   (order, moderation states, primary, the directory and its retry), the card (formatting, hidden
@@ -828,12 +863,17 @@ in Core owns both base addresses.
   tap, the horizon), reschedule (the visit date, the failed-date retry, no working day, no slots),
   the note (counter and trim), the profile edit (validation and the field codes), the service
   editor (add/edit, domain codes), the inbox (cursor pages, the «99+» cap, mark one/all, silent
-  count) and onboarding (`409` as success, refresh failure, salon step). They deliberately do not
+  count) and onboarding (`409` as success, refresh failure, salon step). The photo screen adds
+  about sixty more: the six transport calls, every `PortfolioPhotoErrors` code and status, the
+  picker's four failure kinds and a cancelled pick, the caption rules, the full-id reorder at the
+  edges, the blocked-photo restrictions, the publication toggle, the limit and the `Completed`
+  event. They deliberately do not
   cover the page layer: the XAML and the section creation, `OnAppearing`/`OnDisappearing` and the
   `Pop` reload, `Window.Stopped`/`Resumed`, the two `IDispatcherTimer`s, and the platform intents
   (`tel:`, `geo:`/maps, the share sheet, the clipboard, `DisplayPrompt`/`DisplayAlert`). That is
   where the risk sits — a regression in a timer or a prompt will not turn a test red, only a
-  phone will.
+  phone will. The photo page's file picker and its JPEG preparation are the new members of that
+  untested platform set: `MauiPortfolioPhotoPicker` is exercised only by a real phone.
 
 ## 6. What the backend still lacks
 

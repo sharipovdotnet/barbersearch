@@ -3,6 +3,7 @@ using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 using BarberSearch.Contracts.Specializations.GetSpecializations;
 using BarberSearch.Domain.Common;
 using BarberSearch.Mobile.Core.Api;
+using BarberSearch.Mobile.Core.Media;
 using BarberSearch.Mobile.Core.ViewModels.Barber;
 
 namespace BarberSearch.Mobile.Core.Tests;
@@ -296,9 +297,72 @@ public sealed class BarberCabinetProfileViewModelTests
     }
 
     [Fact]
-    public async Task SpecializationCatalog_TransportFailure_ShowsReasonAndRetryLoads()
+    public async Task SpecializationCatalog_TransportFailure_RetriesUntilLoaded()
     {
-        var harness = new Harness();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var harness = new Harness(catalogRetry: BarberCabinetRetry.Gated(gate.Task));
+        var calls = 0;
+
+        harness.Search.Specializations = _ =>
+        {
+            calls++;
+
+            return calls == 1
+                ? Task.FromException<IReadOnlyList<SpecializationResponse>>(
+                    new HttpRequestException("offline"))
+                : Task.FromResult<IReadOnlyList<SpecializationResponse>>(
+                    [BarberCabinetData.Specialization()]);
+        };
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+
+        await viewModel.OpenSpecializationPickerCommand.ExecuteAsync(null);
+
+        Assert.Equal(NetworkText, viewModel.SpecializationError);
+        Assert.True(viewModel.IsSpecializationAutoRetrying);
+
+        gate.SetResult();
+        await viewModel.SpecializationsRetryCompletion;
+
+        Assert.Null(viewModel.SpecializationError);
+        Assert.False(viewModel.IsSpecializationAutoRetrying);
+        Assert.Equal(2, calls);
+        Assert.Single(viewModel.AvailableSpecializations);
+    }
+
+    [Fact]
+    public async Task SpecializationCatalog_ClosePicker_StopsAutoRetry()
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var harness = new Harness(catalogRetry: BarberCabinetRetry.Gated(gate.Task));
+
+        harness.Search.Specializations = _ => Task.FromException<IReadOnlyList<SpecializationResponse>>(
+            new HttpRequestException("offline"));
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+
+        await viewModel.OpenSpecializationPickerCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.IsSpecializationAutoRetrying);
+
+        viewModel.CloseSpecializationPickerCommand.Execute(null);
+        await viewModel.SpecializationsRetryCompletion;
+
+        Assert.False(viewModel.IsSpecializationAutoRetrying);
+        Assert.Equal(1, harness.Search.SpecializationCalls);
+
+        gate.SetResult();
+    }
+
+    [Fact]
+    public async Task SpecializationCatalog_ReturnToSection_ReadsCatalogAgain()
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var harness = new Harness(catalogRetry: BarberCabinetRetry.Gated(gate.Task));
         var calls = 0;
 
         harness.Search.Specializations = _ =>
@@ -320,25 +384,113 @@ public sealed class BarberCabinetProfileViewModelTests
 
         Assert.Equal(NetworkText, viewModel.SpecializationError);
 
-        await viewModel.RetrySpecializationsCommand.ExecuteAsync(null);
+        viewModel.Deactivate();
+        await viewModel.SpecializationsRetryCompletion;
+
+        gate.SetResult();
+        await viewModel.ActivateAsync();
 
         Assert.Null(viewModel.SpecializationError);
         Assert.Equal(2, calls);
         Assert.Single(viewModel.AvailableSpecializations);
     }
 
+    [Fact]
+    public async Task SpecializationCatalog_TerminalFailure_DoesNotArmAutoRetry()
+    {
+        var harness = new Harness(catalogRetry: BarberCabinetRetry.Fast());
+
+        harness.Search.Specializations = _ => Task.FromException<IReadOnlyList<SpecializationResponse>>(
+            BarberCabinetApiError.Create(HttpStatusCode.BadRequest, "validation"));
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+
+        await viewModel.OpenSpecializationPickerCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, harness.Search.SpecializationCalls);
+        Assert.False(viewModel.IsSpecializationAutoRetrying);
+        Assert.NotNull(viewModel.SpecializationError);
+    }
+
+    [Fact]
+    public void Initialize_ExposesProfileIdForThePhotoPage()
+    {
+        var harness = new Harness();
+
+        Assert.Equal(BarberCabinetFixtures.BarberProfileId, harness.ViewModel.BarberProfileId);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_TenPhotos_ReachesLimitAndNotifies()
+    {
+        var harness = new Harness();
+        var changed = new List<string?>();
+
+        harness.Profile.Own = _ => Task.FromResult(BarberCabinetData.Profile(
+            photos: Photos(PortfolioPhotoLimits.MaxPhotos)));
+
+        harness.ViewModel.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+
+        await harness.ViewModel.ActivateAsync();
+
+        Assert.True(harness.ViewModel.IsPhotoLimitReached);
+        Assert.False(harness.ViewModel.CanAddPhoto);
+        Assert.Contains(nameof(BarberCabinetProfileViewModel.CanAddPhoto), changed);
+        Assert.Contains(nameof(BarberCabinetProfileViewModel.IsPhotoLimitReached), changed);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_NinePhotos_AllowsAdding()
+    {
+        var harness = new Harness();
+
+        harness.Profile.Own = _ => Task.FromResult(BarberCabinetData.Profile(
+            photos: Photos(PortfolioPhotoLimits.MaxPhotos - 1)));
+
+        await harness.ViewModel.ActivateAsync();
+
+        Assert.False(harness.ViewModel.IsPhotoLimitReached);
+        Assert.True(harness.ViewModel.CanAddPhoto);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_FilledPortfolio_ReevaluatesLimit()
+    {
+        var harness = new Harness();
+        var changed = new List<string?>();
+
+        harness.ViewModel.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+
+        harness.Profile.Own = _ => Task.FromResult(BarberCabinetData.Profile(
+            photos: Photos(PortfolioPhotoLimits.MaxPhotos)));
+
+        await harness.ViewModel.ActivateAsync();
+
+        Assert.Contains(nameof(BarberCabinetProfileViewModel.IsPhotoLimitReached), changed);
+    }
+
+    private static IReadOnlyList<BarberProfilePhotoResponse> Photos(int count) =>
+    [
+        .. Enumerable.Range(0, count).Select(index => BarberCabinetData.Photo(
+            $"Работа {index}",
+            id: Guid.Parse($"9e100000-0000-4000-8000-{index + 1:D12}"))),
+    ];
+
     /// <summary>
-    /// Собранный раздел: подменённые клиенты карточки и справочника, часы и цикл повтора.
+    /// Собранный раздел: подменённые клиенты карточки и справочника, часы и два цикла повтора.
     /// </summary>
     private sealed class Harness
     {
-        public Harness(AutoRetryLoop? retry = null)
+        public Harness(AutoRetryLoop? retry = null, AutoRetryLoop? catalogRetry = null)
         {
             ViewModel = new BarberCabinetProfileViewModel(
                 Profile,
                 Search,
                 new FixedTimeProvider(BarberCabinetFixtures.Now),
-                retry);
+                retry,
+                catalogRetry);
 
             ViewModel.Initialize(BarberCabinetFixtures.BarberProfileId);
         }
