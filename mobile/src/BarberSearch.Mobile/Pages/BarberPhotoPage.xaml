@@ -110,10 +110,11 @@
                             Padding="8"
                             Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
                             StrokeShape="RoundRectangle 10">
+                            <!-- 64 — примерно две строки: поле растёт само с текстом. -->
                             <Editor
                                 AutoSize="TextChanges"
                                 MaxLength="{x:Static media:PortfolioPhotoLimits.MaxDescriptionLength}"
-                                MinimumHeightRequest="88"
+                                MinimumHeightRequest="64"
                                 Text="{Binding Caption, Mode=TwoWay}" />
                         </Border>
 
@@ -233,6 +234,72 @@
                     </VerticalStackLayout>
                 </Border>
 
+                <!--
+                    Действия над кадром: порядок, публикация и удаление — те же, что в вебе.
+                    В одну строку четыре подписи не влезали: кнопки сжимались и обрезали
+                    текст, поэтому они встали сеткой 2 × 2 — половина ширины карточки даёт
+                    каждой запас под подпись в любой локали. Минимальная высота 52 выше
+                    обычных 44: по кнопке рядом с фото должен уверенно попадать большой палец.
+                    Пока «Скрыть»/«Вернуть» недоступна (кадр не одобрен), «Удалить» занимает
+                    всю строку — пустая половина читалась бы как забытый контрол.
+                -->
+                <Grid
+                    ColumnDefinitions="*,*"
+                    ColumnSpacing="8"
+                    RowDefinitions="Auto,Auto"
+                    RowSpacing="8">
+
+                    <Button
+                        Grid.Row="0"
+                        Grid.Column="0"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                        Command="{Binding MoveUpCommand}"
+                        IsEnabled="{Binding CanMoveUp}"
+                        MinimumHeightRequest="52"
+                        Text="{loc:Translate Key='Выше'}"
+                        TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+
+                    <Button
+                        Grid.Row="0"
+                        Grid.Column="1"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                        Command="{Binding MoveDownCommand}"
+                        IsEnabled="{Binding CanMoveDown}"
+                        MinimumHeightRequest="52"
+                        Text="{loc:Translate Key='Ниже'}"
+                        TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+
+                    <Button
+                        Grid.Row="1"
+                        Grid.Column="0"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                        Command="{Binding TogglePublicationCommand}"
+                        IsVisible="{Binding CanTogglePublication}"
+                        MinimumHeightRequest="52"
+                        Text="{Binding PublicationActionText}"
+                        TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+
+                    <Button
+                        Grid.Row="1"
+                        Grid.Column="1"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                        Clicked="OnDeleteClicked"
+                        IsVisible="{Binding CanDelete}"
+                        MinimumHeightRequest="52"
+                        Text="{loc:Translate Key='Удалить'}"
+                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                        <Button.Triggers>
+                            <DataTrigger
+                                Binding="{Binding CanTogglePublication}"
+                                TargetType="Button"
+                                Value="False">
+                                <Setter Property="Grid.Column" Value="0" />
+                                <Setter Property="Grid.ColumnSpan" Value="2" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                </Grid>
+
                 <!-- Подпись можно править, пока кадр не заблокирован администратором. -->
                 <Border
                     Padding="16"
@@ -250,10 +317,11 @@
                             Padding="8"
                             Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
                             StrokeShape="RoundRectangle 10">
+                            <!-- 64 — примерно две строки: поле растёт само с текстом. -->
                             <Editor
                                 AutoSize="TextChanges"
                                 MaxLength="{x:Static media:PortfolioPhotoLimits.MaxDescriptionLength}"
-                                MinimumHeightRequest="88"
+                                MinimumHeightRequest="64"
                                 Text="{Binding Caption, Mode=TwoWay}" />
                         </Border>
 
@@ -285,41 +353,6 @@
 
                     </VerticalStackLayout>
                 </Border>
-
-                <!-- Порядок кадра, публикация и удаление: те же действия, что в вебе. -->
-                <FlexLayout
-                    AlignItems="Center"
-                    Direction="Row"
-                    Wrap="Wrap">
-                    <Button
-                        Margin="0,0,8,8"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
-                        Command="{Binding MoveUpCommand}"
-                        IsEnabled="{Binding CanMoveUp}"
-                        Text="{loc:Translate Key='Выше'}"
-                        TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
-                    <Button
-                        Margin="0,0,8,8"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
-                        Command="{Binding MoveDownCommand}"
-                        IsEnabled="{Binding CanMoveDown}"
-                        Text="{loc:Translate Key='Ниже'}"
-                        TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
-                    <Button
-                        Margin="0,0,8,8"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
-                        Command="{Binding TogglePublicationCommand}"
-                        IsVisible="{Binding CanTogglePublication}"
-                        Text="{Binding PublicationActionText}"
-                        TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
-                    <Button
-                        Margin="0,0,8,8"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
-                        Clicked="OnDeleteClicked"
-                        IsVisible="{Binding CanDelete}"
-                        Text="{loc:Translate Key='Удалить'}"
-                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
-                </FlexLayout>
 
                 <Label
                     FontSize="14"
