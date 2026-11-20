@@ -5,6 +5,7 @@ using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.HairServices.GetHairServices;
 using BarberSearch.Contracts.Reviews.GetReviews;
+using BarberSearch.Contracts.Salons.GetSalonDirectory;
 using BarberSearch.Contracts.Specializations.GetSpecializations;
 
 namespace BarberSearch.Mobile.Core.Api;
@@ -145,5 +146,25 @@ public interface IBarberSearchApi
         Guid barberProfileId,
         string? cursor = null,
         int? pageSize = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Публичный каталог активных салонов для выбора места работы.
+    /// </summary>
+    /// <remarks>
+    /// Это анонимное чтение на том же клиенте без авторизационного обработчика: барбер
+    /// выбирает салон до входа в кабинет, а витрина — без входа. Ответ — голый массив без
+    /// пагинации, как у справочников фильтров. Пустые фильтры не передаются вовсе: сервер
+    /// трактует их как «без фильтра», но пустые <c>city=</c>/<c>search=</c> только засоряют
+    /// адрес и кэш.
+    /// </remarks>
+    /// <param name="city">Город; пустая строка или <c>null</c> — без фильтра.</param>
+    /// <param name="search">Поиск по названию и адресу; пустая строка — без фильтра.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Салоны каталога в порядке сервера.</returns>
+    /// <exception cref="BarberSearchApiException">API ответил ошибкой.</exception>
+    Task<IReadOnlyList<SalonDirectoryItemResponse>> SearchSalonsAsync(
+        string? city,
+        string? search,
         CancellationToken cancellationToken = default);
 }

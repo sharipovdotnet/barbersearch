@@ -1,3 +1,4 @@
+using BarberSearch.Mobile.Core.Navigation;
 using BarberSearch.Mobile.Navigation;
 using BarberSearch.Mobile.Pages;
 
@@ -59,6 +60,42 @@ public partial class AppShell : Shell
 		Routing.RegisterRoute(
 			BarberRequestPage.Route,
 			new PageRouteFactory<BarberRequestPage>(services));
+
+		// Кабинет мастера — один экран с четырьмя разделами, тоже поверх стека «Профиля»:
+		// маршрут у кабинета один, а разделы переключаются внутри страницы. Дочерние экраны
+		// кабинета открываются поверх него и закрываются возвратом, поэтому кабинет
+		// перечитывает /me и активирует свой раздел на Pop.
+		Routing.RegisterRoute(
+			BarberCabinetRoutes.Cabinet,
+			new PageRouteFactory<BarberCabinetPage>(services));
+		Routing.RegisterRoute(
+			BarberCabinetRoutes.CreateBooking,
+			new PageRouteFactory<BarberBookingCreatePage>(services));
+		Routing.RegisterRoute(
+			BarberCabinetRoutes.RescheduleBooking,
+			new PageRouteFactory<BarberBookingReschedulePage>(services));
+		Routing.RegisterRoute(
+			BarberCabinetRoutes.BookingNote,
+			new PageRouteFactory<BarberBookingNotePage>(services));
+		Routing.RegisterRoute(
+			BarberCabinetRoutes.Onboarding,
+			new PageRouteFactory<BarberOnboardingPage>(services));
+		Routing.RegisterRoute(
+			BarberCabinetRoutes.Notifications,
+			new PageRouteFactory<BarberNotificationsPage>(services));
+		Routing.RegisterRoute(
+			BarberCabinetRoutes.EditProfile,
+			new PageRouteFactory<BarberProfileEditPage>(services));
+		Routing.RegisterRoute(
+			BarberCabinetRoutes.ServiceEditor,
+			new PageRouteFactory<BarberServiceEditorPage>(services));
+
+		// Фото портфолио открывается нажатием на плитку в «Профиле» кабинета и живёт
+		// поверх него: возврат оставляет и кабинет, и выбранный раздел на месте, а
+		// раздел перечитывает карточку на Pop.
+		Routing.RegisterRoute(
+			BarberPhotoPage.Route,
+			new PageRouteFactory<BarberPhotoPage>(services));
 
 		// Регистрация живёт там же, рядом с формой входа: возврат с неё оставляет вкладку
 		// «Профиль» на месте, а после успеха страница закрывается сама.

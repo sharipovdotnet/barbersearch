@@ -1123,6 +1123,13 @@ public sealed class BarberReviewsSectionTests
             Guid? salonId,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Секция отзывов не читает свободное время.");
+
+        public Task<IReadOnlyList<BarberSearch.Contracts.Salons.GetSalonDirectory.SalonDirectoryItemResponse>>
+            SearchSalonsAsync(
+                string? city,
+                string? search,
+                CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Секция отзывов не читает каталог салонов.");
     }
 
     /// <summary>

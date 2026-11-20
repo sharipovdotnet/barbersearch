@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+    x:Class="BarberSearch.Mobile.Controls.BellMark"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <!--
+        Контур — lucide bell, тот же знак, что у колокольчика кабинета в вебе
+        (barber-cabinet-gates.tsx). Два пути на холсте 24×24 и штрих 2; цвет задаёт
+        StrokeColor, поэтому знак перекрашивается вместе с темой, как иконки табов.
+    -->
+    <Path
+        x:Name="Mark"
+        Data="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9 M10.3 21a1.94 1.94 0 0 0 3.4 0"
+        HeightRequest="24"
+        HorizontalOptions="Center"
+        StrokeLineCap="Round"
+        StrokeLineJoin="Round"
+        StrokeThickness="2"
+        VerticalOptions="Center"
+        WidthRequest="24" />
+
+</ContentView>

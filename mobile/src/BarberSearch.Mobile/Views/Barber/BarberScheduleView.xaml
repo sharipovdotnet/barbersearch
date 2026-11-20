@@ -1,0 +1,698 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+    x:Class="BarberSearch.Mobile.Views.Barber.BarberScheduleView"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels.Barber;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:BarberScheduleViewModel">
+
+    <!--
+        Раздел «Расписание»: недельный шаблон одного салона, исключения на даты и отпуска.
+        Сохранение недели, исключения и отпуска — три записи одного сервера, поэтому
+        конфликт 409 обслуживает один диалог на весь раздел: он лежит в этом же ContentView
+        поверх содержимого и повторяет ровно тот запрос, который сервер отклонил.
+
+        Раздел живёт внутри BarberCabinetPage и не имеет собственного жизненного цикла:
+        окно и автоповтор ему сообщает страница кабинета.
+    -->
+    <Grid>
+
+        <ScrollView>
+            <VerticalStackLayout Padding="0,0,0,24" Spacing="12">
+
+                <!-- Баннер о результате правки: сохранено, добавлено, удалено. -->
+                <Border
+                    Padding="12"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                    IsVisible="{Binding HasAnnouncement}"
+                    Stroke="Transparent"
+                    StrokeShape="RoundRectangle 10">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Label
+                            LineBreakMode="WordWrap"
+                            Text="{Binding Announcement}"
+                            VerticalOptions="Center" />
+                        <Button
+                            Grid.Column="1"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                            Command="{Binding DismissAnnouncementCommand}"
+                            MinimumHeightRequest="44"
+                            MinimumWidthRequest="44"
+                            Text="{loc:Translate Key='Закрыть'}"
+                            TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                    </Grid>
+                </Border>
+
+                <!-- Первое чтение расписания. -->
+                <VerticalStackLayout
+                    IsVisible="{Binding IsFirstLoading}"
+                    Padding="0,24"
+                    Spacing="8">
+                    <ActivityIndicator
+                        HorizontalOptions="Center"
+                        IsRunning="{Binding IsFirstLoading}" />
+                    <Label
+                        HorizontalTextAlignment="Center"
+                        Text="{loc:Translate Key='Загружаем расписание…'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                </VerticalStackLayout>
+
+                <!-- Читать оказалось нечего: причина и строка автоповтора. -->
+                <Border
+                    Padding="16"
+                    IsVisible="{Binding ShowError}"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            HorizontalTextAlignment="Center"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='Не удалось загрузить расписание'}" />
+                        <Label
+                            HorizontalTextAlignment="Center"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding ErrorMessage}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Label
+                            FontSize="12"
+                            HorizontalTextAlignment="Center"
+                            IsVisible="{Binding IsAutoRetrying}"
+                            Text="{loc:Translate Key='Пробуем снова…'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Тихое обновление уже показанного расписания. -->
+                <HorizontalStackLayout
+                    IsVisible="{Binding IsRefreshing}"
+                    Spacing="8">
+                    <ActivityIndicator
+                        IsRunning="{Binding IsRefreshing}"
+                        IsVisible="{Binding IsRefreshing}"
+                        VerticalOptions="Center" />
+                    <Label
+                        Text="{loc:Translate Key='Обновляем расписание…'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                        VerticalOptions="Center" />
+                </HorizontalStackLayout>
+
+                <!-- Запись идёт: кнопки правок уже недоступны, строка объясняет ожидание. -->
+                <HorizontalStackLayout IsVisible="{Binding IsSaving}" Spacing="8">
+                    <ActivityIndicator
+                        IsRunning="{Binding IsSaving}"
+                        IsVisible="{Binding IsSaving}"
+                        VerticalOptions="Center" />
+                    <Label
+                        Text="{loc:Translate Key='Сохраняем…'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                        VerticalOptions="Center" />
+                </HorizontalStackLayout>
+
+                <VerticalStackLayout IsVisible="{Binding ShowContent}" Spacing="12">
+
+                    <!-- Расписание задаётся парой «мастер — салон»: без салона его нет. -->
+                    <Border
+                        Padding="16"
+                        IsVisible="{Binding HasNoSalons}"
+                        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                        StrokeShape="RoundRectangle 10">
+                        <VerticalStackLayout Spacing="8">
+                            <Label
+                                FontFamily="GeistSemiBold"
+                                FontSize="16"
+                                Text="{loc:Translate Key='Нет привязанных салонов'}" />
+                            <Label
+                                LineBreakMode="WordWrap"
+                                Text="{loc:Translate Key='Расписание задаётся для пары «мастер — салон». Попросите администратора добавить салон в профиль.'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <!-- Салон: выбор, только если салонов несколько. -->
+                    <VerticalStackLayout IsVisible="{Binding HasMultipleSalons}" Spacing="4">
+                        <Label
+                            FontSize="12"
+                            Text="{loc:Translate Key='Салон'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Picker
+                            x:Name="SalonPicker"
+                            ItemsSource="{Binding Salons}"
+                            SelectedItem="{Binding SelectedSalon, Mode=TwoWay}"
+                            Title="{loc:Translate Key='Салон'}" />
+                    </VerticalStackLayout>
+
+                    <HorizontalStackLayout Spacing="4">
+                        <HorizontalStackLayout.Triggers>
+                            <DataTrigger
+                                Binding="{Binding HasMultipleSalons}"
+                                TargetType="HorizontalStackLayout"
+                                Value="True">
+                                <Setter Property="IsVisible" Value="False" />
+                            </DataTrigger>
+                            <DataTrigger
+                                Binding="{Binding HasNoSalons}"
+                                TargetType="HorizontalStackLayout"
+                                Value="True">
+                                <Setter Property="IsVisible" Value="False" />
+                            </DataTrigger>
+                        </HorizontalStackLayout.Triggers>
+                        <Label
+                            FontSize="12"
+                            Text="{loc:Translate Key='Салон:'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                            VerticalTextAlignment="Center" />
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="TailTruncation"
+                            Text="{Binding SingleSalonText}"
+                            VerticalTextAlignment="Center" />
+                    </HorizontalStackLayout>
+
+                    <!--
+                        Правка недели и исключений возможна только с салоном: без него неделя
+                        пуста, а исключение некуда привязать. Карточка выше объясняет почему.
+                        Отпуска остаются ниже — они принадлежат профилю и работают без салона.
+                    -->
+                    <VerticalStackLayout Spacing="12">
+
+                    <!-- Недельный шаблон: семь строк, один PUT на всю неделю. -->
+                    <Border
+                        Padding="16"
+                        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                        StrokeShape="RoundRectangle 10">
+                        <Border.Triggers>
+                            <DataTrigger
+                                Binding="{Binding HasNoSalons}"
+                                TargetType="Border"
+                                Value="True">
+                                <Setter Property="IsVisible" Value="False" />
+                            </DataTrigger>
+                        </Border.Triggers>
+                        <VerticalStackLayout Spacing="12">
+                            <VerticalStackLayout Spacing="2">
+                                <Label
+                                    FontFamily="GeistSemiBold"
+                                    FontSize="16"
+                                    Text="{loc:Translate Key='Недельное расписание'}" />
+                                <Label
+                                    FontSize="12"
+                                    LineBreakMode="WordWrap"
+                                    Text="{loc:Translate Key='Обычные рабочие часы салона. Время — в поясе салона.'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            </VerticalStackLayout>
+
+                            <Button
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                Command="{Binding FillWeekdaysCommand}"
+                                HorizontalOptions="Start"
+                                Text="{loc:Translate Key='Заполнить будни'}"
+                                TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Days}" Spacing="8">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:BarberScheduleDayItem">
+                                        <Grid
+                                            ColumnDefinitions="*,Auto"
+                                            ColumnSpacing="8"
+                                            RowDefinitions="Auto,Auto,Auto"
+                                            RowSpacing="4">
+
+                                            <Label
+                                                FontSize="16"
+                                                Text="{Binding DayLabel}"
+                                                VerticalTextAlignment="Center" />
+                                            <Switch
+                                                Grid.Column="1"
+                                                IsToggled="{Binding IsWorking, Mode=TwoWay}"
+                                                VerticalOptions="Center" />
+
+                                            <Label
+                                                Grid.Row="1"
+                                                Grid.ColumnSpan="2"
+                                                FontSize="12"
+                                                IsVisible="{Binding ShowDayOffText}"
+                                                Text="{Binding DayOffText}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                                            <HorizontalStackLayout
+                                                Grid.Row="1"
+                                                Grid.ColumnSpan="2"
+                                                IsVisible="True"
+                                                Spacing="8">
+                                                <HorizontalStackLayout.Triggers>
+                                                    <DataTrigger
+                                                        Binding="{Binding IsDayOff}"
+                                                        TargetType="HorizontalStackLayout"
+                                                        Value="True">
+                                                        <Setter Property="IsVisible" Value="False" />
+                                                    </DataTrigger>
+                                                </HorizontalStackLayout.Triggers>
+                                                <TimePicker Time="{Binding StartTime, Mode=TwoWay}" />
+                                                <Label
+                                                    Text="—"
+                                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                                    VerticalTextAlignment="Center" />
+                                                <TimePicker Time="{Binding EndTime, Mode=TwoWay}" />
+                                            </HorizontalStackLayout>
+
+                                            <Label
+                                                Grid.Row="2"
+                                                Grid.ColumnSpan="2"
+                                                FontSize="12"
+                                                IsVisible="{Binding IsInvalid}"
+                                                LineBreakMode="WordWrap"
+                                                Text="{loc:Translate Key='Конец должен быть позже начала.'}"
+                                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding AllDaysOff}"
+                                LineBreakMode="WordWrap"
+                                Text="{loc:Translate Key='Все дни отмечены выходными: клиенты не увидят свободное время.'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                            <Label
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                Text="{loc:Translate Key='Изменение графика не отменяет записи: если визит выйдет за новые часы, сохранение попросит подтвердить.'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                            <Label
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding SaveError}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                                <Label.Triggers>
+                                    <DataTrigger
+                                        Binding="{Binding SaveError}"
+                                        TargetType="Label"
+                                        Value="{x:Null}">
+                                        <Setter Property="IsVisible" Value="False" />
+                                    </DataTrigger>
+                                </Label.Triggers>
+                            </Label>
+
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding IsDirty}"
+                                Text="{loc:Translate Key='Есть несохранённые изменения'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                            <Button
+                                Command="{Binding SaveCommand}"
+                                Text="{Binding SaveButtonText}" />
+
+                            <Button
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                Command="{Binding DiscardChangesCommand}"
+                                IsVisible="{Binding IsDirty}"
+                                Text="{loc:Translate Key='Отменить изменения'}"
+                                TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <!-- Исключения на даты: выходной или свои часы в одном салоне. -->
+                    <Border
+                        Padding="16"
+                        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                        StrokeShape="RoundRectangle 10">
+                        <Border.Triggers>
+                            <DataTrigger
+                                Binding="{Binding HasNoSalons}"
+                                TargetType="Border"
+                                Value="True">
+                                <Setter Property="IsVisible" Value="False" />
+                            </DataTrigger>
+                        </Border.Triggers>
+                        <VerticalStackLayout Spacing="12">
+                            <VerticalStackLayout Spacing="2">
+                                <Label
+                                    FontFamily="GeistSemiBold"
+                                    FontSize="16"
+                                    Text="{loc:Translate Key='Исключения на даты'}" />
+                                <Label
+                                    FontSize="12"
+                                    LineBreakMode="WordWrap"
+                                    Text="{loc:Translate Key='Выходной или особые часы в конкретный день. Действует только в выбранном салоне; недельное расписание не меняется.'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            </VerticalStackLayout>
+
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                <VerticalStackLayout Spacing="4">
+                                    <Label
+                                        FontSize="12"
+                                        Text="{loc:Translate Key='Дата'}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    <DatePicker
+                                        Date="{Binding NewExceptionDate, Mode=TwoWay}"
+                                        Format="D"
+                                        MaximumDate="{Binding ExceptionMaxDate}"
+                                        MinimumDate="{Binding ExceptionMinDate}" />
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Column="1" Spacing="4">
+                                    <Label
+                                        FontSize="12"
+                                        Text="{loc:Translate Key='Выходной'}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    <Switch IsToggled="{Binding NewExceptionIsDayOff, Mode=TwoWay}" />
+                                </VerticalStackLayout>
+                            </Grid>
+
+                            <!-- Свои часы: только когда день не выходной. -->
+                            <HorizontalStackLayout Spacing="8">
+                                <HorizontalStackLayout.Triggers>
+                                    <DataTrigger
+                                        Binding="{Binding NewExceptionIsDayOff}"
+                                        TargetType="HorizontalStackLayout"
+                                        Value="True">
+                                        <Setter Property="IsVisible" Value="False" />
+                                    </DataTrigger>
+                                </HorizontalStackLayout.Triggers>
+                                <TimePicker
+                                    SemanticProperties.Description="{loc:Translate Key='Начало работы в этот день'}"
+                                    Time="{Binding NewExceptionStartTime, Mode=TwoWay}" />
+                                <Label
+                                    Text="—"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                    VerticalTextAlignment="Center" />
+                                <TimePicker
+                                    SemanticProperties.Description="{loc:Translate Key='Окончание работы в этот день'}"
+                                    Time="{Binding NewExceptionEndTime, Mode=TwoWay}" />
+                            </HorizontalStackLayout>
+
+                            <VerticalStackLayout Spacing="4">
+                                <Label
+                                    FontSize="12"
+                                    Text="{loc:Translate Key='Пометка'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                <Entry
+                                    MaxLength="500"
+                                    Placeholder="{loc:Translate Key='Например, личные дела'}"
+                                    Text="{Binding NewExceptionReason}" />
+                            </VerticalStackLayout>
+
+                            <Label
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding ExceptionError}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                                <Label.Triggers>
+                                    <DataTrigger
+                                        Binding="{Binding ExceptionError}"
+                                        TargetType="Label"
+                                        Value="{x:Null}">
+                                        <Setter Property="IsVisible" Value="False" />
+                                    </DataTrigger>
+                                </Label.Triggers>
+                            </Label>
+
+                            <Button
+                                Command="{Binding AddExceptionCommand}"
+                                Text="{loc:Translate Key='Добавить исключение'}" />
+
+                            <Label
+                                FontSize="12"
+                                IsVisible="True"
+                                Text="{loc:Translate Key='Исключений пока нет.'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
+                                <Label.Triggers>
+                                    <DataTrigger
+                                        Binding="{Binding HasExceptions}"
+                                        TargetType="Label"
+                                        Value="True">
+                                        <Setter Property="IsVisible" Value="False" />
+                                    </DataTrigger>
+                                </Label.Triggers>
+                            </Label>
+
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Exceptions}" Spacing="8">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:BarberScheduleExceptionItem">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <VerticalStackLayout Spacing="2">
+                                                <Label FontSize="14" Text="{Binding DateText}" />
+                                                <Label
+                                                    FontSize="12"
+                                                    LineBreakMode="WordWrap"
+                                                    Text="{Binding SummaryText}"
+                                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                            </VerticalStackLayout>
+                                            <Button
+                                                Grid.Column="1"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                                Clicked="OnRemoveExceptionClicked"
+                                                SemanticProperties.Description="{Binding RemoveLabel}"
+                                                Text="{loc:Translate Key='Удалить'}"
+                                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}"
+                                                VerticalOptions="Center" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <!-- Отпуска: период принадлежит профилю, поэтому общий для всех салонов. -->
+                    <Border
+                        Padding="16"
+                        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                        StrokeShape="RoundRectangle 10">
+                        <VerticalStackLayout Spacing="12">
+                            <VerticalStackLayout Spacing="2">
+                                <Label
+                                    FontFamily="GeistSemiBold"
+                                    FontSize="16"
+                                    Text="{loc:Translate Key='Отпуска и нерабочие периоды'}" />
+                                <Label
+                                    FontSize="12"
+                                    LineBreakMode="WordWrap"
+                                    Text="{loc:Translate Key='Период действует во всех салонах и сильнее недельного расписания.'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            </VerticalStackLayout>
+
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                <VerticalStackLayout Spacing="4">
+                                    <Label
+                                        FontSize="12"
+                                        Text="{loc:Translate Key='С'}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    <DatePicker
+                                        Date="{Binding NewTimeOffStartDate, Mode=TwoWay}"
+                                        Format="D"
+                                        MaximumDate="{Binding TimeOffMaxDate}"
+                                        MinimumDate="{Binding TimeOffMinDate}" />
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Column="1" Spacing="4">
+                                    <Label
+                                        FontSize="12"
+                                        Text="{loc:Translate Key='По'}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    <DatePicker
+                                        Date="{Binding NewTimeOffEndDate, Mode=TwoWay}"
+                                        Format="D"
+                                        MaximumDate="{Binding TimeOffMaxDate}"
+                                        MinimumDate="{Binding TimeOffMinDate}" />
+                                </VerticalStackLayout>
+                            </Grid>
+
+                            <VerticalStackLayout Spacing="4">
+                                <Label
+                                    FontSize="12"
+                                    Text="{loc:Translate Key='Пометка'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                <Entry
+                                    MaxLength="500"
+                                    Placeholder="{loc:Translate Key='Например, отпуск'}"
+                                    Text="{Binding NewTimeOffReason}" />
+                            </VerticalStackLayout>
+
+                            <Label
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding TimeOffError}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                                <Label.Triggers>
+                                    <DataTrigger
+                                        Binding="{Binding TimeOffError}"
+                                        TargetType="Label"
+                                        Value="{x:Null}">
+                                        <Setter Property="IsVisible" Value="False" />
+                                    </DataTrigger>
+                                </Label.Triggers>
+                            </Label>
+
+                            <Button
+                                Command="{Binding AddTimeOffCommand}"
+                                Text="{loc:Translate Key='Добавить отпуск'}" />
+
+                            <Label
+                                FontSize="12"
+                                IsVisible="True"
+                                Text="{loc:Translate Key='Отпусков пока нет.'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
+                                <Label.Triggers>
+                                    <DataTrigger
+                                        Binding="{Binding HasTimeOffs}"
+                                        TargetType="Label"
+                                        Value="True">
+                                        <Setter Property="IsVisible" Value="False" />
+                                    </DataTrigger>
+                                </Label.Triggers>
+                            </Label>
+
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding TimeOffs}" Spacing="8">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:BarberTimeOffItem">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <VerticalStackLayout Spacing="2">
+                                                <Label FontSize="14" Text="{Binding RangeText}" />
+                                                <Label
+                                                    FontSize="12"
+                                                    IsVisible="{Binding HasReason}"
+                                                    LineBreakMode="WordWrap"
+                                                    Text="{Binding ReasonText}"
+                                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                            </VerticalStackLayout>
+                                            <Button
+                                                Grid.Column="1"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                                Clicked="OnRemoveTimeOffClicked"
+                                                SemanticProperties.Description="{Binding RemoveLabel}"
+                                                Text="{loc:Translate Key='Удалить'}"
+                                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}"
+                                                VerticalOptions="Center" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+
+                    </VerticalStackLayout>
+
+                </VerticalStackLayout>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!--
+            Конфликт 409: сервер уже отказался писать, поэтому решение принимается здесь,
+            поверх раздела, а не системным алертом. Затемнение — тот же токен фона с
+            прозрачностью: новых цветов не появляется.
+        -->
+        <Grid IsVisible="{Binding IsConflictPromptVisible}">
+            <BoxView
+                BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                Opacity="0.92" />
+
+            <Border
+                Margin="8"
+                Padding="16"
+                BackgroundColor="{AppThemeBinding Light={StaticResource Background}, Dark={StaticResource BackgroundDark}}"
+                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                StrokeShape="RoundRectangle 10"
+                VerticalOptions="Center">
+                <VerticalStackLayout Spacing="12">
+                    <Label
+                        FontFamily="GeistSemiBold"
+                        FontSize="16"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding ConflictTitle}" />
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding ConflictDescription}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                    <ScrollView MaximumHeightRequest="240">
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Conflicts}" Spacing="8">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ScheduleConflictItem">
+                                    <VerticalStackLayout Spacing="2">
+                                        <Label
+                                            FontFamily="GeistMedium"
+                                            FontSize="14"
+                                            LineBreakMode="WordWrap"
+                                            Text="{Binding When}" />
+                                        <Label
+                                            FontSize="12"
+                                            LineBreakMode="WordWrap"
+                                            Text="{Binding Customer}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        <Label
+                                            FontSize="12"
+                                            LineBreakMode="WordWrap"
+                                            Text="{Binding Service}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        <Label
+                                            FontSize="12"
+                                            LineBreakMode="WordWrap"
+                                            Text="{Binding Status}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    </VerticalStackLayout>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                    </ScrollView>
+
+                    <Label
+                        FontSize="12"
+                        IsVisible="{Binding HasMoreConflicts}"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding MoreConflictsText}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding ConflictError}"
+                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                        <Label.Triggers>
+                            <DataTrigger
+                                Binding="{Binding ConflictError}"
+                                TargetType="Label"
+                                Value="{x:Null}">
+                                <Setter Property="IsVisible" Value="False" />
+                            </DataTrigger>
+                        </Label.Triggers>
+                    </Label>
+
+                    <!-- «Всё равно сохранить» не destructive: визит не отменяется. -->
+                    <Button
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                        Command="{Binding CancelConflictCommand}"
+                        Text="{loc:Translate Key='Отмена'}"
+                        TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}">
+                        <Button.Triggers>
+                            <DataTrigger
+                                Binding="{Binding IsSaving}"
+                                TargetType="Button"
+                                Value="True">
+                                <Setter Property="IsEnabled" Value="False" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                    <Button Command="{Binding ConfirmForceCommand}" Text="{loc:Translate Key='Всё равно сохранить'}">
+                        <Button.Triggers>
+                            <DataTrigger
+                                Binding="{Binding IsSaving}"
+                                TargetType="Button"
+                                Value="True">
+                                <Setter Property="IsEnabled" Value="False" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                </VerticalStackLayout>
+            </Border>
+        </Grid>
+
+    </Grid>
+
+</ContentView>

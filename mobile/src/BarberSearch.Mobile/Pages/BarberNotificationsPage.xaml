@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.BarberNotificationsPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels.Barber;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:BarberNotificationsViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="{loc:Translate Key='Уведомления'}">
+
+    <Grid Padding="16" RowDefinitions="Auto,Auto,*" RowSpacing="12">
+
+        <!-- Баннер после «Прочитать все»: отметка удалась. -->
+        <Border
+            Grid.Row="0"
+            Padding="12"
+            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+            IsVisible="{Binding HasAnnouncement}"
+            Stroke="Transparent"
+            StrokeShape="RoundRectangle 10">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <Label
+                    LineBreakMode="WordWrap"
+                    Text="{Binding Announcement}"
+                    VerticalOptions="Center" />
+                <Button
+                    Grid.Column="1"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                    Command="{Binding DismissAnnouncementCommand}"
+                    MinimumHeightRequest="44"
+                    MinimumWidthRequest="44"
+                    Text="{loc:Translate Key='Закрыть'}"
+                    TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+            </Grid>
+        </Border>
+
+        <!-- Шапка инбокса: отметка всех прочитанными. Это запись — без автоповтора. -->
+        <VerticalStackLayout Grid.Row="1" Spacing="8">
+            <Button
+                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                Command="{Binding MarkAllReadCommand}"
+                HorizontalOptions="Start"
+                IsEnabled="{Binding CanMarkAllRead}"
+                Text="{loc:Translate Key='Прочитать все'}"
+                TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+            <Label
+                FontSize="12"
+                IsVisible="{Binding HasMarkAllError}"
+                LineBreakMode="WordWrap"
+                Text="{Binding MarkAllError}"
+                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+        </VerticalStackLayout>
+
+        <Grid Grid.Row="2">
+
+            <!-- Первое чтение инбокса. -->
+            <VerticalStackLayout
+                IsVisible="{Binding IsFirstLoading}"
+                Spacing="8"
+                VerticalOptions="Center">
+                <ActivityIndicator
+                    HorizontalOptions="Center"
+                    IsRunning="{Binding IsFirstLoading}" />
+                <Label
+                    HorizontalTextAlignment="Center"
+                    Text="{loc:Translate Key='Загружаем уведомления…'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            </VerticalStackLayout>
+
+            <!-- Ошибка первой страницы: причина и строка автоповтора. -->
+            <VerticalStackLayout
+                IsVisible="{Binding ShowError}"
+                Spacing="12"
+                VerticalOptions="Center">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="16"
+                    HorizontalTextAlignment="Center"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Не удалось загрузить уведомления'}" />
+                <Label
+                    HorizontalTextAlignment="Center"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding ErrorMessage}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Label
+                    FontSize="12"
+                    HorizontalTextAlignment="Center"
+                    IsVisible="{Binding IsAutoRetrying}"
+                    Text="{loc:Translate Key='Пробуем снова…'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            </VerticalStackLayout>
+
+            <!-- Список: ключевой набор, свайп вниз обновляет первую страницу. -->
+            <RefreshView
+                Command="{Binding RefreshCommand}"
+                IsRefreshing="{Binding IsRefreshing}"
+                IsVisible="{Binding ShowContent}">
+                <CollectionView
+                    ItemsSource="{Binding Items}"
+                    SelectionChanged="OnNotificationSelected"
+                    SelectionMode="Single">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BarberNotificationItem">
+                            <Border
+                                Margin="0,0,0,8"
+                                Padding="12"
+                                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                StrokeShape="RoundRectangle 10">
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+
+                                    <!-- Точка непрочитанного: цвет единственного токена, без новых. -->
+                                    <Border
+                                        Margin="0,6,0,0"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                                        HeightRequest="8"
+                                        IsVisible="{Binding IsUnread}"
+                                        Stroke="Transparent"
+                                        StrokeShape="RoundRectangle 4"
+                                        VerticalOptions="Start"
+                                        WidthRequest="8" />
+
+                                    <VerticalStackLayout Grid.Column="1" Spacing="2">
+                                        <Label
+                                            FontFamily="GeistMedium"
+                                            FontSize="16"
+                                            LineBreakMode="WordWrap"
+                                            Text="{Binding Title}">
+                                            <Label.Triggers>
+                                                <DataTrigger
+                                                    Binding="{Binding IsUnread}"
+                                                    TargetType="Label"
+                                                    Value="True">
+                                                    <Setter Property="FontFamily" Value="GeistSemiBold" />
+                                                </DataTrigger>
+                                            </Label.Triggers>
+                                        </Label>
+                                        <Label
+                                            FontSize="14"
+                                            IsVisible="{Binding HasBody}"
+                                            LineBreakMode="WordWrap"
+                                            Text="{Binding Body}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        <Label
+                                            FontSize="12"
+                                            Text="{Binding MomentText}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    </VerticalStackLayout>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+
+                    <CollectionView.Footer>
+                        <VerticalStackLayout Padding="0,8,0,24" Spacing="8">
+
+                            <!-- Догрузка следующей страницы. -->
+                            <HorizontalStackLayout
+                                HorizontalOptions="Center"
+                                IsVisible="{Binding IsLoadingMore}"
+                                Spacing="8">
+                                <ActivityIndicator IsRunning="{Binding IsLoadingMore}" />
+                                <Label
+                                    Text="{loc:Translate Key='Идёт догрузка…'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                    VerticalOptions="Center" />
+                            </HorizontalStackLayout>
+
+                            <!-- Ошибка следующей страницы: показанные строки остаются. -->
+                            <VerticalStackLayout IsVisible="{Binding HasLoadMoreError}" Spacing="8">
+                                <Label
+                                    LineBreakMode="WordWrap"
+                                    Text="{Binding LoadMoreError}"
+                                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                                <Label
+                                    FontSize="12"
+                                    IsVisible="{Binding IsLoadMoreAutoRetrying}"
+                                    Text="{loc:Translate Key='Пробуем снова…'}"
+                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            </VerticalStackLayout>
+
+                            <!-- Следующая страница: курсор не сдвигается на ошибке. -->
+                            <Button
+                                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                Command="{Binding LoadMoreCommand}"
+                                HorizontalOptions="Center"
+                                IsVisible="{Binding CanLoadMore}"
+                                Text="{loc:Translate Key='Дальше'}"
+                                TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                        </VerticalStackLayout>
+                    </CollectionView.Footer>
+                </CollectionView>
+            </RefreshView>
+
+            <!-- Пустое состояние: читать удалось, но строк нет. -->
+            <ScrollView IsVisible="{Binding ShowEmpty}">
+                <VerticalStackLayout
+                    Padding="0,24"
+                    Spacing="8"
+                    VerticalOptions="Center">
+                    <Label
+                        FontFamily="GeistSemiBold"
+                        FontSize="16"
+                        HorizontalTextAlignment="Center"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding EmptyText}" />
+                    <Label
+                        FontSize="12"
+                        HorizontalTextAlignment="Center"
+                        LineBreakMode="WordWrap"
+                        Text="{loc:Translate Key='Напоминания о визитах и утренняя сводка появятся здесь.'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                </VerticalStackLayout>
+            </ScrollView>
+
+        </Grid>
+
+    </Grid>
+
+</ContentPage>

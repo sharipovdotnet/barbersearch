@@ -1,0 +1,460 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.BarberOnboardingPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels.Barber;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:BarberOnboardingViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="{loc:Translate Key='Создать профиль мастера'}">
+
+    <!--
+        Онбординг мастера: форма профиля, шаг «Добавьте место приёма» и состояния сессии.
+        Все состояния лежат в одной ячейке сетки и показываются взаимоисключающе — так
+        ни одно из них не толкает остальные.
+    -->
+    <Grid Padding="16">
+
+        <!-- Чтение заявки: форма ещё не собрана. -->
+        <VerticalStackLayout
+            IsVisible="{Binding IsLoading}"
+            Spacing="8"
+            VerticalOptions="Center">
+            <ActivityIndicator
+                HorizontalOptions="Center"
+                IsRunning="{Binding IsLoading}" />
+        </VerticalStackLayout>
+
+        <!-- Чтение заявки не удалось: причина и строка автоповтора. -->
+        <VerticalStackLayout
+            IsVisible="{Binding ShowReadError}"
+            Spacing="12"
+            VerticalOptions="Center">
+            <Label
+                FontFamily="GeistSemiBold"
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='Не удалось проверить заявку'}" />
+            <Label
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{Binding ReadError}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            <Label
+                FontSize="12"
+                HorizontalTextAlignment="Center"
+                IsVisible="{Binding IsAutoRetrying}"
+                Text="{loc:Translate Key='Пробуем снова…'}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+        </VerticalStackLayout>
+
+        <!-- Сессия закончилась: форму показывать нечему, нужен вход. -->
+        <VerticalStackLayout
+            IsVisible="{Binding IsSignInRequired}"
+            Spacing="12"
+            VerticalOptions="Center">
+            <Label
+                FontFamily="GeistSemiBold"
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='Нужен вход'}" />
+            <Label
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='Профиль мастера создаётся в кабинете, а кабинет открывается по сессии. Войдите и попробуйте снова.'}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            <Button
+                Command="{Binding SignInCommand}"
+                HorizontalOptions="Center"
+                Text="{loc:Translate Key='Войти'}" />
+        </VerticalStackLayout>
+
+        <!-- Состояние сессии после создания профиля: обновление, временный и окончательный сбой. -->
+        <VerticalStackLayout
+            IsVisible="{Binding ShowSessionState}"
+            Spacing="12"
+            VerticalOptions="Center">
+            <Label
+                FontFamily="GeistSemiBold"
+                FontSize="16"
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{Binding SessionStateTitle}" />
+            <Label
+                HorizontalTextAlignment="Center"
+                LineBreakMode="WordWrap"
+                Text="{Binding SessionStateDescription}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            <ActivityIndicator
+                HorizontalOptions="Center"
+                IsRunning="{Binding IsRefreshingSession}"
+                IsVisible="{Binding IsRefreshingSession}" />
+            <Button
+                Command="{Binding RetrySessionCommand}"
+                HorizontalOptions="Center"
+                IsVisible="{Binding CanRetrySession}"
+                Text="{loc:Translate Key='Повторить'}" />
+            <Button
+                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                Command="{Binding SignInCommand}"
+                HorizontalOptions="Center"
+                Text="{loc:Translate Key='Войти'}"
+                TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+        </VerticalStackLayout>
+
+        <!-- Форма создания профиля. -->
+        <ScrollView IsVisible="{Binding ShowForm}">
+            <VerticalStackLayout Padding="0,0,0,24" Spacing="8">
+
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="20"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Создать профиль мастера'}" />
+                <Label
+                    FontSize="14"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Профиль на проверке. Заполняйте карточку — она появится в поиске после подтверждения администратором.'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                <!-- Поля из одобренной заявки: спрашивать одно и то же дважды незачем. -->
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding LockedHint}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
+                    <Label.Triggers>
+                        <DataTrigger
+                            Binding="{Binding LockedHint}"
+                            TargetType="Label"
+                            Value="">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+
+                <HorizontalStackLayout Spacing="2">
+                    <Label Text="{loc:Translate Key='Как вас представить'}" />
+                    <Label
+                        Text="*"
+                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                </HorizontalStackLayout>
+                <Entry
+                    IsReadOnly="{Binding IsDisplayNameLocked}"
+                    MaxLength="120"
+                    Text="{Binding DisplayName}" />
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding HasDisplayNameError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding DisplayNameError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <HorizontalStackLayout Spacing="2">
+                    <Label Text="{loc:Translate Key='Опыт, лет'}" />
+                    <Label
+                        Text="*"
+                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                </HorizontalStackLayout>
+                <Entry
+                    IsReadOnly="{Binding IsExperienceLocked}"
+                    Keyboard="Numeric"
+                    MaxLength="2"
+                    Text="{Binding ExperienceYears}" />
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding HasExperienceError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding ExperienceError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <Label Text="{loc:Translate Key='О себе'}" />
+                <Border
+                    Padding="8"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <Editor
+                        AutoSize="TextChanges"
+                        IsReadOnly="{Binding IsBioLocked}"
+                        MinimumHeightRequest="120"
+                        Text="{Binding Bio}" />
+                </Border>
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='О себе — необязательно'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding HasBioError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding BioError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <!-- Языки: по умолчанию русский, хотя бы один обязателен. -->
+                <Label Text="{loc:Translate Key='Языки'}" />
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Languages}">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BarberLanguageOption">
+                            <Grid
+                                ColumnDefinitions="Auto,*"
+                                ColumnSpacing="8"
+                                MinimumHeightRequest="44">
+                                <CheckBox
+                                    IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                    VerticalOptions="Center" />
+                                <Label
+                                    Grid.Column="1"
+                                    Text="{Binding Text}"
+                                    VerticalTextAlignment="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding HasLanguagesError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding LanguagesError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <Label
+                    FontSize="14"
+                    IsVisible="{Binding HasFormError}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding FormError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                <!-- Повтор после сетевого сбоя: профиль ещё не создан, форма не меняется. -->
+                <Button
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                    Command="{Binding SubmitCommand}"
+                    HorizontalOptions="Start"
+                    IsVisible="{Binding CanRetrySubmit}"
+                    Text="{loc:Translate Key='Повторить'}"
+                    TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+
+                <Button
+                    Margin="0,8,0,0"
+                    Command="{Binding SubmitCommand}"
+                    IsEnabled="{Binding IsFormEnabled}"
+                    Text="{Binding SubmitButtonText}" />
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Шаг «Добавьте место приёма»: профиль и пара токенов уже обновлены. -->
+        <ScrollView IsVisible="{Binding IsSalonStep}">
+            <VerticalStackLayout Padding="0,0,0,24" Spacing="12">
+
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="20"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding SalonStepTitle}" />
+                <Label
+                    LineBreakMode="WordWrap"
+                    Text="{Binding SalonStepDescription}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding SalonStepHint}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                <!-- Поиск и выбор салона; после привязки блок скрывается. -->
+                <VerticalStackLayout Spacing="8">
+                    <VerticalStackLayout.Triggers>
+                        <DataTrigger
+                            Binding="{Binding SalonAdded}"
+                            TargetType="VerticalStackLayout"
+                            Value="True">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </VerticalStackLayout.Triggers>
+
+                    <Label Text="{loc:Translate Key='Город'}" />
+                    <Entry Text="{Binding CatalogCity}" />
+
+                    <Label Text="{loc:Translate Key='Название или адрес'}" />
+                    <Entry
+                        ReturnCommand="{Binding SearchCatalogCommand}"
+                        ReturnType="Search"
+                        Text="{Binding CatalogQuery}" />
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding CatalogHint}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
+                        <Label.Triggers>
+                            <DataTrigger
+                                Binding="{Binding CatalogHint}"
+                                TargetType="Label"
+                                Value="">
+                                <Setter Property="IsVisible" Value="False" />
+                            </DataTrigger>
+                        </Label.Triggers>
+                    </Label>
+
+                    <HorizontalStackLayout
+                        IsVisible="{Binding IsCatalogLoading}"
+                        Spacing="8">
+                        <ActivityIndicator IsRunning="{Binding IsCatalogLoading}" />
+                        <Label
+                            Text="{loc:Translate Key='Загружаем каталог…'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                            VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+
+                    <!-- Ошибка каталога: причина и строка автоповтора. -->
+                    <VerticalStackLayout Spacing="8">
+                        <VerticalStackLayout.Triggers>
+                            <DataTrigger
+                                Binding="{Binding CatalogError}"
+                                TargetType="VerticalStackLayout"
+                                Value="{x:Null}">
+                                <Setter Property="IsVisible" Value="False" />
+                            </DataTrigger>
+                        </VerticalStackLayout.Triggers>
+                        <Label
+                            LineBreakMode="WordWrap"
+                            Text="{Binding CatalogError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding IsCatalogAutoRetrying}"
+                            Text="{loc:Translate Key='Пробуем снова…'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                    </VerticalStackLayout>
+
+                    <!-- Результаты каталога: нажатие на строку выбирает салон. -->
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Catalog}" Spacing="4">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BarberSalonCatalogItem">
+                                <Border
+                                    Margin="0,0,0,4"
+                                    Padding="12"
+                                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                    StrokeShape="RoundRectangle 10">
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnCatalogSalonTapped" />
+                                    </Border.GestureRecognizers>
+                                    <VerticalStackLayout Spacing="2">
+                                        <Label
+                                            FontFamily="GeistMedium"
+                                            FontSize="16"
+                                            LineBreakMode="WordWrap"
+                                            Text="{Binding Name}" />
+                                        <Label
+                                            FontSize="12"
+                                            LineBreakMode="WordWrap"
+                                            Text="{Binding FullAddress}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        <Label
+                                            FontSize="12"
+                                            Text="{Binding KindText}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+
+                    <Label
+                        FontSize="12"
+                        IsVisible="{Binding ShowCatalogEmpty}"
+                        LineBreakMode="WordWrap"
+                        Text="{loc:Translate Key='Ничего не найдено.'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                    <!-- Выбранный салон: подтверждение выбора и кнопка привязки. -->
+                    <Border
+                        Padding="12"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                        Stroke="Transparent"
+                        StrokeShape="RoundRectangle 10">
+                        <Border.Triggers>
+                            <DataTrigger
+                                Binding="{Binding SelectedCatalogSalon}"
+                                TargetType="Border"
+                                Value="{x:Null}">
+                                <Setter Property="IsVisible" Value="False" />
+                            </DataTrigger>
+                        </Border.Triggers>
+                        <VerticalStackLayout Spacing="2">
+                            <Label
+                                FontSize="12"
+                                Text="{loc:Translate Key='Выбрано:'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Label
+                                FontFamily="GeistSemiBold"
+                                FontSize="16"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding SelectedCatalogSalon.Name}" />
+                            <Label
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding SelectedCatalogSalon.FullAddress}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <Label
+                        IsVisible="{Binding HasAddSalonError}"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding AddSalonError}"
+                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                    <Button
+                        Command="{Binding AddSalonCommand}"
+                        HorizontalOptions="Start"
+                        IsEnabled="{Binding CanAddSalon}"
+                        Text="{Binding AddSalonButtonText}" />
+                </VerticalStackLayout>
+
+                <!-- Салон привязан: сообщение и путь в кабинет. -->
+                <Label
+                    FontSize="14"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding SalonAddedText}"
+                    TextColor="{AppThemeBinding Light={StaticResource Success}, Dark={StaticResource SuccessDark}}">
+                    <Label.Triggers>
+                        <DataTrigger
+                            Binding="{Binding SalonAddedText}"
+                            TargetType="Label"
+                            Value="">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+
+                <Button
+                    Margin="0,8,0,0"
+                    Command="{Binding GoToCabinetCommand}"
+                    Text="{loc:Translate Key='Перейти в кабинет'}" />
+
+                <!-- «Пропустить» — тот же переход в кабинет, но вторичной кнопкой. -->
+                <Button
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                    Command="{Binding GoToCabinetCommand}"
+                    Text="{loc:Translate Key='Пропустить'}"
+                    TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}">
+                    <Button.Triggers>
+                        <DataTrigger
+                            Binding="{Binding SalonAdded}"
+                            TargetType="Button"
+                            Value="True">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+    </Grid>
+
+</ContentPage>

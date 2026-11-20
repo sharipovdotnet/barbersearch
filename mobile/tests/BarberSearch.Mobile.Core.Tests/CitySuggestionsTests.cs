@@ -330,5 +330,12 @@ public sealed class CitySuggestionsTests
             int? pageSize = null,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Подсказки не читают отзывы.");
+
+        public Task<IReadOnlyList<BarberSearch.Contracts.Salons.GetSalonDirectory.SalonDirectoryItemResponse>>
+            SearchSalonsAsync(
+                string? city,
+                string? search,
+                CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Подсказки не читают каталог салонов.");
     }
 }

@@ -1985,6 +1985,13 @@ public sealed class BookingsViewModelTests
             int? pageSize = null,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Экран записей не читает отзывы мастера.");
+
+        public Task<IReadOnlyList<BarberSearch.Contracts.Salons.GetSalonDirectory.SalonDirectoryItemResponse>>
+            SearchSalonsAsync(
+                string? city,
+                string? search,
+                CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Экран записей не читает каталог салонов.");
     }
 
     /// <summary>

@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.BarberProfileEditPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels.Barber;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:BarberProfileEditViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="{loc:Translate Key='Редактировать профиль'}">
+
+    <!--
+        Правка карточки: поля разложены по коду сервера, грейд только для чтения.
+        Ошибки полей показываются триггером на null: отдельных Has-свойств у формы нет,
+        а пустая строка ошибки оставляла бы пустое место.
+    -->
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="16">
+
+            <!-- Грейд только для чтения: его назначает администратор. -->
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                <Label
+                    FontSize="12"
+                    Text="{loc:Translate Key='Грейд'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                    VerticalTextAlignment="Center" />
+                <Label
+                    Grid.Column="1"
+                    FontFamily="GeistMedium"
+                    FontSize="14"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding GradeText}" />
+            </Grid>
+
+            <!-- Как представить мастера: имя видят клиенты в поиске. -->
+            <VerticalStackLayout Spacing="4">
+                <Label Text="{loc:Translate Key='Как вас представить'}" />
+                <Entry MaxLength="120" Text="{Binding DisplayName}" />
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding DisplayNameError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                    <Label.Triggers>
+                        <DataTrigger
+                            Binding="{Binding DisplayNameError}"
+                            TargetType="Label"
+                            Value="{x:Null}">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+            </VerticalStackLayout>
+
+            <!-- Опыт: клиентская граница та же, что у домена, — от 1 до 70 лет. -->
+            <VerticalStackLayout Spacing="4">
+                <Label Text="{loc:Translate Key='Опыт, лет'}" />
+                <Entry
+                    Keyboard="Numeric"
+                    MaxLength="2"
+                    Text="{Binding ExperienceYears}" />
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding ExperienceError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                    <Label.Triggers>
+                        <DataTrigger
+                            Binding="{Binding ExperienceError}"
+                            TargetType="Label"
+                            Value="{x:Null}">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+            </VerticalStackLayout>
+
+            <!-- Языки: хотя бы один, иначе карточку не сохранить. -->
+            <VerticalStackLayout Spacing="4">
+                <Label Text="{loc:Translate Key='Языки'}" />
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Languages}">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BarberLanguageOption">
+                            <Grid
+                                ColumnDefinitions="Auto,*"
+                                ColumnSpacing="8"
+                                MinimumHeightRequest="44">
+                                <CheckBox
+                                    IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                    VerticalOptions="Center" />
+                                <Label
+                                    Grid.Column="1"
+                                    Text="{Binding Text}"
+                                    VerticalTextAlignment="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding LanguagesError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                    <Label.Triggers>
+                        <DataTrigger
+                            Binding="{Binding LanguagesError}"
+                            TargetType="Label"
+                            Value="{x:Null}">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+            </VerticalStackLayout>
+
+            <!-- Способы оплаты: необязательны, но сервер проверяет коды. -->
+            <VerticalStackLayout Spacing="4">
+                <Label Text="{loc:Translate Key='Способы оплаты'}" />
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding PaymentMethods}">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BarberPaymentOption">
+                            <Grid
+                                ColumnDefinitions="Auto,*"
+                                ColumnSpacing="8"
+                                MinimumHeightRequest="44">
+                                <CheckBox
+                                    IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                    VerticalOptions="Center" />
+                                <Label
+                                    Grid.Column="1"
+                                    Text="{Binding Text}"
+                                    VerticalTextAlignment="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding PaymentMethodsError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                    <Label.Triggers>
+                        <DataTrigger
+                            Binding="{Binding PaymentMethodsError}"
+                            TargetType="Label"
+                            Value="{x:Null}">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+            </VerticalStackLayout>
+
+            <!-- О себе: до 2000 символов, пустое уходит как null. -->
+            <VerticalStackLayout Spacing="4">
+                <Label Text="{loc:Translate Key='О себе'}" />
+                <Border
+                    Padding="8"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <Editor
+                        AutoSize="TextChanges"
+                        MinimumHeightRequest="120"
+                        Text="{Binding Bio}" />
+                </Border>
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding BioError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                    <Label.Triggers>
+                        <DataTrigger
+                            Binding="{Binding BioError}"
+                            TargetType="Label"
+                            Value="{x:Null}">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+            </VerticalStackLayout>
+
+            <!-- Правило опозданий: до 500 символов, пустая строка допустима. -->
+            <VerticalStackLayout Spacing="4">
+                <Label Text="{loc:Translate Key='Правило опозданий'}" />
+                <Entry Text="{Binding LatePolicy}" />
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding LatePolicyError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                    <Label.Triggers>
+                        <DataTrigger
+                            Binding="{Binding LatePolicyError}"
+                            TargetType="Label"
+                            Value="{x:Null}">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+            </VerticalStackLayout>
+
+            <!-- Списки: по одному пункту в строке, пустые строки выбрасываются. -->
+            <Label
+                FontSize="12"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='По одному пункту в строке.'}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+            <VerticalStackLayout Spacing="4">
+                <Label Text="{loc:Translate Key='Сертификаты и обучение'}" />
+                <Border
+                    Padding="8"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <Editor
+                        AutoSize="TextChanges"
+                        MinimumHeightRequest="88"
+                        Text="{Binding Certificates}" />
+                </Border>
+            </VerticalStackLayout>
+
+            <VerticalStackLayout Spacing="4">
+                <Label Text="{loc:Translate Key='Достижения'}" />
+                <Border
+                    Padding="8"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <Editor
+                        AutoSize="TextChanges"
+                        MinimumHeightRequest="88"
+                        Text="{Binding Achievements}" />
+                </Border>
+            </VerticalStackLayout>
+
+            <VerticalStackLayout Spacing="4">
+                <Label Text="{loc:Translate Key='Формат общения'}" />
+                <Border
+                    Padding="8"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <Editor
+                        AutoSize="TextChanges"
+                        MinimumHeightRequest="88"
+                        Text="{Binding CommunicationFormat}" />
+                </Border>
+            </VerticalStackLayout>
+
+            <VerticalStackLayout Spacing="4">
+                <Label Text="{loc:Translate Key='Комфорт в кресле'}" />
+                <Border
+                    Padding="8"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <Editor
+                        AutoSize="TextChanges"
+                        MinimumHeightRequest="88"
+                        Text="{Binding Goodies}" />
+                </Border>
+            </VerticalStackLayout>
+
+            <VerticalStackLayout Spacing="4">
+                <Label Text="{loc:Translate Key='Дополнительные услуги'}" />
+                <Border
+                    Padding="8"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <Editor
+                        AutoSize="TextChanges"
+                        MinimumHeightRequest="88"
+                        Text="{Binding AdditionalServices}" />
+                </Border>
+            </VerticalStackLayout>
+
+            <Label
+                LineBreakMode="WordWrap"
+                Text="{Binding FormError}"
+                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                <Label.Triggers>
+                    <DataTrigger
+                        Binding="{Binding FormError}"
+                        TargetType="Label"
+                        Value="{x:Null}">
+                        <Setter Property="IsVisible" Value="False" />
+                    </DataTrigger>
+                </Label.Triggers>
+            </Label>
+
+            <FlexLayout
+                AlignItems="Center"
+                Direction="Row"
+                Wrap="Wrap">
+                <Button
+                    Margin="0,0,8,8"
+                    Command="{Binding SaveCommand}"
+                    IsEnabled="{Binding CanSave}"
+                    Text="{loc:Translate Key='Сохранить'}" />
+                <Button
+                    Margin="0,0,8,8"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                    Clicked="OnDiscardClicked"
+                    Text="{loc:Translate Key='Отменить'}"
+                    TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                <ActivityIndicator
+                    Margin="0,0,8,8"
+                    IsRunning="{Binding IsSaving}"
+                    IsVisible="{Binding IsSaving}"
+                    VerticalOptions="Center" />
+            </FlexLayout>
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

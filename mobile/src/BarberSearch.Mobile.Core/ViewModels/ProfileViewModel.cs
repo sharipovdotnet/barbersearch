@@ -250,6 +250,27 @@ public sealed partial class ProfileViewModel : ObservableObject
     public event EventHandler? AdminRequested;
 
     /// <summary>
+    /// Нажата строка «Кабинет мастера»: страница открывает кабинет.
+    /// </summary>
+    /// <remarks>
+    /// Кабинет — не вкладка, а страница поверх стека «Профиля», как администрирование:
+    /// роль мастера редкая, и пятая вкладка занимала бы место у всех остальных. Событие,
+    /// а не навигация: Core не знает о Shell.
+    /// </remarks>
+    public event EventHandler? BarberCabinetRequested;
+
+    /// <summary>
+    /// Роль из профиля — мастер: строка «Кабинет мастера» видна.
+    /// </summary>
+    /// <remarks>
+    /// Строка видна и мастеру без привязанного профиля: кабинет сам объяснит, что профиль
+    /// ещё не создан, и предложит онбординг. Прятать вход из-за отсутствия профиля значило бы
+    /// оставить нового мастера без единственного пути к его созданию.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isBarber;
+
+    /// <summary>
     /// Роль из профиля — администратор: строка администрирования видна.
     /// </summary>
     /// <remarks>
@@ -713,6 +734,9 @@ public sealed partial class ProfileViewModel : ObservableObject
         BarberRequestTitle = Loc.T("Стать мастером");
         _barberRequestFailureKind = null;
 
+        // Строка кабинета — тоже: роль прошлого пользователя больше не известна.
+        IsBarber = false;
+
         // Строка администрирования — тоже: чужую очередь модерации показывать нельзя.
         IsAdmin = false;
         AdminPendingCount = 0;
@@ -953,6 +977,16 @@ public sealed partial class ProfileViewModel : ObservableObject
     /// </remarks>
     [RelayCommand]
     private void OpenAdmin() => AdminRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>
+    /// Просит страницу открыть кабинет мастера.
+    /// </summary>
+    /// <remarks>
+    /// Команда только поднимает событие: остановка повторов и навигация — работа страницы,
+    /// а Core про Shell не знает.
+    /// </remarks>
+    [RelayCommand]
+    private void OpenBarberCabinet() => BarberCabinetRequested?.Invoke(this, EventArgs.Empty);
 
     /// <summary>
     /// Включает или выключает напоминания по переключателю «Присылать напоминания».
@@ -1350,6 +1384,10 @@ public sealed partial class ProfileViewModel : ObservableObject
         // Строка «Стать мастером» — только клиенту: мастеру и администратору сервер ответил бы
         // 403, и предлагать действие, которое запрещено, нельзя.
         CanRequestBarberRole = profile.Role == UserRole.Customer;
+
+        // Кабинет — только мастеру. Профиль мастера может быть ещё не создан: кабинет
+        // объяснит это сам и предложит онбординг, поэтому одного признака роли достаточно.
+        IsBarber = profile.Role == UserRole.Barber;
 
         // Строка администрирования — только администратору: раздел закрыт политикой AdminOnly,
         // а строка, ведущая на «нет доступа», обещает то, чего нет.

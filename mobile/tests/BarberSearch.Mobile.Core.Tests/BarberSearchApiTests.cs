@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using BarberSearch.Domain.BarberProfiles.Enums;
 using BarberSearch.Domain.HairServices;
+using BarberSearch.Domain.Salons;
 using BarberSearch.Mobile.Core.Api;
 
 namespace BarberSearch.Mobile.Core.Tests;
@@ -21,6 +22,7 @@ public sealed class BarberSearchApiTests
     private static readonly Guid HairServiceId = Guid.Parse("9e100000-0000-4000-8000-000000000003");
     private static readonly Guid BarberServiceId = Guid.Parse("9e100000-0000-4000-8000-000000000004");
     private static readonly Guid SpecializationId = Guid.Parse("9e100000-0000-4000-8000-000000000009");
+    private static readonly Guid SalonDirectoryId = Guid.Parse("9e100000-0000-4000-8000-0000000000f1");
 
     private const string BarberProfileJson = """
         {
@@ -670,17 +672,118 @@ public sealed class BarberSearchApiTests
         Assert.Null(handler.LastRequestUri);
     }
 
+    [Fact]
+    public async Task SearchSalonsAsync_CityAndSearch_SendsEscapedFiltersAndParsesList()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, SalonDirectoryJson, "application/json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        var salons = await api.SearchSalonsAsync("  Москва  ", "Ленина 1");
+
+        Assert.Equal(HttpMethod.Get, handler.LastMethod);
+        Assert.Equal("/api/salons", handler.LastRequestUri!.AbsolutePath);
+
+        var rawQuery = handler.LastRequestUri.Query;
+
+        // Фильтры тримятся и уходят экранированными: пробел внутри значения иначе разорвал бы
+        // query-параметр, а кириллица зависела бы от кодировки HttpClient.
+        Assert.Contains(
+            string.Concat("city=", Uri.EscapeDataString("Москва")),
+            rawQuery,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            string.Concat("search=", Uri.EscapeDataString("Ленина 1")),
+            rawQuery,
+            StringComparison.Ordinal);
+
+        var salon = Assert.Single(salons);
+
+        Assert.Equal(SalonDirectoryId, salon.Id);
+        Assert.Equal("E2E Studio", salon.Name);
+        Assert.Equal("Москва", salon.City);
+        Assert.Equal("Ленина, 1", salon.Address);
+        Assert.Equal("Europe/Moscow", salon.TimeZoneId);
+        Assert.Equal(PlaceKind.Salon, salon.Kind);
+    }
+
+    [Fact]
+    public async Task SearchSalonsAsync_NoFilters_SendsBareSalonsPath()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, "[]", "application/json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        var salons = await api.SearchSalonsAsync(null, "   ");
+
+        Assert.Empty(salons);
+        Assert.Equal("/api/salons", handler.LastRequestUri!.AbsolutePath);
+
+        // Пустой фильтр — это «без фильтра»: параметр не передаётся вовсе, иначе сервер
+        // получил бы city= и search= как значения, а не как отсутствие условия.
+        Assert.Equal(string.Empty, handler.LastRequestUri.Query);
+    }
+
+    [Fact]
+    public async Task SearchSalonsAsync_NullJsonBody_ThrowsInsteadOfReturningNothing()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, "null", "application/json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => api.SearchSalonsAsync(null, null));
+    }
+
+    [Fact]
+    public async Task SearchSalonsAsync_TooManyRequests_ThrowsWithStatusAndErrorCode()
+    {
+        const string problemJson = """
+            {
+              "title": "Too Many Requests",
+              "status": 429,
+              "detail": "Rate limit exceeded.",
+              "errorCodes": ["rateLimit.exceeded"]
+            }
+            """;
+
+        var handler = new StubHandler(HttpStatusCode.TooManyRequests, problemJson, "application/problem+json");
+        using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5243/") };
+        var api = new BarberSearchApi(httpClient);
+
+        var exception = await Assert.ThrowsAsync<BarberSearchApiException>(
+            () => api.SearchSalonsAsync("Москва", null));
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, exception.StatusCode);
+        Assert.Contains("rateLimit.exceeded", exception.ErrorCodes, StringComparer.Ordinal);
+    }
+
+    private const string SalonDirectoryJson = """
+        [
+          {
+            "id": "9e100000-0000-4000-8000-0000000000f1",
+            "name": "E2E Studio",
+            "city": "Москва",
+            "address": "Ленина, 1",
+            "timeZoneId": "Europe/Moscow",
+            "kind": "Salon"
+          }
+        ]
+        """;
+
     /// <summary>
     /// Подменённый обработчик: отдаёт заранее заданный ответ и запоминает адрес запроса.
     /// </summary>
     private sealed class StubHandler(HttpStatusCode statusCode, string body, string contentType) : HttpMessageHandler
     {
+        public HttpMethod? LastMethod { get; private set; }
+
         public Uri? LastRequestUri { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            LastMethod = request.Method;
             LastRequestUri = request.RequestUri;
 
             return Task.FromResult(new HttpResponseMessage(statusCode)

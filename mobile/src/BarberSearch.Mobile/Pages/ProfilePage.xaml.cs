@@ -1,4 +1,5 @@
 using BarberSearch.Mobile.Core.Auth;
+using BarberSearch.Mobile.Core.Navigation;
 using BarberSearch.Mobile.Core.ViewModels;
 using BarberSearch.Mobile.Theming;
 
@@ -58,6 +59,7 @@ public partial class ProfilePage : ContentPage
         _viewModel.ForgotPasswordRequested += OnForgotPasswordRequested;
         _viewModel.BarberRequestRequested += OnBarberRequestRequested;
         _viewModel.AdminRequested += OnAdminRequested;
+        _viewModel.BarberCabinetRequested += OnBarberCabinetRequested;
     }
 
     /// <summary>
@@ -211,6 +213,21 @@ public partial class ProfilePage : ContentPage
         _viewModel.StopAutoRetry();
 
         await Shell.Current.GoToAsync(AdminHubPage.Route);
+    }
+
+    /// <summary>
+    /// Открывает кабинет мастера.
+    /// </summary>
+    /// <remarks>
+    /// Кабинет — не вкладка, а страница поверх стека «Профиля»: роль мастера редкая. Оба
+    /// цикла хаба останавливаются до перехода — push-навигация Shell может не вызвать
+    /// <see cref="OnDisappearing"/>, и тихие чтения продолжили бы ходить в сеть под кабинетом.
+    /// </remarks>
+    private async void OnBarberCabinetRequested(object? sender, EventArgs e)
+    {
+        _viewModel.StopAutoRetry();
+
+        await Shell.Current.GoToAsync(BarberCabinetRoutes.Cabinet);
     }
 
     /// <summary>

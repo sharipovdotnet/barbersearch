@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.BarberCabinetPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:controls="clr-namespace:BarberSearch.Mobile.Controls"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels.Barber;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:BarberCabinetViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="{loc:Translate Key='Кабинет мастера'}">
+
+    <!--
+        Кабинет — один экран с четырьмя разделами, а не пятая вкладка: роль мастера
+        редкая, и вкладка занимала бы место у всех. Разделы — ContentView, которые
+        страница создаёт из DI и переключает через IsVisible; они лежат в одной ячейке
+        сетки, поэтому переключение не толкает шапку и не пересобирает разметку.
+
+        Состояния гейта (сессия, роль, профиль, загрузка, ошибка) собраны в той же
+        ячейке и показываются взаимоисключающе — так ни одно из них не сдвигает другое.
+    -->
+    <Grid Padding="16,12,16,0" RowDefinitions="Auto,Auto,*" RowSpacing="12">
+
+        <!-- Шапка: заголовок, подпись и колокольчик 44×44 с бейджем непрочитанных. -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="22"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Кабинет мастера'}" />
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{loc:Translate Key='Записи клиентов: подтверждение, завершение и заметки.'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            </VerticalStackLayout>
+
+            <!--
+                Колокольчик: тот же lucide bell, что в шапке кабинета веба. Бейдж — соседний
+                элемент, а не часть знака; счётчик ограничен «99+» в ViewModel. Нажатие
+                открывает инбокс уведомлений; до готовности гейта профиля у него нет,
+                поэтому колокольчик в карточках входа, отказа и «профиля нет» скрыт.
+            -->
+            <Grid
+                Grid.Column="1"
+                HeightRequest="44"
+                IsVisible="{Binding BarberProfileId, Converter={StaticResource NotNull}}"
+                VerticalOptions="Start"
+                WidthRequest="44">
+                <Border
+                    BackgroundColor="Transparent"
+                    HeightRequest="44"
+                    SemanticProperties.Description="{loc:Translate Key='Уведомления'}"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 22"
+                    WidthRequest="44">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnBellTapped" />
+                    </Border.GestureRecognizers>
+                    <controls:BellMark StrokeColor="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}" />
+                </Border>
+                <Border
+                    Margin="0,-4,-4,0"
+                    Padding="5,1"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                    HorizontalOptions="End"
+                    InputTransparent="True"
+                    IsVisible="{Binding HasUnread}"
+                    Stroke="Transparent"
+                    StrokeShape="RoundRectangle 9"
+                    VerticalOptions="Start">
+                    <Label
+                        FontFamily="GeistSemiBold"
+                        FontSize="12"
+                        Text="{Binding UnreadBadgeText}"
+                        TextColor="{AppThemeBinding Light={StaticResource PrimaryForeground}, Dark={StaticResource PrimaryForegroundDark}}"
+                        VerticalTextAlignment="Center" />
+                </Border>
+            </Grid>
+        </Grid>
+
+        <!-- Сегменты навигации: четыре равных цели 44 pt, строятся из списка разделов. -->
+        <Grid
+            x:Name="SegmentBar"
+            Grid.Row="1"
+            ColumnSpacing="4"
+            IsVisible="{Binding IsReady}" />
+
+        <Grid Grid.Row="2">
+
+            <!-- Первая проверка сессии. -->
+            <VerticalStackLayout
+                IsVisible="{Binding IsFirstLoading}"
+                Spacing="8"
+                VerticalOptions="Center">
+                <ActivityIndicator
+                    HorizontalOptions="Center"
+                    IsRunning="{Binding IsFirstLoading}" />
+                <Label
+                    HorizontalTextAlignment="Center"
+                    Text="{loc:Translate Key='Загружаем кабинет…'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            </VerticalStackLayout>
+
+            <!-- Разделы: страница создаёт их из DI, все экземпляры живут до конца страницы. -->
+            <Grid x:Name="SectionsHost" IsVisible="{Binding IsReady}" />
+
+            <!--
+                Аноним или истёкшая сессия: форма входа живёт на вкладке «Профиль».
+                Отдельной формы здесь нет — она была бы вторым входом в приложение.
+            -->
+            <ScrollView IsVisible="{Binding IsSignInRequired}" VerticalOptions="Center">
+                <Border
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            HorizontalTextAlignment="Center"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='Войдите, чтобы увидеть записи клиентов'}" />
+                        <Label
+                            HorizontalTextAlignment="Center"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='Здесь мастер подтверждает записи, завершает визиты и оставляет заметки. Вход по email и паролю.'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Button
+                            Clicked="OnSignInClicked"
+                            HorizontalOptions="Center"
+                            Text="{loc:Translate Key='Войти'}" />
+                    </VerticalStackLayout>
+                </Border>
+            </ScrollView>
+
+            <!-- Роль не Barber: кабинет этой учётной записи не принадлежит. -->
+            <ScrollView IsVisible="{Binding IsForbidden}" VerticalOptions="Center">
+                <Border
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            HorizontalTextAlignment="Center"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='Это кабинет мастера'}" />
+                        <Label
+                            HorizontalTextAlignment="Center"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='Записи клиентов видит мастер со своим профилем. Ваши записи и отзывы — в кабинете клиента.'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                    </VerticalStackLayout>
+                </Border>
+            </ScrollView>
+
+            <!-- Роль есть, профиля нет: его создают в онбординге, а не на сайте. -->
+            <ScrollView IsVisible="{Binding IsNoProfile}" VerticalOptions="Center">
+                <Border
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            HorizontalTextAlignment="Center"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='Профиль ещё не создан'}" />
+                        <Label
+                            HorizontalTextAlignment="Center"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='Записи клиентов приходят только для профиля, связанного с вашим аккаунтом. Заполните его сами — это займёт пару минут.'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Button
+                            Clicked="OnCreateProfileClicked"
+                            HorizontalOptions="Center"
+                            Text="{loc:Translate Key='Создать профиль мастера'}" />
+                    </VerticalStackLayout>
+                </Border>
+            </ScrollView>
+
+            <!--
+                Ошибка проверки /me: причина и строка автоповтора.
+                Видимость снимается триггером, показывать причину нечего.
+            -->
+            <ScrollView VerticalOptions="Center">
+                <ScrollView.Triggers>
+                    <DataTrigger
+                        Binding="{Binding ErrorMessage}"
+                        TargetType="ScrollView"
+                        Value="{x:Null}">
+                        <Setter Property="IsVisible" Value="False" />
+                    </DataTrigger>
+                    <DataTrigger
+                        Binding="{Binding IsReady}"
+                        TargetType="ScrollView"
+                        Value="True">
+                        <Setter Property="IsVisible" Value="False" />
+                    </DataTrigger>
+                </ScrollView.Triggers>
+                <Border
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            HorizontalTextAlignment="Center"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='Не удалось загрузить кабинет'}" />
+                        <Label
+                            HorizontalTextAlignment="Center"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding ErrorMessage}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Label
+                            FontSize="12"
+                            HorizontalTextAlignment="Center"
+                            IsVisible="{Binding IsAutoRetrying}"
+                            Text="{loc:Translate Key='Пробуем снова…'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                    </VerticalStackLayout>
+                </Border>
+            </ScrollView>
+
+        </Grid>
+
+    </Grid>
+
+</ContentPage>

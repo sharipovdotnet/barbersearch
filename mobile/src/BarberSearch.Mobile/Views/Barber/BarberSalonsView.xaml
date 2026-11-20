@@ -1,0 +1,526 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView
+    x:Class="BarberSearch.Mobile.Views.Barber.BarberSalonsView"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels.Barber;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:BarberSalonsViewModel">
+
+    <!--
+        Раздел «Салоны»: привязанные места приёма, основной салон и добавление из
+        публичного каталога. Порядок и признак «основной» приходят с сервера как есть:
+        раздел их не пересобирает.
+
+        Мобильные действия строки (звонок, карта, копирование адреса и переход к
+        расписанию этого салона) собраны в code-behind: Core не знает ни Launcher,
+        ни Clipboard, ни Shell, а отдаёт только значения — телефон, координаты, адрес
+        и идентификатор салона.
+
+        Состояния (первое чтение, ошибка, пусто, список) лежат в одном ScrollView и
+        показываются взаимоисключающе: так ни одно из них не толкает остальные.
+    -->
+    <RefreshView Command="{Binding RefreshCommand}" IsRefreshing="{Binding IsRefreshing}">
+        <ScrollView>
+            <VerticalStackLayout Padding="0,0,0,24" Spacing="12">
+
+                <!-- Баннер о результате привязки или смены основного салона. -->
+                <Border
+                    Padding="12"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                    IsVisible="{Binding HasAnnouncement}"
+                    Stroke="Transparent"
+                    StrokeShape="RoundRectangle 10">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Label
+                            LineBreakMode="WordWrap"
+                            Text="{Binding Announcement}"
+                            VerticalOptions="Center" />
+                        <Button
+                            Grid.Column="1"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                            Command="{Binding DismissAnnouncementCommand}"
+                            MinimumHeightRequest="44"
+                            MinimumWidthRequest="44"
+                            Text="{loc:Translate Key='Закрыть'}"
+                            TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                    </Grid>
+                </Border>
+
+                <!-- Ошибка смены основного салона: строка списка остаётся на месте. -->
+                <Border
+                    Padding="12"
+                    IsVisible="{Binding HasActionError}"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Label
+                            LineBreakMode="WordWrap"
+                            Text="{Binding ActionError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}"
+                            VerticalOptions="Center" />
+                        <Button
+                            Grid.Column="1"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                            Command="{Binding DismissActionErrorCommand}"
+                            MinimumHeightRequest="44"
+                            MinimumWidthRequest="44"
+                            Text="{loc:Translate Key='Закрыть'}"
+                            TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                    </Grid>
+                </Border>
+
+                <!-- Первое чтение привязанных салонов. -->
+                <VerticalStackLayout
+                    IsVisible="{Binding IsFirstLoading}"
+                    Padding="0,24"
+                    Spacing="8">
+                    <ActivityIndicator
+                        HorizontalOptions="Center"
+                        IsRunning="{Binding IsFirstLoading}" />
+                    <Label
+                        HorizontalTextAlignment="Center"
+                        Text="{loc:Translate Key='Загружаем салоны…'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                </VerticalStackLayout>
+
+                <!-- Читать оказалось нечего: причина и строка автоповтора. -->
+                <Border
+                    Padding="16"
+                    IsVisible="{Binding ShowError}"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            HorizontalTextAlignment="Center"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='Не удалось загрузить салоны'}" />
+                        <Label
+                            HorizontalTextAlignment="Center"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding ErrorMessage}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Label
+                            FontSize="12"
+                            HorizontalTextAlignment="Center"
+                            IsVisible="{Binding IsAutoRetrying}"
+                            Text="{loc:Translate Key='Пробуем снова…'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Пустое состояние: тексты те же, что в вебе. -->
+                <Border
+                    Padding="16"
+                    IsVisible="{Binding ShowEmpty}"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding EmptyTitle}" />
+                        <Label
+                            LineBreakMode="WordWrap"
+                            Text="{Binding EmptyDescription}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Привязанные салоны: строка на место приёма. -->
+                <VerticalStackLayout
+                    BindableLayout.ItemsSource="{Binding Salons}"
+                    IsVisible="{Binding ShowContent}"
+                    Spacing="8">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BarberSalonItem">
+                            <Border
+                                Padding="12"
+                                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                StrokeShape="RoundRectangle 10">
+                                <VerticalStackLayout Spacing="8">
+
+                                    <!-- Название и бейджи: вид места, «Основной», модерация. -->
+                                    <FlexLayout
+                                        AlignItems="Center"
+                                        Direction="Row"
+                                        Wrap="Wrap">
+                                        <Label
+                                            Margin="0,0,8,4"
+                                            FontFamily="GeistSemiBold"
+                                            FontSize="16"
+                                            LineBreakMode="WordWrap"
+                                            Text="{Binding Name}" />
+
+                                        <Border
+                                            Margin="0,0,8,4"
+                                            Padding="8,2"
+                                            BackgroundColor="Transparent"
+                                            Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                            StrokeShape="RoundRectangle 8">
+                                            <Label
+                                                FontSize="12"
+                                                Text="{Binding KindText}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        </Border>
+
+                                        <Border
+                                            Margin="0,0,8,4"
+                                            Padding="8,2"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                            IsVisible="{Binding IsPrimary}"
+                                            Stroke="Transparent"
+                                            StrokeShape="RoundRectangle 8">
+                                            <Label
+                                                FontSize="12"
+                                                Text="{Binding PrimaryBadgeText}"
+                                                TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                                        </Border>
+
+                                        <!-- Статус — словом, а цвет только подкрепляет текст. -->
+                                        <Border
+                                            Margin="0,0,8,4"
+                                            Padding="8,2"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                            Stroke="Transparent"
+                                            StrokeShape="RoundRectangle 8">
+                                            <Border.Triggers>
+                                                <DataTrigger
+                                                    Binding="{Binding StatusKind}"
+                                                    TargetType="Border"
+                                                    Value="approved">
+                                                    <Setter
+                                                        Property="BackgroundColor"
+                                                        Value="{AppThemeBinding Light={StaticResource Success}, Dark={StaticResource SuccessDark}}" />
+                                                </DataTrigger>
+                                                <DataTrigger
+                                                    Binding="{Binding StatusKind}"
+                                                    TargetType="Border"
+                                                    Value="pending">
+                                                    <Setter
+                                                        Property="BackgroundColor"
+                                                        Value="{AppThemeBinding Light={StaticResource Warning}, Dark={StaticResource WarningDark}}" />
+                                                </DataTrigger>
+                                                <DataTrigger
+                                                    Binding="{Binding StatusKind}"
+                                                    TargetType="Border"
+                                                    Value="rejected">
+                                                    <Setter
+                                                        Property="BackgroundColor"
+                                                        Value="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                                                </DataTrigger>
+                                            </Border.Triggers>
+                                            <Label
+                                                FontSize="12"
+                                                Text="{Binding StatusText}">
+                                                <Label.Triggers>
+                                                    <DataTrigger
+                                                        Binding="{Binding StatusKind}"
+                                                        TargetType="Label"
+                                                        Value="approved">
+                                                        <Setter
+                                                            Property="TextColor"
+                                                            Value="{AppThemeBinding Light={StaticResource PrimaryForeground}, Dark={StaticResource PrimaryForegroundDark}}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger
+                                                        Binding="{Binding StatusKind}"
+                                                        TargetType="Label"
+                                                        Value="pending">
+                                                        <Setter
+                                                            Property="TextColor"
+                                                            Value="{AppThemeBinding Light={StaticResource PrimaryForeground}, Dark={StaticResource PrimaryForegroundDark}}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger
+                                                        Binding="{Binding StatusKind}"
+                                                        TargetType="Label"
+                                                        Value="rejected">
+                                                        <Setter
+                                                            Property="TextColor"
+                                                            Value="{AppThemeBinding Light={StaticResource PrimaryForeground}, Dark={StaticResource PrimaryForegroundDark}}" />
+                                                    </DataTrigger>
+                                                </Label.Triggers>
+                                            </Label>
+                                        </Border>
+                                    </FlexLayout>
+
+                                    <Label
+                                        IsVisible="{Binding HasAddress}"
+                                        LineBreakMode="WordWrap"
+                                        Text="{Binding FullAddress}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                                    <Label
+                                        FontSize="12"
+                                        LineBreakMode="WordWrap"
+                                        Text="{Binding TimeZoneText}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                                    <!-- Салон на проверке: почему его ещё нет в поиске. -->
+                                    <Label
+                                        FontSize="12"
+                                        LineBreakMode="WordWrap"
+                                        Text="{Binding PendingHint}"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
+                                        <Label.Triggers>
+                                            <Trigger
+                                                Property="Text"
+                                                TargetType="Label"
+                                                Value="">
+                                                <Setter Property="IsVisible" Value="False" />
+                                            </Trigger>
+                                        </Label.Triggers>
+                                    </Label>
+
+                                    <!-- Салон отклонён: причина словами администратора. -->
+                                    <Label
+                                        FontSize="12"
+                                        IsVisible="{Binding IsRejected}"
+                                        LineBreakMode="WordWrap"
+                                        Text="{Binding RejectionReasonText}"
+                                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                                    <!--
+                                        Действия строки: основное — назначение основным,
+                                        остальные мобильные подсказки вторичны.
+                                    -->
+                                    <FlexLayout
+                                        AlignItems="Center"
+                                        Direction="Row"
+                                        Wrap="Wrap">
+                                        <Button
+                                            Margin="0,0,8,8"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                            Clicked="OnSetPrimaryClicked"
+                                            IsVisible="True"
+                                            Text="{loc:Translate Key='Сделать основным'}"
+                                            TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}">
+                                            <Button.Triggers>
+                                                <DataTrigger
+                                                    Binding="{Binding IsPrimary}"
+                                                    TargetType="Button"
+                                                    Value="True">
+                                                    <Setter Property="IsVisible" Value="False" />
+                                                </DataTrigger>
+                                            </Button.Triggers>
+                                        </Button>
+                                        <Button
+                                            Margin="0,0,8,8"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                            Clicked="OnCallClicked"
+                                            IsVisible="{Binding HasPhoneNumber}"
+                                            Text="{loc:Translate Key='Позвонить'}"
+                                            TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                                        <Button
+                                            Margin="0,0,8,8"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                            Clicked="OnMapClicked"
+                                            IsVisible="{Binding HasAddress}"
+                                            Text="{loc:Translate Key='На карте'}"
+                                            TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                                        <Button
+                                            Margin="0,0,8,8"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                            Clicked="OnCopyAddressClicked"
+                                            IsVisible="{Binding HasAddress}"
+                                            Text="{loc:Translate Key='Скопировать адрес'}"
+                                            TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                                        <Button
+                                            Margin="0,0,8,8"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                            Clicked="OnScheduleClicked"
+                                            Text="{loc:Translate Key='Открыть расписание этого салона'}"
+                                            TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                                    </FlexLayout>
+
+                                </VerticalStackLayout>
+                            </Border>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+
+                <!-- Добавление из публичного каталога: показывается, когда список уже прочитан. -->
+                <Border
+                    Padding="16"
+                    IsVisible="{Binding HasLoaded}"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+                        <VerticalStackLayout Spacing="2">
+                            <Label
+                                FontFamily="GeistSemiBold"
+                                FontSize="16"
+                                Text="{loc:Translate Key='Добавить салон'}" />
+                            <Label
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                Text="{loc:Translate Key='Найдите салон в каталоге и выберите его. Без салона расписание и запись не работают.'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout Spacing="4">
+                            <Label
+                                FontSize="12"
+                                Text="{loc:Translate Key='Город'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Entry
+                                Placeholder="{loc:Translate Key='Например, Екатеринбург'}"
+                                Text="{Binding CatalogCity}" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout Spacing="4">
+                            <Label
+                                FontSize="12"
+                                Text="{loc:Translate Key='Поиск'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <Entry
+                                Placeholder="{loc:Translate Key='Название или адрес'}"
+                                ReturnCommand="{Binding SearchCatalogCommand}"
+                                ReturnType="Search"
+                                Text="{Binding CatalogQuery}" />
+                        </VerticalStackLayout>
+
+                        <!-- Подсказка о минимуме: строка короче двух символов не ищется. -->
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding CatalogHint}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
+                            <Label.Triggers>
+                                <Trigger
+                                    Property="Text"
+                                    TargetType="Label"
+                                    Value="">
+                                    <Setter Property="IsVisible" Value="False" />
+                                </Trigger>
+                            </Label.Triggers>
+                        </Label>
+
+                        <HorizontalStackLayout
+                            IsVisible="{Binding IsCatalogLoading}"
+                            Spacing="8">
+                            <ActivityIndicator
+                                IsRunning="{Binding IsCatalogLoading}"
+                                IsVisible="{Binding IsCatalogLoading}"
+                                VerticalOptions="Center" />
+                            <Label
+                                Text="{loc:Translate Key='Загружаем каталог…'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+
+                        <!-- Каталог не ответил: причина и автоповтор. -->
+                        <VerticalStackLayout IsVisible="{Binding ShowCatalogError}" Spacing="8">
+                            <Label
+                                LineBreakMode="WordWrap"
+                                Text="{Binding CatalogError}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding IsCatalogAutoRetrying}"
+                                Text="{loc:Translate Key='Пробуем снова…'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        </VerticalStackLayout>
+
+                        <!-- Ничего не нашлось: та же строка, что в вебе. -->
+                        <Label
+                            FontSize="12"
+                            IsVisible="{Binding ShowCatalogEmpty}"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='Ничего не найдено.'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <!-- Результаты: строка выбирается радиокнопкой, привязка — кнопкой ниже. -->
+                        <VerticalStackLayout IsVisible="{Binding ShowCatalogResults}" Spacing="4">
+                            <Label
+                                FontSize="12"
+                                Text="{loc:Translate Key='Результаты поиска'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Catalog}" Spacing="4">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:BarberSalonCatalogItem">
+                                        <Border
+                                            Padding="4,8"
+                                            Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                            StrokeShape="RoundRectangle 10">
+                                            <RadioButton
+                                                GroupName="salon-catalog-result"
+                                                CheckedChanged="OnCatalogSalonChecked">
+                                                <RadioButton.Content>
+                                                    <VerticalStackLayout
+                                                        x:DataType="vm:BarberSalonCatalogItem"
+                                                        Padding="0,4"
+                                                        Spacing="2">
+                                                        <Label
+                                                            FontFamily="GeistMedium"
+                                                            FontSize="14"
+                                                            LineBreakMode="WordWrap"
+                                                            Text="{Binding Name}" />
+                                                        <Label
+                                                            FontSize="12"
+                                                            LineBreakMode="WordWrap"
+                                                            Text="{Binding FullAddress}"
+                                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                                        <Label
+                                                            FontSize="12"
+                                                            Text="{Binding KindText}"
+                                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                                    </VerticalStackLayout>
+                                                </RadioButton.Content>
+                                            </RadioButton>
+                                        </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+
+                        <!-- Первый салон профиля становится основным: у него выбора нет. -->
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                            <Switch
+                                IsToggled="{Binding MakePrimary, Mode=TwoWay}"
+                                VerticalOptions="Center">
+                                <Switch.Triggers>
+                                    <DataTrigger
+                                        Binding="{Binding FirstSalonBecomesPrimary}"
+                                        TargetType="Switch"
+                                        Value="True">
+                                        <Setter Property="IsEnabled" Value="False" />
+                                    </DataTrigger>
+                                </Switch.Triggers>
+                            </Switch>
+                            <Label
+                                Grid.Column="1"
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding PrimaryToggleText}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                VerticalTextAlignment="Center" />
+                        </Grid>
+
+                        <Label
+                            IsVisible="{Binding HasAddSalonError}"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding AddSalonError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                        <Button
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                            Command="{Binding DismissAddSalonErrorCommand}"
+                            HorizontalOptions="Start"
+                            IsVisible="{Binding HasAddSalonError}"
+                            Text="{loc:Translate Key='Закрыть'}"
+                            TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+
+                        <Button
+                            Command="{Binding AddSalonCommand}"
+                            Text="{Binding AddSalonButtonText}" />
+                    </VerticalStackLayout>
+                </Border>
+
+            </VerticalStackLayout>
+        </ScrollView>
+    </RefreshView>
+
+</ContentView>

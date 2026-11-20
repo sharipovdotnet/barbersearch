@@ -299,7 +299,7 @@
                             <Label
                                 FontSize="14"
                                 LineBreakMode="WordWrap"
-                                Text="{loc:Translate Key='Роль уже выдана. Выйдите и войдите снова — приложение получит новую роль. Профиль мастера создаётся в кабинете на сайте.'}"
+                                Text="{loc:Translate Key='Роль уже выдана. Выйдите и войдите снова — приложение получит новую роль. Профиль мастера создаётся в кабинете.'}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                             <Button
                                 Command="{Binding SignOutAndLeaveCommand}"

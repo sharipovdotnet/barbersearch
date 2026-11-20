@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.BarberPhotoPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:media="clr-namespace:BarberSearch.Mobile.Core.Media;assembly=BarberSearch.Mobile.Core"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels.Barber;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:BarberPhotoViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="{Binding TitleText}">
+
+    <!--
+        Одно фото портфолио: загрузка нового кадра или правка уже загруженного.
+        В вебе это три диалога (загрузка, подпись, удаление) на одном экране; на телефоне
+        диалогов нет, поэтому экран один, а режим выбирает ViewModel: «новое фото» несёт
+        файл и подпись, «фото» — превью, положение, статус проверки и действия над кадром.
+
+        Ошибки не прячут уже показанное: строки ошибок стоят рядом с полями и не
+        переключают режим. Ошибку выбора файла собирает ViewModel — страница её только
+        показывает и своих сообщений не добавляет.
+    -->
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="16">
+
+            <!-- ===== Новое фото: файл, превью и подпись. ===== -->
+            <VerticalStackLayout IsVisible="{Binding IsNew}" Spacing="16">
+
+                <Border
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="12">
+
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            Text="{loc:Translate Key='Файл'}" />
+
+                        <!--
+                            Превью выбранного файла: подложка видна, пока кадр не выбран,
+                            а картинка приходит из байтов ViewModel — без второго чтения файла.
+                        -->
+                        <Border
+                            Padding="0"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                            HeightRequest="240"
+                            StrokeThickness="0"
+                            StrokeShape="RoundRectangle 10">
+                            <Image
+                                Aspect="AspectFill"
+                                HeightRequest="240"
+                                Source="{Binding PickedPhotoBytes, Converter={StaticResource ImageBytes}}" />
+                        </Border>
+
+                        <FlexLayout
+                            AlignItems="Center"
+                            Direction="Row"
+                            Wrap="Wrap">
+                            <Button
+                                Margin="0,0,8,8"
+                                Command="{Binding PickPhotoCommand}"
+                                Text="{loc:Translate Key='Выбрать фото'}" />
+                            <Label
+                                Margin="0,0,8,8"
+                                FontSize="12"
+                                IsVisible="{Binding HasPickedPhoto}"
+                                LineBreakMode="TailTruncation"
+                                Text="{Binding PickedFileName}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                VerticalTextAlignment="Center" />
+                        </FlexLayout>
+
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='JPEG, PNG или WebP до 15 МБ. Перед загрузкой фото уменьшится до 1600 px по длинной стороне.'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <Label
+                            FontSize="14"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding FileErrorText}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                            <Label.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding FileErrorText}"
+                                    TargetType="Label"
+                                    Value="{x:Null}">
+                                    <Setter Property="IsVisible" Value="False" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            Text="{loc:Translate Key='Подпись'}" />
+
+                        <Border
+                            Padding="8"
+                            Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                            StrokeShape="RoundRectangle 10">
+                            <Editor
+                                AutoSize="TextChanges"
+                                MaxLength="{x:Static media:PortfolioPhotoLimits.MaxDescriptionLength}"
+                                MinimumHeightRequest="88"
+                                Text="{Binding Caption, Mode=TwoWay}" />
+                        </Border>
+
+                        <Label
+                            FontSize="12"
+                            HorizontalOptions="End"
+                            Text="{Binding CaptionCounterText}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <Label
+                            FontSize="14"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding CaptionErrorText}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                            <Label.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding CaptionErrorText}"
+                                    TargetType="Label"
+                                    Value="{x:Null}">
+                                    <Setter Property="IsVisible" Value="False" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+
+                    </VerticalStackLayout>
+                </Border>
+
+                <Label
+                    FontSize="14"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding ErrorText}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                    <Label.Triggers>
+                        <DataTrigger
+                            Binding="{Binding ErrorText}"
+                            TargetType="Label"
+                            Value="{x:Null}">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+
+                <FlexLayout
+                    AlignItems="Center"
+                    Direction="Row"
+                    Wrap="Wrap">
+                    <Button
+                        Margin="0,0,8,8"
+                        Command="{Binding UploadCommand}"
+                        IsEnabled="{Binding CanSubmitUpload}"
+                        Text="{loc:Translate Key='Загрузить'}" />
+                    <ActivityIndicator
+                        Margin="0,0,8,8"
+                        IsRunning="{Binding IsUploading}"
+                        IsVisible="{Binding IsUploading}"
+                        VerticalOptions="Center" />
+                </FlexLayout>
+
+            </VerticalStackLayout>
+
+            <!-- ===== Загруженное фото: превью, статус проверки и действия. ===== -->
+            <VerticalStackLayout IsVisible="True" Spacing="16">
+                <VerticalStackLayout.Triggers>
+                    <DataTrigger
+                        Binding="{Binding IsNew}"
+                        TargetType="VerticalStackLayout"
+                        Value="True">
+                        <Setter Property="IsVisible" Value="False" />
+                    </DataTrigger>
+                </VerticalStackLayout.Triggers>
+
+                <Border
+                    Padding="16"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="12">
+
+                        <!--
+                            Превью собирает код страницы: адрес склеивается с базой API, а
+                            неодобренный кадр читается с Bearer — анонимно раздача отвечает
+                            «404», и загрузчик картинок платформы показал бы пустую подложку.
+                        -->
+                        <Border
+                            Padding="0"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                            HeightRequest="260"
+                            StrokeThickness="0"
+                            StrokeShape="RoundRectangle 10">
+                            <Image
+                                x:Name="PhotoPreviewImage"
+                                Aspect="AspectFill"
+                                HeightRequest="260" />
+                        </Border>
+
+                        <Label
+                            FontFamily="GeistMedium"
+                            FontSize="16"
+                            Text="{Binding PositionText}" />
+
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding StatusText}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <!--
+                            Причина отказа администратора: текст с подстановкой собирает
+                            код страницы, потому что ключ перевода содержит «{0}».
+                        -->
+                        <Label
+                            x:Name="RejectionReasonLabel"
+                            FontSize="14"
+                            IsVisible="{Binding ShowRejectionReason}"
+                            LineBreakMode="WordWrap"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Подпись можно править, пока кадр не заблокирован администратором. -->
+                <Border
+                    Padding="16"
+                    IsVisible="{Binding CanEditCaption}"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout Spacing="8">
+
+                        <Label
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            Text="{loc:Translate Key='Подпись'}" />
+
+                        <Border
+                            Padding="8"
+                            Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                            StrokeShape="RoundRectangle 10">
+                            <Editor
+                                AutoSize="TextChanges"
+                                MaxLength="{x:Static media:PortfolioPhotoLimits.MaxDescriptionLength}"
+                                MinimumHeightRequest="88"
+                                Text="{Binding Caption, Mode=TwoWay}" />
+                        </Border>
+
+                        <Label
+                            FontSize="12"
+                            HorizontalOptions="End"
+                            Text="{Binding CaptionCounterText}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                        <Label
+                            FontSize="14"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding CaptionErrorText}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                            <Label.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding CaptionErrorText}"
+                                    TargetType="Label"
+                                    Value="{x:Null}">
+                                    <Setter Property="IsVisible" Value="False" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+
+                        <Button
+                            Command="{Binding SaveCaptionCommand}"
+                            HorizontalOptions="Start"
+                            Text="{loc:Translate Key='Сохранить подпись'}" />
+
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Порядок кадра, публикация и удаление: те же действия, что в вебе. -->
+                <FlexLayout
+                    AlignItems="Center"
+                    Direction="Row"
+                    Wrap="Wrap">
+                    <Button
+                        Margin="0,0,8,8"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                        Command="{Binding MoveUpCommand}"
+                        IsEnabled="{Binding CanMoveUp}"
+                        Text="{loc:Translate Key='Выше'}"
+                        TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                    <Button
+                        Margin="0,0,8,8"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                        Command="{Binding MoveDownCommand}"
+                        IsEnabled="{Binding CanMoveDown}"
+                        Text="{loc:Translate Key='Ниже'}"
+                        TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                    <Button
+                        Margin="0,0,8,8"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                        Command="{Binding TogglePublicationCommand}"
+                        IsVisible="{Binding CanTogglePublication}"
+                        Text="{Binding PublicationActionText}"
+                        TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                    <Button
+                        Margin="0,0,8,8"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                        Clicked="OnDeleteClicked"
+                        IsVisible="{Binding CanDelete}"
+                        Text="{loc:Translate Key='Удалить'}"
+                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                </FlexLayout>
+
+                <Label
+                    FontSize="14"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding ErrorText}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                    <Label.Triggers>
+                        <DataTrigger
+                            Binding="{Binding ErrorText}"
+                            TargetType="Label"
+                            Value="{x:Null}">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+
+                <!-- Занятость кадра: команды гаснут сами, а индикатор объясняет ожидание. -->
+                <ActivityIndicator
+                    HorizontalOptions="Start"
+                    IsRunning="{Binding IsBusy}"
+                    IsVisible="{Binding IsBusy}" />
+
+            </VerticalStackLayout>
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

@@ -5,8 +5,10 @@
 The app is the **client** half of the product: search for a barber, the public card, the slot
 grid, booking, the customer's bookings, favourites and — on Android — push reminders about a
 confirmed visit. An administrator also gets the moderation queues on the phone (see «Admin
-queues» below); the rest of the admin section and the professional cabinet stay on the web — a
-professional does not fill in a weekly schedule from a phone.
+queues» below), and a barber gets the cabinet — bookings, schedule, salons and the public card
+(see «Кабинет мастера» below). The web keeps the professional surface that is not a phone job:
+importing old bookings, creating a salon and managing its barbers, and the
+notification settings; the rest of the admin section stays there too.
 
 ## Layout
 
@@ -190,12 +192,13 @@ deviation from the web, which polls «Предстоящие» once a minute, is
 
 The tab is the hub and the only sign-in screen: without a session it shows the sign-in form, with
 a session it shows initials instead of an avatar, the name, the email, its verification state, the
-role and the entry points to «Личные данные», «Мои отзывы», «Безопасность» and «Выйти», plus — for
-a customer — the «Стать мастером» row, whose title follows the state of the request (see below).
-Those sections are ordinary Shell pages pushed over the profile stack (`account-profile`, `security`,
-`my-reviews`, `review-edit`, `barber-request`), so the tab bar stays hidden there and the back
-gesture returns to the hub. The web has no hub — every account route is wrapped in its own access
-gate — and that adaptation is recorded in `AGENT.md` §5.
+role and the entry points to «Личные данные», «Мои отзывы», «Безопасность» and «Выйти», plus —
+for a barber — the «Кабинет мастера» row (see below) and — for a customer — the «Стать мастером»
+row, whose title follows the state of the request (see below). Those sections are ordinary Shell
+pages pushed over the profile stack (`account-profile`, `security`, `my-reviews`, `review-edit`,
+`barber-request`, `barber-cabinet`), so the tab bar stays hidden there and the back gesture returns
+to the hub. The web has no hub — every account route is wrapped in its own access gate — and that
+adaptation is recorded in `AGENT.md` §5.
 
 The hub and the account pages read `GET api/users/me`, not `GET api/auth/me`: the latter returns a
 projection of the token claims and stays the session check and the `userId` source for «Записи»,
@@ -299,6 +302,132 @@ The texts come from the web (`become-a-barber-page.tsx`, `barber-request-form.ts
 `barber-request-status.tsx`, `lib/barber-request-form.ts`) with «барбер» → «мастер»; the English
 values follow the same rule — “professional”, never “barber” or “master” — and live in
 `src/BarberSearch.Mobile.Core/Localization/messages/en.json`, like every other string.
+
+## «Кабинет мастера» (the barber cabinet)
+
+The barber's working screen: the visits of the day, the weekly schedule, the salons where the
+person works and the public card. It is one screen with four sections, opened from «Профиль» and
+pushed over its stack with the tab bar hidden — the role is rare, so it is not a fifth tab. The
+web cabinet is the reference for structure, states and wording; the mobile adaptations are
+recorded in `AGENT.md` §5.
+
+### Getting there
+
+- `GET api/users/me` answers `role: "Barber"` → a «Кабинет мастера» card-row in «Профиль», under
+  the person card, with «Записи клиентов, расписание и прайс».
+- The row is drawn for a barber without a profile too: the cabinet explains that the profile is
+  missing and offers «Создать профиль мастера» (onboarding).
+- The route `barber-cabinet` opens over the profile stack, so the back gesture returns to
+  «Профиль» and the row keeps its place.
+- The cabinet gates on `GET api/auth/me`: a customer sees «Это кабинет мастера», a barber without
+  a profile sees the onboarding card, an anonymous or expired session sees the sign-in card with
+  «Войти» (which goes to the «Профиль» tab, not automatically).
+
+### Sections
+
+| Section | What it does |
+|---|---|
+| «Записи» | «Сегодня» (the day feed built from both scopes, with the free windows and the next client), «Ближайшие» and «История». Confirm, complete, no-show, cancel with a reason, reschedule, note and price; «Записать клиента» opens the create form from «Сегодня» and «Ближайшие», not from «История»; a client's phone is a `tel:` link. The active list re-reads itself every 30 seconds while the section is on screen. A failed next page keeps the rows and shows the reason; «Дальше» retries it. |
+| «Расписание» | The weekly template per salon, Monday to Sunday (working day or day off, hours), «Заполнить будни», one `PUT` for the whole week, the `409` conflict panel with the affected visits and «Всё равно сохранить», date exceptions and time offs. |
+| «Салоны» | The profile's attachments with their moderation status, the primary salon («Сделать основным»), a public-catalog search for a new place, and call / map / copy address / open this salon's schedule. |
+| «Профиль» | The card (name, grade, rating, experience, languages, payment, bio, late policy), the photo grid — tap a frame to upload, caption, reorder, hide, restore or delete it — services and prices (add, edit, hide, restore), specializations, «Редактировать профиль», «Поделиться профилем» and «Открыть, как видят клиенты» — the last two only for a verified and active profile. |
+
+Reads retry themselves while the screen or section is visible; writes show their reason and are
+never repeated silently (`AGENT.md` §5 lists both sides and the one picker catalog that keeps only
+the button). A cabinet card has no «Повторить», and in «Записи» a failed next page keeps its reason
+and is retried by «Дальше».
+
+### Screens over the cabinet
+
+| Route | Screen | Route parameters |
+|---|---|---|
+| `barber-booking-create` | Creates a booking for a registered client or a guest — service, salon, date within 30 days, a free slot, a comment up to 500 characters, an idempotency key per attempt | `owner` (the bookings section ViewModel), optional `preferredStartAt` |
+| `barber-booking-reschedule` | Moves a visit to a free slot of the same duration | `item`, `owner` |
+| `barber-booking-note` | The barber's note for a visit, 0 / 1000 characters | `item`, `owner` |
+| `barber-onboarding` | Creates the profile, rotates the token pair and attaches the first salon (skippable) | — |
+| `barber-notifications` | The notification inbox, keyset pages, «Прочитать все» | `owner` (the cabinet page), `barberProfileId` |
+| `barber-profile-edit` | Edits the public card; grade stays read-only | `owner`, `profile` |
+| `barber-service-editor` | Adds a service from the directory or edits its price and duration; hide and restore stay in the section | `owner`, `barberProfileId`, optional `item` |
+| `barber-photo` | One portfolio frame: upload (file picker, JPEG ≤ 1600 px and ≤ 5 MB prepared on the phone, caption up to 2000 characters) or edit (caption, «Выше»/«Ниже», «Скрыть»/«Вернуть», «Удалить» behind a confirmation); the 10-photo limit disables adding | `profileId`, `photos` (snapshot), optional `photoId` |
+
+### API
+
+Reads:
+
+- `GET api/auth/me` — the gate; `GET api/users/me` — the hub role that draws the row.
+- `GET api/barber/bookings?scope=upcoming|past&cursor=&pageSize=`;
+  `GET api/bookings/{id}/reschedule-slots?date=`.
+- `GET api/barber/booking-options`, `GET api/barber/slots?date=&hairServiceId=&salonId=`,
+  `GET api/barber/clients?search=`.
+- `GET api/barber-profiles/{id}` (the own card, hidden services included),
+  `GET api/barber-profiles/{id}/salons`, `GET api/barber-profiles/{id}/schedule?from=&to=`.
+- `GET api/salons?city=&search=`, `GET api/specializations`, `GET api/hair-services`.
+- `GET api/barber-requests/mine` — the onboarding prefill.
+- `GET api/barber/notifications?cursor=&pageSize=`, `GET api/barber/notifications/unread-count`.
+
+Writes:
+
+- `POST api/barber/bookings`; `POST api/bookings/{id}/confirmation`, `/completion`,
+  `/cancellation`, `/no-show`, `/barber-note`, `/price`, `/reschedule`.
+- `PUT api/barber-profiles/{id}/salons/{salonId}/working-schedules?force=true`;
+  `PUT api/barber-profiles/{id}/salons/{salonId}/schedule-exceptions/{yyyy-MM-dd}?force=true`,
+  `DELETE` on the same exception path;
+  `POST api/barber-profiles/{id}/time-offs?force=true`,
+  `DELETE api/barber-profiles/{id}/time-offs/{timeOffId}`.
+- `POST api/barber-profiles`, `PUT api/barber-profiles/{id}`, `POST api/barber-profiles/{id}/salons`,
+  `PUT api/barber-profiles/{id}/salons/{salonId}/primary`.
+- `POST api/barber-profiles/{id}/services`, `PUT|DELETE api/barber-profiles/{id}/services/{hairServiceId}`;
+  `POST|DELETE api/barber-profiles/{id}/specializations/{specializationId}`.
+- `POST api/barber-profiles/{id}/photos/upload` (multipart `file` + `description`),
+  `DELETE api/barber-profiles/{id}/photos/{photoId}`,
+  `PUT api/barber-profiles/{id}/photos/{photoId}/description`,
+  `PUT api/barber-profiles/{id}/photos/order` (the full id list),
+  `POST|DELETE api/barber-profiles/{id}/photos/{photoId}/publication`.
+- `POST api/barber/notifications/{id}/read`, `POST api/barber/notifications/read-all`.
+- `POST api/auth/refresh` — the pair is rotated right after the profile is created, because the
+  access token has no `barber_profile_id` claim yet.
+
+### The bell and its badge
+
+- The 44 pt bell in the cabinet header opens `barber-notifications`; the badge caps at «99+».
+- The unread count is read after the gate succeeds, every 60 seconds while the cabinet is
+  visible and ready, when the app returns to the foreground, and when a child screen pops back.
+- A failed count is silent: the previous number stays, and the badge never becomes an error.
+- A row in the inbox is marked read on tap and opens «Записи», not a single visit —
+  `GET api/bookings/{id}` does not exist and the list already shows the visit.
+
+### States
+
+- **Loading** — «Загружаем кабинет…» for the gate; each section has its own indicator on the first
+  read, and a later refresh keeps the content on screen.
+- **Error and auto-retry** — the reason and «Пробуем снова…» while the loop runs; a cabinet card
+  has no «Повторить», because the loop is the retry, and a failed attempt keeps the rows and the
+  reason until the answer. A failed row action leaves only the reason in the row (a `409` says
+  «Запись уже изменилась — обновите список.»); the list is reread by pull-to-refresh or the
+  30-second refresh. A failed next page keeps the rows and the reason, and «Дальше» retries it —
+  there is no second button. The specialization picker's catalogue arms its own loop while the
+  picker is open, so its card shows the reason and «Пробуем снова…»; the service editor's
+  hair-service catalogue keeps its own «Повторить», because it arms no loop.
+- **Empty** — no bookings in the day or the scope, no attached salon, no exceptions, no time off,
+  no notifications, no photos; each keeps the web's wording.
+- **Session expired** — the sign-in card with «Войти»; the cabinet stays on the stack, only the
+  tap navigates to «Профиль».
+- **Not a barber** — «Это кабинет мастера» for a customer or an administrator.
+- **Pending profile** — a barber without a profile gets «Профиль ещё не создан» and the
+  onboarding button; a created but unverified card carries «Профиль на проверке…» and hides
+  preview and share.
+- **Onboarding session states** — «Профиль создан. Обновляем сессию…», «Профиль создан, но сессия
+  не обновилась» (retry or sign in), «Профиль создан, войдите снова».
+
+### What the cabinet cannot do
+
+- Import old bookings (`/barber/import`) — a text/ICS parser and a bulk load stay on the web.
+- Create a salon or manage its barbers.
+- Change notification or Telegram settings — the «Профиль» tab carries the global «Присылать
+  напоминания» switch.
+- Open one booking from a notification — the row lands on «Записи».
+- Appear for anyone but a barber: there is no fifth tab and no cabinet for a customer or an
+  administrator.
 
 ## Admin queues
 
@@ -525,7 +654,8 @@ and keyboard shortcuts are deliberately dropped — on a phone the gesture is th
 The interface is Russian and English, like the web. The approach is gettext: the key is the Russian
 source string, and `src/BarberSearch.Mobile.Core/Localization/messages/en.json` holds the English
 translation. Code calls `Loc.T("…")`; XAML uses `{loc:Translate Key='…'}`. A missing translation
-falls back to the Russian source instead of a key.
+falls back to the Russian source instead of a key. The catalog holds **938 keys**, the cabinet
+strings included.
 
 The language is chosen by the compact RU/EN pair at the top of the «Профиль» tab (the web's header
 switcher has no direct phone equivalent), defaults to Russian and is stored in `Preferences` under
@@ -633,7 +763,10 @@ errors), payload parsing and the «Записи» route, and the «Профил�
 denied/unavailable texts and the no-hint rule for a transient failure — 47 new cases, **624 tests**
 in total. The booking-creation event adds two payload-routing cases (a `booking.created` tap opens
 «Записи», with or without `bookingId`), and the barber confirmation, cancellation and reschedule
-events add three more, which brings the suite to **842 tests**. The Android build
+events add three more, which brings the suite to **842 tests**. The cabinet slice adds the gate
+and the four section ViewModels, the seven child screens' ViewModels and the five cabinet API
+clients; it brings the suite to **1402 tests**. The page layer, the two page timers and the
+platform intents are not covered — `AGENT.md` §5 says where the risk sits. The Android build
 stays at 0 warnings; the iOS C# compile is clean after an iOS
 `PlatformTheme` no-op partial and the CA1711 suppressions: one explicit line in the existing
 `Platforms/**/*.cs` section (the `AppDelegate`/`AndroidPushPermission` names) plus the pointwise

@@ -4,6 +4,7 @@ using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Account;
 using BarberSearch.Mobile.Core.Api.Admin;
 using BarberSearch.Mobile.Core.Api.Auth;
+using BarberSearch.Mobile.Core.Api.Barber;
 using BarberSearch.Mobile.Core.Api.BarberRequests;
 using BarberSearch.Mobile.Core.Api.Bookings;
 using BarberSearch.Mobile.Core.Api.Push;
@@ -13,16 +14,21 @@ using BarberSearch.Mobile.Core.Configuration;
 using BarberSearch.Mobile.Core.Legal;
 using BarberSearch.Mobile.Core.Localization;
 using BarberSearch.Mobile.Core.Location;
+using BarberSearch.Mobile.Core.Media;
 using BarberSearch.Mobile.Core.Push;
 using BarberSearch.Mobile.Core.Theming;
 using BarberSearch.Mobile.Core.ViewModels;
 using BarberSearch.Mobile.Core.ViewModels.Admin;
+using BarberSearch.Mobile.Core.ViewModels.Barber;
 using BarberSearch.Mobile.Devices;
 using BarberSearch.Mobile.Localization;
 using BarberSearch.Mobile.Navigation;
 using BarberSearch.Mobile.Pages;
 using BarberSearch.Mobile.Push;
+using BarberSearch.Mobile.Services;
 using BarberSearch.Mobile.Theming;
+using BarberSearch.Mobile.Views.Barber;
+using BarberBookingsSectionView = BarberSearch.Mobile.Views.Barber.BarberBookingsView;
 using Microsoft.Extensions.Logging;
 
 namespace BarberSearch.Mobile;
@@ -196,6 +202,20 @@ public static class MauiProgram
         builder.Services.AddHttpClient<IAdminMediaApi, AdminMediaApi>(ConfigureHttpClient)
             .AddHttpMessageHandler<AuthenticatedHttpHandler>();
 
+        // Кабинет мастера — пять клиентов по разделам: записи и действия над ними, форма
+        // записи клиента, расписание, карточка с прайсом и инбокс. Роль и профиль мастер
+        // сервер берёт из токена, поэтому все пять идут с Bearer и без X-CSRF-TOKEN.
+        builder.Services.AddHttpClient<IBarberBookingsApi, BarberBookingsApi>(ConfigureHttpClient)
+            .AddHttpMessageHandler<AuthenticatedHttpHandler>();
+        builder.Services.AddHttpClient<IBarberClientsApi, BarberClientsApi>(ConfigureHttpClient)
+            .AddHttpMessageHandler<AuthenticatedHttpHandler>();
+        builder.Services.AddHttpClient<IBarberScheduleApi, BarberScheduleApi>(ConfigureHttpClient)
+            .AddHttpMessageHandler<AuthenticatedHttpHandler>();
+        builder.Services.AddHttpClient<IBarberProfileApi, BarberProfileApi>(ConfigureHttpClient)
+            .AddHttpMessageHandler<AuthenticatedHttpHandler>();
+        builder.Services.AddHttpClient<IBarberNotificationsApi, BarberNotificationsApi>(ConfigureHttpClient)
+            .AddHttpMessageHandler<AuthenticatedHttpHandler>();
+
         builder.Services.AddHttpClient<IBarberSearchApi, BarberSearchApi>(ConfigureHttpClient);
 
         builder.Services.AddSingleton(TimeProvider.System);
@@ -214,6 +234,10 @@ public static class MauiProgram
         // Город по координатам — тот же слой устройства, что и геопозиция: синглтон без
         // состояния, за интерфейсом Core, чтобы экран проверялся без геокодера платформы.
         builder.Services.AddSingleton<ICityLocator, MauiCityLocator>();
+
+        // Файл портфолио выбирает галерея устройства (FilePicker), а уменьшает и
+        // перекодирует приложение: сервер принимает JPEG до 5 МБ. Синглтон без состояния.
+        builder.Services.AddSingleton<IPortfolioPhotoPicker, MauiPortfolioPhotoPicker>();
 
         // Подсказки города — часть экрана «Поиск»: одна секция на один ViewModel, поэтому
         // transient рядом с ним, а не синглтон.
@@ -255,6 +279,43 @@ public static class MauiProgram
         builder.Services.AddTransient<AdminRequestsViewModel>();
         builder.Services.AddTransient<AdminRequestViewModel>();
 
+        // Кабинет мастера — один экран с четырьмя разделами: оболочка проверяет сессию,
+        // роль и профиль, а разделы живут внутри страницы. Экран открывается из «Профиля»
+        // и живёт один визит: состояние прошлого захода (чужие записи, чужие часы) хранить
+        // нечего. Разделы — такие же transient: их создаёт страница из контейнера.
+        builder.Services.AddTransient<BarberCabinetViewModel>();
+        builder.Services.AddTransient<BarberBookingsViewModel>();
+        builder.Services.AddTransient<BarberScheduleViewModel>();
+        builder.Services.AddTransient<BarberSalonsViewModel>();
+        builder.Services.AddTransient<BarberCabinetProfileViewModel>();
+        builder.Services.AddTransient<BarberBookingsSectionView>();
+        builder.Services.AddTransient<BarberScheduleView>();
+        builder.Services.AddTransient<BarberSalonsView>();
+        builder.Services.AddTransient<BarberProfileView>();
+
+        // Дочерние экраны кабинета живут один визит и открываются поверх его стека:
+        // форма записи клиента, перенос, заметка, онбординг, инбокс, правка карточки,
+        // редактор услуги и экран одного фото портфолио. Свои чтения каждый из них
+        // повторяет сам (AutoRetryLoop регистрируется transient выше), поэтому второго
+        // состояния между заходами нет.
+        builder.Services.AddTransient<BarberBookingCreateViewModel>();
+        builder.Services.AddTransient<BarberBookingRescheduleViewModel>();
+        builder.Services.AddTransient<BarberBookingNoteViewModel>();
+        builder.Services.AddTransient<BarberOnboardingViewModel>();
+        builder.Services.AddTransient<BarberNotificationsViewModel>();
+        builder.Services.AddTransient<BarberProfileEditViewModel>();
+        builder.Services.AddTransient<BarberServiceEditorViewModel>();
+        builder.Services.AddTransient<BarberPhotoViewModel>();
+
+        builder.Services.AddTransient<BarberBookingCreatePage>();
+        builder.Services.AddTransient<BarberBookingReschedulePage>();
+        builder.Services.AddTransient<BarberBookingNotePage>();
+        builder.Services.AddTransient<BarberOnboardingPage>();
+        builder.Services.AddTransient<BarberNotificationsPage>();
+        builder.Services.AddTransient<BarberProfileEditPage>();
+        builder.Services.AddTransient<BarberServiceEditorPage>();
+        builder.Services.AddTransient<BarberPhotoPage>();
+
         builder.Services.AddTransient<SearchPage>();
         builder.Services.AddTransient<BarberPage>();
         builder.Services.AddTransient<PortfolioPhotoPage>();
@@ -275,6 +336,12 @@ public static class MauiProgram
         builder.Services.AddTransient<AdminMasterPage>();
         builder.Services.AddTransient<AdminRequestsPage>();
         builder.Services.AddTransient<AdminRequestPage>();
+
+        // Кабинет мастера открывается строкой из «Профиля» и живёт поверх его стека:
+        // возврат оставляет вкладку и загруженный профиль на месте. Его дочерние экраны
+        // (запись, перенос, заметка, онбординг, уведомления, правка профиля, услуга)
+        // резолвятся из контейнера фабрикой маршрута и тоже живут один визит.
+        builder.Services.AddTransient<BarberCabinetPage>();
 
         // Вкладки тоже transient: смена языка пересобирает Shell, и каждая страница должна
         // получить ViewModel с новым языком. Состояние вкладки сохраняется между визитами,

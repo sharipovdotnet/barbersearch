@@ -261,6 +261,56 @@
                 </Border>
 
                 <!--
+                    «Кабинет мастера» — карточка-строка над заявкой и видна только роли
+                    Barber. Это единственный вход в кабинет: отдельной вкладки нет, потому
+                    что роль редкая. Строка остаётся и мастеру без профиля — кабинет сам
+                    объяснит, что профиль не создан, и предложит онбординг.
+                -->
+                <Border
+                    Padding="12"
+                    IsVisible="{Binding IsBarber}"
+                    MinimumHeightRequest="56"
+                    SemanticProperties.Description="{loc:Translate Key='Кабинет мастера'}"
+                    StrokeShape="RoundRectangle 10">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding OpenBarberCabinetCommand}" />
+                    </Border.GestureRecognizers>
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                        <Border
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                            HeightRequest="36"
+                            HorizontalOptions="Center"
+                            Stroke="Transparent"
+                            StrokeShape="RoundRectangle 18"
+                            VerticalOptions="Center"
+                            WidthRequest="36">
+                            <controls:ScissorsMark StrokeColor="{AppThemeBinding Light={StaticResource Foreground}, Dark={StaticResource ForegroundDark}}" />
+                        </Border>
+                        <VerticalStackLayout
+                            Grid.Column="1"
+                            Spacing="1"
+                            VerticalOptions="Center">
+                            <Label
+                                FontFamily="GeistMedium"
+                                FontSize="16"
+                                LineBreakMode="TailTruncation"
+                                Text="{loc:Translate Key='Кабинет мастера'}" />
+                            <Label
+                                FontSize="12"
+                                LineBreakMode="TailTruncation"
+                                Text="{loc:Translate Key='Записи клиентов, расписание и прайс'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        </VerticalStackLayout>
+                        <Label
+                            Grid.Column="2"
+                            FontSize="20"
+                            Text="›"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                            VerticalTextAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <!--
                     «Стать мастером» — карточка-строка, а не кнопка: залитая Primary-кнопка
                     спорила бы с «Выйти» и «Личными данными», хотя заявка пока ничего не
                     выдаёт. Вся строка — цель нажатия не меньше 56 pt; заголовок показывает
