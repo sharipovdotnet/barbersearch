@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using BarberSearch.Domain.Common;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Admin;
 using BarberSearch.Mobile.Core.Legal;
@@ -37,6 +38,11 @@ namespace BarberSearch.Mobile.Views.Barber;
 /// </remarks>
 public partial class BarberProfileView : ContentView
 {
+    /// <summary>
+    /// Промежуток между плитками фотографий: gap-3 сетки кабинета веба, 12.
+    /// </summary>
+    private const double PhotoTileGap = 12;
+
     private readonly BarberCabinetProfileViewModel _viewModel;
     private readonly BarberSearchApiOptions _apiOptions;
     private readonly IAdminMediaApi _mediaApi;
@@ -45,6 +51,7 @@ public partial class BarberProfileView : ContentView
 
     private Guid? _selectedSpecializationId;
     private bool _isNavigating;
+    private double _photoTileWidth;
 
     /// <summary>
     /// Создаёт раздел, подписывается на события ViewModel и строит сетку фотографий.
@@ -74,6 +81,7 @@ public partial class BarberProfileView : ContentView
         BindingContext = viewModel;
 
         BindableLayout.SetItemsSource(PhotoTilesHost, _photoTiles);
+        PhotoTilesHost.SizeChanged += OnPhotoTilesHostSizeChanged;
 
         // Подпись строки задаётся кодом: ItemDisplayBinding — привязка к элементу, а не к
         // ViewModel раздела, поэтому компилированная разметка здесь не подходит.
@@ -417,6 +425,42 @@ public partial class BarberProfileView : ContentView
     }
 
     /// <summary>
+    /// Раскладывает сетку по два кадра в строке: ширина плитки считается от ширины хоста.
+    /// </summary>
+    /// <remarks>
+    /// Ширина известна только после раскладки, поэтому первая пара плиток приходит с нулевой
+    /// шириной и получает настоящую здесь. Половина хоста без промежутка, а остаток от
+    /// округления уходит в <c>SpaceBetween</c>: строка занята целиком, и две плитки не
+    /// переносятся на вторую строку из-за дробной ширины. Поворот и планшет приходят тем же
+    /// событием, так что сетка пересобирается без перечитывания карточки.
+    /// </remarks>
+    /// <param name="sender">Хост сетки.</param>
+    /// <param name="e">Аргументы события.</param>
+    private void OnPhotoTilesHostSizeChanged(object? sender, EventArgs e)
+    {
+        var hostWidth = PhotoTilesHost.Width;
+
+        if (hostWidth <= 0)
+        {
+            return;
+        }
+
+        var tileWidth = Math.Floor((hostWidth - PhotoTileGap) / 2);
+
+        if (tileWidth < 1 || Math.Abs(tileWidth - _photoTileWidth) < 0.5)
+        {
+            return;
+        }
+
+        _photoTileWidth = tileWidth;
+
+        foreach (var tile in _photoTiles)
+        {
+            tile.TileWidth = tileWidth;
+        }
+    }
+
+    /// <summary>
     /// Фотографии пересобраны: строки ответа превращаются в плитки с абсолютными адресами.
     /// </summary>
     private void OnPhotosChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
@@ -454,9 +498,10 @@ public partial class BarberProfileView : ContentView
                     photo.Id,
                     imageUrl,
                     photo.Caption,
-                    photo.HasCaption,
                     photo.StatusText,
-                    isVisibleToClients: !requiresBearer);
+                    PhotoStatusKind(photo),
+                    isVisibleToClients: !requiresBearer,
+                    tileWidth: _photoTileWidth);
 
                 _photoTiles.Add(tile);
 
@@ -471,6 +516,20 @@ public partial class BarberProfileView : ContentView
             }
         }
     }
+
+    /// <summary>
+    /// Ключ состояния кадра для бейджа проверки: тот же набор, что у статусов записей.
+    /// </summary>
+    /// <param name="photo">Кадр портфолио.</param>
+    /// <returns><c>published</c>, <c>pending</c>, <c>rejected</c> либо <c>hidden</c>.</returns>
+    private static string PhotoStatusKind(BarberProfilePhotoItem photo) =>
+        photo.IsBlocked || photo.ModerationStatus == PhotoModerationStatus.Rejected
+            ? "rejected"
+            : photo.ModerationStatus == PhotoModerationStatus.Pending
+                ? "pending"
+                : photo.IsPublished
+                    ? "published"
+                    : "hidden";
 
     /// <summary>
     /// Читает неодобренный кадр с Bearer и показывает его, не ожидая остальных плиток.
@@ -546,7 +605,13 @@ public partial class BarberProfileView : ContentView
 /// </remarks>
 public sealed class BarberProfilePhotoTile : INotifyPropertyChanged
 {
+    /// <summary>
+    /// Отступ карточки кадра: p-2 карточки веба, 8.
+    /// </summary>
+    private const double Padding = 8;
+
     private ImageSource? _image;
+    private double _tileWidth;
 
     /// <summary>
     /// Создаёт плитку из строки ответа.
@@ -554,29 +619,33 @@ public sealed class BarberProfilePhotoTile : INotifyPropertyChanged
     /// <param name="photoId">Идентификатор фотографии.</param>
     /// <param name="imageUrl">Абсолютный адрес миниатюры.</param>
     /// <param name="caption">Подпись владельца либо «Без подписи».</param>
-    /// <param name="hasCaption">Подпись заполнена.</param>
     /// <param name="statusText">Состояние проверки кадра.</param>
+    /// <param name="statusKind">Ключ состояния проверки: цвет бейджа.</param>
     /// <param name="isVisibleToClients">
     /// Кадр доступен анонимно и его можно отдать загрузчику картинок платформы.
     /// </param>
+    /// <param name="tileWidth">Ширина плитки; <c>0</c>, пока сетка не разложена.</param>
     public BarberProfilePhotoTile(
         Guid photoId,
         string imageUrl,
         string caption,
-        bool hasCaption,
         string statusText,
-        bool isVisibleToClients)
+        string statusKind,
+        bool isVisibleToClients,
+        double tileWidth = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(imageUrl);
         ArgumentNullException.ThrowIfNull(caption);
         ArgumentNullException.ThrowIfNull(statusText);
+        ArgumentNullException.ThrowIfNull(statusKind);
 
         PhotoId = photoId;
         ImageUrl = imageUrl;
         Image = isVisibleToClients ? ImageSource.FromUri(new Uri(imageUrl)) : null;
         Caption = caption;
-        HasCaption = hasCaption;
         StatusText = statusText;
+        StatusKind = statusKind;
+        _tileWidth = tileWidth;
     }
 
     /// <inheritdoc />
@@ -607,19 +676,50 @@ public sealed class BarberProfilePhotoTile : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Ширина плитки: половина строки сетки без промежутка, считается разделом.
+    /// </summary>
+    /// <remarks>
+    /// Ноль — «ширина ещё не известна»: сетка раскладывается после первого замера, и
+    /// <see cref="ImageSize"/> тогда тоже ноль. Сетка сообщает ширину всем плиткам сразу,
+    /// поэтому поворот и планшет перекладывают её без перечитывания карточки.
+    /// </remarks>
+    public double TileWidth
+    {
+        get => _tileWidth;
+        set
+        {
+            if (Math.Abs(_tileWidth - value) < 0.5)
+            {
+                return;
+            }
+
+            _tileWidth = value;
+
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TileWidth)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ImageSize)));
+        }
+    }
+
+    /// <summary>
+    /// Сторона квадратного превью: ширина плитки без отступов карточки.
+    /// </summary>
+    public double ImageSize => Math.Max(0, TileWidth - (2 * Padding));
+
+    /// <summary>
     /// Подпись фотографии либо «Без подписи».
     /// </summary>
     public string Caption { get; }
 
     /// <summary>
-    /// Подпись заполнена: пустая строка не занимает место под кадром.
-    /// </summary>
-    public bool HasCaption { get; }
-
-    /// <summary>
     /// Состояние проверки: «Опубликовано», «На проверке», «Отклонено».
     /// </summary>
     public string StatusText { get; }
+
+    /// <summary>
+    /// Ключ состояния проверки: <c>published</c>, <c>pending</c>, <c>rejected</c> или
+    /// <c>hidden</c>. Им бейдж выбирает цвет — тот же набор, что у статусов записей.
+    /// </summary>
+    public string StatusKind { get; }
 
     /// <summary>
     /// Показывает кадр, байты которого прочитаны с Bearer.
