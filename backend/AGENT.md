@@ -6,8 +6,9 @@
 > `CODE-REVIEW.md`.
 > Tests: **697 domain + 1196 application + 460 infrastructure** unit tests, all green locally
 > (2026-11-21); the integration project compiles, and the push-focused subset (30 tests) is green
-> on a local PostgreSQL 16 via `BARBERSEARCH_TEST_POSTGRES`; the full integration suite was not
-> run in this session.
+> on a local PostgreSQL 16 via `BARBERSEARCH_TEST_POSTGRES`; the four new `PushStaffCustomerTests`
+> are green 4/4 (run with the xunit console runner — the VSTest testhost cannot open its parent
+> process handle in this sandbox); the full integration suite was not run in this session.
 
 ---
 
@@ -51,7 +52,7 @@ the repo; Application, Infrastructure and Web exist — current state in §8.
 | Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 625 xunit tests) |
 | Application tests | `tests\BarberSearch.Application.UnitTests` (in the `.sln`; 1044 xunit tests, fakes instead of a database) |
 | Infrastructure tests | `tests\BarberSearch.Infrastructure.UnitTests` (in the `.sln`; 414 xunit tests, no database) |
-| Integration tests | `tests\BarberSearch.IntegrationTests` (in the `.sln`; 337 xunit tests, real PostgreSQL via Testcontainers `postgres:18` or `BARBERSEARCH_TEST_POSTGRES`) |
+| Integration tests | `tests\BarberSearch.IntegrationTests` (in the `.sln`; 341 xunit tests, real PostgreSQL via Testcontainers `postgres:18` or `BARBERSEARCH_TEST_POSTGRES`) |
 | Domain glossary | `GLOSSARY.md` at the **git root** (`D:\Projects\barbersearch\GLOSSARY.md`) |
 
 > ⚠️ `AGENT.md` lives in the workspace, but `.git` is in the parent folder. Run git commands
@@ -5183,6 +5184,14 @@ isBarberCancellation, ...)` после сохранения перехода, к
 своей отмене по-прежнему не получает. Сбой уведомителя логируется предупреждением с
 идентификатором брони и кодами ошибок и не меняет результат команды.
 
+**Роль получателя не проверяется.** Клиентские события адресованы `bookings.user_id`,
+мастерские — владельцу профиля (`barber_profiles.user_id`), и ни один уведомитель не смотрит
+на `UserRole`. Поэтому администратор или мастер, записавшийся к другому мастеру, получает
+клиентскую семью — создание, напоминание, подтверждение, отмену и перенос — наравне с
+клиентом, а мастер его визита получает свою пару событий. Одно устройство может получать обе
+семьи: аккаунт мастера владеет профилем и одновременно бывает клиентом другого мастера.
+Правило закреплено интеграционными `PushStaffCustomerTests`.
+
 1. **Создание напоминаний** — `CreateDuePushNotificationsHandler`. Окно: `now < start_at <= now + lead`, где
    `lead` — `Push:ReminderLeadMinutes` (60). Выбираются только `Confirmed`-брони с
    `user_id IS NOT NULL` (гостю push отправить некуда) и `created_at <= start_at − lead`.
@@ -5598,15 +5607,24 @@ valid». Такой ответ —
   отмены дополнительно проверяют вторую строку — вид 9/10 и снимок `CustomerName` («Integration
   Test» в тестовых данных), а гейт поверхности у мастера отсутствует: создание из приложения
   клиентской строки не даёт, а событие мастеру даёт.
+- **Клиентская семья не зависит от роли клиента.** `PushStaffCustomerTests` на реальной
+  PostgreSQL закрепляет: клиент с ролью `Barber` и клиент с ролью `Admin` получают
+  `BookingCreatedByCustomer` и текст `Вы записались: салон «…»`, а мастер записи — вид 9;
+  барбер-клиент получает напоминание (`Reminder`), админ-клиент — подтверждение
+  (`BookingConfirmed`). Ни один уведомитель не читает `UserRole`: получатель клиентского
+  события — `Booking.UserId`, поэтому сотрудник, записавшийся как клиент, обслуживается тем же
+  путём, что и обычный клиент.
 - Сборка решения — 0 warnings / 0 errors; `has-pending-model-changes` чисто. SQL новой миграции
   `AddBarberBookingPushNotifications` проверен через `dotnet ef migrations script`:
   `DROP CONSTRAINT ck_push_notifications_kind`, `ADD customer_name varchar(200)`,
   `ADD CONSTRAINT … CHECK (kind IN (1..10))`, данные не трогаются.
   Юнит-наборы зелёные: Domain 697/697, Application 1196/1196, Infrastructure 460/460.
   Push-подмножество интеграционных тестов прогнано на локальной PostgreSQL 16 (не Docker):
-  30/30, включая новые события мастеру; полный интеграционный набор в этой сессии не
-  запускался. Реальная доставка FCM не выполнялась — проекта Firebase нет, поэтому проверены
-  транспорт (HTTP-фейк) и путь create → deliver → cleanup на реальной БД.
+  30/30, включая новые события мастеру; четыре новых `PushStaffCustomerTests` — 4/4 (xunit
+  console runner: VSTest-testhost в песочнице не может открыть handle родительского процесса);
+  полный интеграционный набор в этой сессии не запускался. Реальная доставка FCM не
+  выполнялась — проекта Firebase нет, поэтому проверены транспорт (HTTP-фейк) и путь
+  create → deliver → cleanup на реальной БД.
 
 ### 20.11 События статуса записи (added 2026-11-18)
 
