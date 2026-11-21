@@ -38,6 +38,7 @@ public class BookingConcurrencyTests
             new FakeBarberProfileRepository(),
             new FakeCurrentUser(clientId),
             new FakeBookingStatusPushNotifier(),
+            new FakeBarberBookingPushNotifier(),
             new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 

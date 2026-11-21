@@ -7,9 +7,14 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace BarberSearch.Infrastructure.Postgresql.Configurations;
 
 /// <summary>
-/// Конфигурация таблицы <c>push_notifications</c> — очередь push-уведомлений клиенту.
+/// Конфигурация таблицы <c>push_notifications</c> — очередь push-уведомлений о брони.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Получатель — клиент брони или владелец профиля мастера: виды 9 и 10 адресованы мастеру,
+/// остальные — клиенту. Схема одна: обе стороны получают снимок визита и доставляются тем же
+/// воркером.
+/// </para>
 /// <para>
 /// Таблица — снимок на момент создания: названия салона, мастера и услуги и пояс салона
 /// не пересчитываются, поэтому внешних ключей на каталог нет. Строка переживает
@@ -78,6 +83,9 @@ public class PushNotificationConfiguration : IEntityTypeConfiguration<PushNotifi
         builder.Property(x => x.ServiceName)
             .HasColumnName("service_name")
             .HasMaxLength(Constants.MAX_NOTIFICATION_SERVICE_NAME_LENGTH);
+        builder.Property(x => x.CustomerName)
+            .HasColumnName("customer_name")
+            .HasMaxLength(Constants.MAX_NOTIFICATION_CUSTOMER_NAME_LENGTH);
         builder.Property(x => x.SalonTimeZoneId)
             .HasColumnName("salon_time_zone_id")
             .HasMaxLength(Constants.MAX_NOTIFICATION_TIME_ZONE_ID_LENGTH);

@@ -1136,7 +1136,8 @@ public class BookingCreateTests
         Guid? barberProfileId = null,
         DateTimeOffset? now = null,
         FakeUnitOfWork? unitOfWork = null,
-        FakeBookingCreatedPushNotifier? notifier = null)
+        FakeBookingCreatedPushNotifier? notifier = null,
+        FakeBarberBookingPushNotifier? barberNotifier = null)
         => new(
             context.Bookings,
             context.Profiles,
@@ -1147,6 +1148,7 @@ public class BookingCreateTests
                 userId ?? context.UserId,
                 barberProfileId: barberProfileId),
             notifier ?? new FakeBookingCreatedPushNotifier(),
+            barberNotifier ?? new FakeBarberBookingPushNotifier(),
             new FakeTimeProvider(now ?? Now),
             NullLogger<CreateBookingHandler>.Instance);
 

@@ -373,7 +373,8 @@ in Core owns both base addresses.
   default. `DevelopmentEndpoints` in Core owns the rule and both base addresses, so the choice is one
   tested function rather than two `#if` constants.
 - **The reminder text is composed by the server, in Russian, and the channel is Android/FCM-first.**
-  The channel carries seven events: the hour-before reminder (`booking.reminder`); the
+  The channel carries nine events: seven for the customer and two for the master. The seven
+  customer ones are the hour-before reminder (`booking.reminder`); the
   booking-creation event (`booking.created`), which the server sends both when the customer books a
   barber outside the app and when a barber books the customer; and five booking-change events —
   confirmation (`booking.confirmed`), cancellation (`booking.cancelled`), reschedule
@@ -385,13 +386,19 @@ in Core owns both base addresses.
   always push, even
   with the `app` header. The app marks itself with `X-Client-Surface: app` on the create, cancel
   and reschedule requests; the backend treats a missing or unknown header as another surface and
-  pushes, and never rejects the request over it. All seven texts are composed by the server, all
-  seven open «Записи», and all seven reuse the same `reminders` channel and the same «Присылать
-  напоминания» switch. Switching reminders off unregisters the device, so while the switch is off
-  the server cannot send any of them, the five booking-change events included; a separate toggle
-  would need a second registration concept and is out of scope. The creation event arrives on the
-  worker's next tick when it pushes, and a guest booking (no account) produces none. The app never
-  formats push text. FCM delivers a
+  pushes, and never rejects the request over it. The two master events are
+  `barber.booking.created` (a customer booked the barber on their own) and
+  `barber.booking.cancelled` (a customer or an administrator cancelled); the barber's own create
+  and cancel produce none, and the recipient is the profile owner, so an administrator's
+  cancellation of a guest booking notifies the master too. All nine texts are composed by the
+  server and all nine reuse the same `reminders` channel and the same «Присылать напоминания»
+  switch; the seven customer texts open «Записи», while the two master texts open `barber-cabinet`
+  (its default section — client bookings). Switching reminders off unregisters the device, so
+  while the switch is off the server cannot send any of them — the master events included; a
+  separate toggle would need a second registration concept and is out of scope. The creation event
+  arrives on the worker's next tick when it pushes, and a guest booking (no account) produces no
+  customer creation event — an administrator's cancellation of a guest booking still notifies the
+  master. The app never formats push text. FCM delivers a
   `notification` payload that Android shows
   even when the process is dead, so the title and body must exist before any app code runs; a data-only
   message with a background handler would be unreliable on modern Android and would add a second
@@ -447,8 +454,8 @@ in Core owns both base addresses.
   which attempts to unregister the device and keeps the marker if the request fails, so the next
   ensure retries while the toggle is off. The switch and the `reminders` channel are shared with
   every booking event, none of which has a toggle of its own: switching reminders off stops every
-  push the channel carries, the reminder and all six booking events. The channel is `reminders`,
-  importance `Default`; its
+  push the channel carries, the reminder and all eight booking events (six customer, two master).
+  The channel is `reminders`, importance `Default`; its
   visible name and description are localized keys «Напоминания» / «Напоминания о записях» and are
   created/updated by `App` **after** localization is initialized (not in `MauiProgram`), only when
   push is configured. Notifications use the monochrome lucide bell vector
@@ -457,8 +464,10 @@ in Core owns both base addresses.
   `...default_notification_channel_id=reminders`, so a background notification shown by the system
   gets the same icon and channel. `POST_NOTIFICATIONS` is declared in the manifest and requested
   only after push is configured. A foreground message is posted locally (`AndroidNotifications`), a
-  background one is shown by the system. A tap on any of the seven events opens the «Записи» tab via
-  `//bookings`: cold start reads the extras in `MainActivity.OnCreate` **only when
+  background one is shown by the system. A tap on any of the seven customer events opens the
+  «Записи» tab via `//bookings`, and a tap on either master event opens `barber-cabinet` instead
+  (its default section — client bookings, not the «Записи» tab): cold start reads the extras in
+  `MainActivity.OnCreate` **only when
   `savedInstanceState is null`** (a restored process must not jump tabs), warm start in
   `OnNewIntent` (`LaunchMode.SingleTop`), and the router waits for `Shell.Current`. There is no
   per-booking deep link because `GET api/bookings/{id}` does not exist and the list already shows
@@ -468,7 +477,11 @@ in Core owns both base addresses.
   the API client (`204`, no body), payload parsing/routing and the «Профиль» toggle/status texts
   (including the rule that a transient failure shows no device hint). The booking-creation event
   adds two payload-routing cases, and the barber confirmation, cancellation and reschedule events
-  add three more, which brings the suite to 842 tests. iOS compiles after an iOS
+  add three more, which brought the suite to 842 tests. The two master events add three
+  payload-routing cases (`TryParse_BarberBookingCreatedExtras_OpensCabinet`,
+  `TryParse_BarberBookingCancelledExtras_OpensCabinet`, and
+  `Route_EveryCustomerType_OpensBookingsTab`, which keeps all seven customer types on
+  `//bookings`), and the suite now stands at 1492 tests. iOS compiles after an iOS
   `PlatformTheme` no-op partial and the CA1711 suppressions: one explicit line in the existing
   `[src/BarberSearch.Mobile/Platforms/**/*.cs]` section (the MAUI-mandated `AppDelegate` and
   `AndroidPushPermission` names) plus the pointwise `IPushPermission.cs` entry. No real FCM delivery

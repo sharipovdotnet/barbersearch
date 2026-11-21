@@ -3,7 +3,7 @@ using BarberSearch.Mobile.Core.Push;
 namespace BarberSearch.Mobile.Push;
 
 /// <summary>
-/// Переход по нажатию на push-напоминание.
+/// Переход по нажатию на push-уведомление.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -17,7 +17,7 @@ namespace BarberSearch.Mobile.Push;
 /// Одна цель — один переход: после успешного <c>GoToAsync</c> ожидание стирается, чтобы
 /// возврат на вкладку «Профиль» и обратно не переключал вкладки повторно. Deep link на
 /// конкретную запись не делается: <c>GET api/bookings/{id}</c> не существует, а список
-/// «Записи» и так показывает нужную запись.
+/// «Записи» — для событий мастера раздел записей кабинета — и так показывает нужную запись.
 /// </para>
 /// </remarks>
 public sealed class NotificationTapRouter
@@ -34,7 +34,7 @@ public sealed class NotificationTapRouter
     /// </summary>
     /// <remarks>
     /// Неизвестное сообщение (например, из будущего среза) молча игнорируется: приложение
-    /// не должно открывать вкладку, которую это уведомление не имело в виду.
+    /// не должно открывать экран, который это уведомление не имело в виду.
     /// </remarks>
     /// <param name="extras">Extras intent'а либо <c>null</c>.</param>
     public void HandleIntent(IDictionary<string, string>? extras)

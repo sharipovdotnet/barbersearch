@@ -2,6 +2,7 @@ using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
 using BarberSearch.Application.Bookings.BookingChangeEmail;
 using BarberSearch.Application.Common;
+using BarberSearch.Application.Push.BarberBooking;
 using BarberSearch.Application.Push.BookingStatus;
 using BarberSearch.Contracts.Common;
 using CSharpFunctionalExtensions;
@@ -33,6 +34,7 @@ public class CancelBookingHandler : ICommandHandler<CancelBookingCommand>
     private readonly IBarberProfileRepository _barberProfiles;
     private readonly ICurrentUser _currentUser;
     private readonly IBookingStatusPushNotifier _pushNotifier;
+    private readonly IBarberBookingPushNotifier _barberPushNotifier;
     private readonly IBookingChangeEmailNotifier _emailNotifier;
     private readonly ILogger<CancelBookingHandler> _logger;
 
@@ -41,6 +43,7 @@ public class CancelBookingHandler : ICommandHandler<CancelBookingCommand>
         IBarberProfileRepository barberProfiles,
         ICurrentUser currentUser,
         IBookingStatusPushNotifier pushNotifier,
+        IBarberBookingPushNotifier barberPushNotifier,
         IBookingChangeEmailNotifier emailNotifier,
         ILogger<CancelBookingHandler> logger)
     {
@@ -48,6 +51,7 @@ public class CancelBookingHandler : ICommandHandler<CancelBookingCommand>
         _barberProfiles = barberProfiles;
         _currentUser = currentUser;
         _pushNotifier = pushNotifier;
+        _barberPushNotifier = barberPushNotifier;
         _emailNotifier = emailNotifier;
         _logger = logger;
     }
@@ -133,6 +137,16 @@ public class CancelBookingHandler : ICommandHandler<CancelBookingCommand>
             _logger,
             booking,
             change,
+            cancellationToken);
+
+        // Мастеру — отдельное событие: клиент отменил запись или её снял администратор.
+        // Собственную отмену мастер не получает: он и есть автор действия. Гостевая бронь
+        // клиента-пользователя не имеет, но получатель здесь — владелец профиля.
+        await BarberBookingPush.NotifyCancelledAsync(
+            _barberPushNotifier,
+            _logger,
+            booking,
+            cancelledByBarber: isBarberCancellation,
             cancellationToken);
 
         // Письмо заменяет push тогда и только тогда, когда клиент отменил запись в том же

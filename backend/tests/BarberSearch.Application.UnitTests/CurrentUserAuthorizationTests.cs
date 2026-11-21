@@ -71,6 +71,7 @@ public class CurrentUserAuthorizationTests
             new FakeBarberProfileRepository(),
             FakeCurrentUser.Anonymous(),
             new FakeBookingStatusPushNotifier(),
+            new FakeBarberBookingPushNotifier(),
             new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
@@ -99,6 +100,7 @@ public class CurrentUserAuthorizationTests
             new FakeUnitOfWork(),
             FakeCurrentUser.Anonymous(),
             notifier,
+            new FakeBarberBookingPushNotifier(),
             TimeProvider.System,
             NullLogger<CreateBookingHandler>.Instance);
 

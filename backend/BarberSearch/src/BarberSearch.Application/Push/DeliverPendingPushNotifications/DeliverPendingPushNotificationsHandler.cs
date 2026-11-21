@@ -27,6 +27,12 @@ using BookingStatus = BarberSearch.Domain.Bookings.BookingStatus;
 /// состояние события создания, она доставляется.
 /// </para>
 /// <para>
+/// События мастеру проверяются как их клиентские пары: новая запись доставляется, пока визит
+/// жив (в том числе <c>Pending</c>), и пропускается, если бронь удалена или отменена; отмена
+/// мастера доставляется только пока бронь <c>Cancelled</c>. Перенос и наступившее начало —
+/// общие проверки для всех видов.
+/// </para>
+/// <para>
 /// События статуса проверяются по своему правилу. Подтверждение доставляется только пока
 /// бронь <c>Confirmed</c> (иначе — та же причина <c>booking is not confirmed</c>). Отмена —
 /// только пока бронь <c>Cancelled</c> (<c>booking is not cancelled</c>: запись «ожила» после
@@ -412,6 +418,7 @@ public sealed class DeliverPendingPushNotificationsHandler
 
             case PushNotificationKind.BookingCreatedByCustomer:
             case PushNotificationKind.BookingCreatedByBarber:
+            case PushNotificationKind.BarberBookingCreated:
                 if (bookingResult.IsFailure)
                 {
                     return Result.Success<string?, Failure>(BOOKING_DELETED_REASON);
@@ -439,6 +446,7 @@ public sealed class DeliverPendingPushNotificationsHandler
 
             case PushNotificationKind.BookingCancelledByBarber:
             case PushNotificationKind.BookingCancelledByCustomer:
+            case PushNotificationKind.BarberBookingCancelled:
                 if (bookingResult.IsFailure)
                 {
                     return Result.Success<string?, Failure>(BOOKING_DELETED_REASON);
@@ -505,6 +513,8 @@ public sealed class DeliverPendingPushNotificationsHandler
                 or PushNotificationKind.BookingCancelledByCustomer => "cancellation event",
             PushNotificationKind.BookingRescheduledByBarber
                 or PushNotificationKind.BookingRescheduledByCustomer => "reschedule event",
+            PushNotificationKind.BarberBookingCreated => "barber creation event",
+            PushNotificationKind.BarberBookingCancelled => "barber cancellation event",
             _ => "unknown event"
         };
 

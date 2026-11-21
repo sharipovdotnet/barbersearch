@@ -1,6 +1,7 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
 using BarberSearch.Application.Common;
+using BarberSearch.Application.Push.BarberBooking;
 using BarberSearch.Application.Push.BookingCreated;
 using BarberSearch.Application.Salons;
 using BarberSearch.Application.Users;
@@ -113,6 +114,7 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUser _currentUser;
     private readonly IBookingCreatedPushNotifier _pushNotifier;
+    private readonly IBarberBookingPushNotifier _barberPushNotifier;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<CreateBookingHandler> _logger;
 
@@ -124,6 +126,7 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
         IUnitOfWork unitOfWork,
         ICurrentUser currentUser,
         IBookingCreatedPushNotifier pushNotifier,
+        IBarberBookingPushNotifier barberPushNotifier,
         TimeProvider timeProvider,
         ILogger<CreateBookingHandler> logger)
     {
@@ -134,6 +137,7 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
         _unitOfWork = unitOfWork;
         _currentUser = currentUser;
         _pushNotifier = pushNotifier;
+        _barberPushNotifier = barberPushNotifier;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -434,11 +438,19 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
                 return added.Error;
             }
 
-            // Событие создания ставится в очередь в этой же транзакции: бронь и строка push
-            // коммитятся вместе. Сбой уведомления не должен откатывать бронь — см. NotifyAsync.
-            await NotifyBookingCreatedAsync(
+            // Событие создания ставится в очередь в этой же транзакции: бронь и строки push
+            // коммитятся вместе. Клиентское событие и событие мастеру — разные получатели
+            // и разные тексты, поэтому это две строки. Сбой уведомления не должен откатывать
+            // бронь — см. NotifyBookingCreatedAsync и BarberBookingPush.
+            var createdByBarber = command.CustomerId is not null || hasGuestContact;
+
+            await NotifyBookingCreatedAsync(booking.Value, createdByBarber, ct);
+
+            await BarberBookingPush.NotifyCreatedAsync(
+                _barberPushNotifier,
+                _logger,
                 booking.Value,
-                createdByBarber: command.CustomerId is not null || hasGuestContact,
+                createdByBarber,
                 ct);
 
             return booking.Value.Id;

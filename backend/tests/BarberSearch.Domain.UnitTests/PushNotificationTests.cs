@@ -50,13 +50,15 @@ public class PushNotificationTests
             new string('s', 201),
             new string('b', 121),
             new string('v', 201),
-            new string('z', 101));
+            new string('z', 101),
+            new string('c', 201));
 
         Assert.True(result.IsFailure);
-        Assert.Equal(4, result.Error.Errors.Count);
+        Assert.Equal(5, result.Error.Errors.Count);
         Assert.Contains(result.Error.Errors, error => error.Code == "pushNotification.create.salonName");
         Assert.Contains(result.Error.Errors, error => error.Code == "pushNotification.create.barberName");
         Assert.Contains(result.Error.Errors, error => error.Code == "pushNotification.create.serviceName");
+        Assert.Contains(result.Error.Errors, error => error.Code == "pushNotification.create.customerName");
         Assert.Contains(
             result.Error.Errors,
             error => error.Code == "pushNotification.create.salonTimeZoneId");
@@ -73,7 +75,8 @@ public class PushNotificationTests
             "  Барбершоп  ",
             "   ",
             " Стрижка ",
-            "Asia/Yekaterinburg");
+            "Asia/Yekaterinburg",
+            "  Анна Петрова  ");
 
         Assert.True(result.IsSuccess);
 
@@ -85,6 +88,7 @@ public class PushNotificationTests
         Assert.Equal("Барбершоп", notification.SalonName);
         Assert.Null(notification.BarberName);
         Assert.Equal("Стрижка", notification.ServiceName);
+        Assert.Equal("Анна Петрова", notification.CustomerName);
         Assert.Equal("Asia/Yekaterinburg", notification.SalonTimeZoneId);
         Assert.Equal(PushDelivery.Pending, notification.Delivery);
         Assert.Equal(0, notification.DeliveryAttempts);
@@ -127,6 +131,24 @@ public class PushNotificationTests
     }
 
     [Fact]
+    public void Create_WithBlankCustomerName_StoresNull()
+    {
+        var result = PushNotification.Create(
+            PushNotificationKind.BarberBookingCreated,
+            UserId,
+            BookingId,
+            StartAt,
+            "Барбершоп",
+            "Иван",
+            "Стрижка",
+            "Asia/Yekaterinburg",
+            "   ");
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Value.CustomerName);
+    }
+
+    [Fact]
     public void Create_WithUndefinedKind_ReturnsValidationError()
     {
         var result = PushNotification.Create(
@@ -156,6 +178,8 @@ public class PushNotificationTests
         Assert.Equal(6, (int)PushNotificationKind.BookingRescheduledByBarber);
         Assert.Equal(7, (int)PushNotificationKind.BookingCancelledByCustomer);
         Assert.Equal(8, (int)PushNotificationKind.BookingRescheduledByCustomer);
+        Assert.Equal(9, (int)PushNotificationKind.BarberBookingCreated);
+        Assert.Equal(10, (int)PushNotificationKind.BarberBookingCancelled);
     }
 
     [Fact]

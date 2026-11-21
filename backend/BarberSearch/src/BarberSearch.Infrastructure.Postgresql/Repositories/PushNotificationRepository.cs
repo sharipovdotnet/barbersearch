@@ -63,13 +63,14 @@ public sealed class PushNotificationRepository
                 $"""
                  INSERT INTO push_notifications (
                      id, user_id, kind, booking_id, start_at, salon_name, barber_name,
-                     service_name, salon_time_zone_id, delivery, delivery_attempts,
-                     next_attempt_at, last_error, created_at, updated_at)
+                     service_name, customer_name, salon_time_zone_id, delivery,
+                     delivery_attempts, next_attempt_at, last_error, created_at, updated_at)
                  VALUES (
                      {notification.Id}, {notification.UserId}, {(short)notification.Kind},
                      {notification.BookingId}, {notification.StartAt},
                      {notification.SalonName}, {notification.BarberName},
-                     {notification.ServiceName}, {notification.SalonTimeZoneId},
+                     {notification.ServiceName}, {notification.CustomerName},
+                     {notification.SalonTimeZoneId},
                      {(short)notification.Delivery}, {notification.DeliveryAttempts},
                      {notification.NextAttemptAt}, {notification.LastError},
                      {notification.CreatedAt}, {notification.UpdatedAt})

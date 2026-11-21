@@ -85,9 +85,9 @@ public class PushModelTests
         Assert.Equal("pk_push_notifications", entity.GetKeys().Single().GetName());
         Assert.Equal(
             [
-                "barber_name", "booking_id", "created_at", "delivery", "delivery_attempts",
-                "id", "kind", "last_error", "next_attempt_at", "salon_name", "salon_time_zone_id",
-                "service_name", "start_at", "updated_at", "user_id"
+                "barber_name", "booking_id", "created_at", "customer_name", "delivery",
+                "delivery_attempts", "id", "kind", "last_error", "next_attempt_at", "salon_name",
+                "salon_time_zone_id", "service_name", "start_at", "updated_at", "user_id"
             ],
             entity.GetProperties()
                 .Select(property => property.GetColumnName())
@@ -100,6 +100,13 @@ public class PushModelTests
         Assert.Equal("kind", kind.GetColumnName());
         Assert.Equal(typeof(PushNotificationKind), kind.ClrType);
         Assert.Equal("smallint", kind.GetColumnType());
+
+        // Имя клиента — снимок только для событий мастеру, поэтому nullable и с пределом 200.
+        var customerName = entity.FindProperty(nameof(PushNotification.CustomerName));
+        Assert.NotNull(customerName);
+        Assert.Equal("customer_name", customerName.GetColumnName());
+        Assert.True(customerName.IsNullable);
+        Assert.Equal(200, customerName.GetMaxLength());
     }
 
     [Fact]
@@ -111,7 +118,7 @@ public class PushModelTests
         Assert.NotNull(entity);
 
         Assert.Equal(
-            "kind IN (1, 2, 3, 4, 5, 6, 7, 8)",
+            "kind IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)",
             Assert.Single(
                 entity.GetCheckConstraints(),
                 check => check.Name == "ck_push_notifications_kind").Sql);
@@ -180,6 +187,11 @@ public class PushModelTests
             context.Database.GetMigrations(),
             migration => migration.EndsWith(
                 "_AddCustomerBookingPushEvents",
+                StringComparison.Ordinal));
+        Assert.Contains(
+            context.Database.GetMigrations(),
+            migration => migration.EndsWith(
+                "_AddBarberBookingPushNotifications",
                 StringComparison.Ordinal));
 
         // Снимок модели обновлён вместе с миграцией: следующая миграция не должна

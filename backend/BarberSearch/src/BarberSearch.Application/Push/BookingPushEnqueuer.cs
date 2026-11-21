@@ -7,7 +7,8 @@ namespace BarberSearch.Application.Push;
 
 /// <summary>
 /// Общая постановка push-события о брони в очередь: гейты канала и получателя, снимок
-/// каталога, доменная фабрика и дедуплицирующая вставка.
+/// каталога, доменная фабрика и дедуплицирующая вставка. Получатель — клиент брони или
+/// владелец профиля мастера.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -46,27 +47,54 @@ public sealed class BookingPushEnqueuer
     }
 
     /// <summary>
-    /// Ставит в очередь уведомление заданного вида для брони, если канал включён и у брони
+    /// Ставит в очередь уведомление заданного вида для клиента, если канал включён и у брони
     /// есть клиент.
     /// </summary>
     /// <param name="booking">Бронь после сохранения; её <c>StartAt</c> — время события.</param>
     /// <param name="kind">Вид уведомления.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
-    public async Task<UnitResult<Failure>> EnqueueAsync(
+    public Task<UnitResult<Failure>> EnqueueAsync(
         Booking booking,
         PushNotificationKind kind,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(booking);
 
-        // Выключенный канал не создаёт строк: включение — решение эксплуатации (AGENT.md §20.5).
-        if (!_options.Enabled)
-        {
-            return UnitResult.Success<Failure>();
-        }
-
         // Гостю отправлять некуда: у брони нет получателя.
         if (booking.UserId is not { } userId)
+        {
+            return Task.FromResult(UnitResult.Success<Failure>());
+        }
+
+        return EnqueueAsync(booking, kind, userId, customerName: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Ставит в очередь уведомление заданного вида для явного получателя — клиента из брони
+    /// или владельца профиля мастера.
+    /// </summary>
+    /// <remarks>
+    /// Мастеру событие создаётся и тогда, когда у брони нет клиента-пользователя: гость
+    /// записан мастером, но отменить визит может администратор, и мастер должен об этом
+    /// узнать. Поэтому получатель передаётся отдельно, а не выводится из
+    /// <see cref="Booking.UserId"/>.
+    /// </remarks>
+    /// <param name="booking">Бронь после сохранения; её <c>StartAt</c> — время события.</param>
+    /// <param name="kind">Вид уведомления.</param>
+    /// <param name="recipientId">Пользователь-получатель.</param>
+    /// <param name="customerName">Снимок имени клиента для события мастеру; иначе <c>null</c>.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    public async Task<UnitResult<Failure>> EnqueueAsync(
+        Booking booking,
+        PushNotificationKind kind,
+        Guid recipientId,
+        string? customerName,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(booking);
+
+        // Выключенный канал не создаёт строк: включение — решение эксплуатации (AGENT.md §20.5).
+        if (!_options.Enabled)
         {
             return UnitResult.Success<Failure>();
         }
@@ -88,13 +116,14 @@ public sealed class BookingPushEnqueuer
 
         var notification = PushNotification.Create(
             kind,
-            userId,
+            recipientId,
             booking.Id,
             booking.StartAt,
             snapshot.SalonName,
             snapshot.BarberName,
             snapshot.ServiceName,
-            snapshot.SalonTimeZoneId);
+            snapshot.SalonTimeZoneId,
+            customerName);
         if (notification.IsFailure)
         {
             return notification.Error;
