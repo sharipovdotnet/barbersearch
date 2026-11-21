@@ -43,7 +43,7 @@ public sealed class PushClientSurfaceTests
     }
 
     [Fact(Timeout = 180_000)]
-    public async Task CancelFromApp_WithSurfaceHeader_CreatesNoPushRow()
+    public async Task CancelFromApp_CreatesNoCustomerPushRowButNotifiesTheBarber()
     {
         var sender = new CapturingPushSender();
 
@@ -71,13 +71,20 @@ public sealed class PushClientSurfaceTests
             Assert.Equal(HttpStatusCode.NoContent, cancelled.StatusCode);
         }
 
-        // Действие в том же приложении, которое получило бы push: строка не создаётся.
+        // Действие в том же приложении, которое получило бы push: клиентской строки нет.
+        // Мастеру событие всё равно уходит — он не выполнял это действие.
         var push = new PushTestData(app);
-        Assert.Empty(await push.GetAllNotificationsAsync());
+        Assert.Empty(await push.GetNotificationsAsync(customer.Id));
+
+        var barberRow = Assert.Single(await push.GetNotificationsAsync(barber.User.Id));
+        Assert.Equal(PushNotificationKind.BarberBookingCancelled, barberRow.Kind);
+        Assert.Equal(booking.Id, barberRow.BookingId);
+        Assert.Equal("Integration Test", barberRow.CustomerName);
 
         var result = await app.RunPushTickAsync();
 
-        Assert.Equal(PushTickResult.Empty, result);
+        Assert.Equal(0, result.Sent);
+        Assert.Equal(1, result.Skipped);
         Assert.Empty(sender.Messages);
     }
 
@@ -117,9 +124,15 @@ public sealed class PushClientSurfaceTests
             notification => notification.Kind == PushNotificationKind.BookingCancelledByCustomer);
         Assert.Equal(booking.Id, row.BookingId);
 
+        var barberRow = Assert.Single(await push.GetNotificationsAsync(barber.User.Id));
+        Assert.Equal(PushNotificationKind.BarberBookingCancelled, barberRow.Kind);
+        Assert.Equal(booking.Id, barberRow.BookingId);
+        Assert.Equal("Integration Test", barberRow.CustomerName);
+
         var result = await app.RunPushTickAsync();
 
         Assert.Equal(1, result.Sent);
+        Assert.Equal(1, result.Skipped);
 
         var captured = Assert.Single(sender.Messages);
         Assert.Equal(
@@ -163,6 +176,10 @@ public sealed class PushClientSurfaceTests
             await push.GetNotificationsAsync(customer.Id),
             notification => notification.Kind == PushNotificationKind.BookingCancelledByCustomer);
         Assert.Equal(booking.Id, row.BookingId);
+
+        var barberRow = Assert.Single(await push.GetNotificationsAsync(barber.User.Id));
+        Assert.Equal(PushNotificationKind.BarberBookingCancelled, barberRow.Kind);
+        Assert.Equal(booking.Id, barberRow.BookingId);
     }
 
     [Fact(Timeout = 180_000)]
@@ -206,9 +223,16 @@ public sealed class PushClientSurfaceTests
             notification => notification.Kind == PushNotificationKind.BookingCancelledByBarber);
         Assert.Equal(booking.Id, row.BookingId);
 
+        // Администратор — не мастер: мастеру уходит событие отмены клиентской записи.
+        var barberRow = Assert.Single(await push.GetNotificationsAsync(barber.User.Id));
+        Assert.Equal(PushNotificationKind.BarberBookingCancelled, barberRow.Kind);
+        Assert.Equal(booking.Id, barberRow.BookingId);
+        Assert.Equal("Integration Test", barberRow.CustomerName);
+
         var result = await app.RunPushTickAsync();
 
         Assert.Equal(1, result.Sent);
+        Assert.Equal(1, result.Skipped);
 
         var captured = Assert.Single(sender.Messages);
         Assert.Equal(
@@ -218,7 +242,7 @@ public sealed class PushClientSurfaceTests
     }
 
     [Fact(Timeout = 180_000)]
-    public async Task CreateFromApp_WithSurfaceHeader_CreatesNoPushRow()
+    public async Task CreateFromApp_CreatesNoCustomerPushRowButNotifiesTheBarber()
     {
         var sender = new CapturingPushSender();
 
@@ -231,20 +255,26 @@ public sealed class PushClientSurfaceTests
         var barber = await data.CreateBookableBarberAsync("Push Surface Create App Barber");
 
         var email = CustomerEmail("create-app");
-        await app.RegisterAsync(email);
+        var customerId = await app.RegisterAsync(email);
         await app.AuthenticateAsync(email);
         app.Client.DefaultRequestHeaders.Add(SurfaceHeader, "app");
 
         var startAt = DateTimeOffset.UtcNow.AddDays(2);
         await CreateBookingAsync(app, barber, startAt);
 
-        // Самозапись из приложения: экран уже подтвердил бронь, push не создаётся.
+        // Самозапись из приложения: экран уже подтвердил бронь, клиентского push нет.
+        // Мастеру событие уходит: для него это новая запись, а не собственное действие.
         var push = new PushTestData(app);
-        Assert.Empty(await push.GetAllNotificationsAsync());
+        Assert.Empty(await push.GetNotificationsAsync(customerId));
+
+        var barberRow = Assert.Single(await push.GetNotificationsAsync(barber.User.Id));
+        Assert.Equal(PushNotificationKind.BarberBookingCreated, barberRow.Kind);
+        Assert.Equal("Integration Test", barberRow.CustomerName);
 
         var result = await app.RunPushTickAsync();
 
-        Assert.Equal(PushTickResult.Empty, result);
+        Assert.Equal(0, result.Sent);
+        Assert.Equal(1, result.Skipped);
         Assert.Empty(sender.Messages);
     }
 
@@ -275,9 +305,15 @@ public sealed class PushClientSurfaceTests
         Assert.Equal(PushNotificationKind.BookingCreatedByCustomer, row.Kind);
         Assert.Equal(bookingId, row.BookingId);
 
+        var barberRow = Assert.Single(await push.GetNotificationsAsync(barber.User.Id));
+        Assert.Equal(PushNotificationKind.BarberBookingCreated, barberRow.Kind);
+        Assert.Equal(bookingId, barberRow.BookingId);
+        Assert.Equal("Integration Test", barberRow.CustomerName);
+
         var result = await app.RunPushTickAsync();
 
         Assert.Equal(1, result.Sent);
+        Assert.Equal(1, result.Skipped);
 
         var captured = Assert.Single(sender.Messages);
         Assert.Equal(
@@ -317,9 +353,14 @@ public sealed class PushClientSurfaceTests
             Assert.Equal(HttpStatusCode.NoContent, cancelled.StatusCode);
         }
 
-        // Отмена из приложения не создаёт push, но ставит письмо на подтверждённый адрес.
+        // Отмена из приложения не создаёт клиентский push, но ставит письмо на подтверждённый
+        // адрес и уведомляет мастера: для него отмена — внешнее действие.
         var push = new PushTestData(app);
-        Assert.Empty(await push.GetAllNotificationsAsync());
+        Assert.Empty(await push.GetNotificationsAsync(customer.Id));
+
+        var barberRow = Assert.Single(await push.GetNotificationsAsync(barber.User.Id));
+        Assert.Equal(PushNotificationKind.BarberBookingCancelled, barberRow.Kind);
+        Assert.Equal(booking.Id, barberRow.BookingId);
 
         var first = Assert.Single(await GetOutboxAsync(app));
         Assert.Equal(customer.Email.Value, first.ToEmail);

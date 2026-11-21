@@ -61,9 +61,10 @@ public sealed class PushBookingCreatedTests
         var result = await app.RunPushTickAsync();
 
         // Напоминание не создаётся: самозапись ещё Pending и визит далеко за окном.
+        // Клиентское событие доставляется, а событие мастеру ждёт устройства барбера.
         Assert.Equal(0, result.Created);
         Assert.Equal(1, result.Sent);
-        Assert.Equal(0, result.Skipped);
+        Assert.Equal(1, result.Skipped);
 
         var row = Assert.Single(await push.GetNotificationsAsync(customerId));
         Assert.Equal(PushNotificationKind.BookingCreatedByCustomer, row.Kind);
@@ -74,6 +75,15 @@ public sealed class PushBookingCreatedTests
         Assert.Equal("Haircut Push Created Barber", row.ServiceName);
         Assert.Equal("Europe/Berlin", row.SalonTimeZoneId);
 
+        // Вторая сторона события — строка мастеру с его именем клиента.
+        var barberRow = Assert.Single(await push.GetNotificationsAsync(barber.User.Id));
+        Assert.Equal(PushNotificationKind.BarberBookingCreated, barberRow.Kind);
+        Assert.Equal(bookingId, barberRow.BookingId);
+        Assert.Equal(barber.User.Id, barberRow.UserId);
+        Assert.Equal("Integration Test", barberRow.CustomerName);
+        Assert.Equal(PushDelivery.Skipped, barberRow.Delivery);
+        Assert.Equal("no registered device", barberRow.LastError);
+
         var captured = Assert.Single(sender.Messages);
         Assert.Equal("integration-device-token", captured.Token);
         Assert.Equal("Вы записались: салон «Salon Push Created Barber»", captured.Message.Title);
@@ -82,6 +92,54 @@ public sealed class PushBookingCreatedTests
             captured.Message.Body,
             StringComparison.Ordinal);
         Assert.Equal(PushMessage.BOOKING_CREATED_TYPE, captured.Message.Type);
+    }
+
+    [Fact(Timeout = 180_000)]
+    public async Task CreateBooking_ThroughTheCustomerApi_DeliversTheMasterEvent()
+    {
+        var sender = new CapturingPushSender();
+
+        await using var app = await TestApp.StartAsync(
+            _database,
+            PushEnabled(),
+            pushSender: sender);
+
+        var data = new TestData(app);
+        var barber = await data.CreateBookableBarberAsync("Push Master Event Barber");
+
+        var email = $"push-master-event-{Guid.NewGuid():N}@barbersearch.test";
+        var customerId = await app.RegisterAsync(email);
+        await app.AuthenticateAsync(email);
+
+        var push = new PushTestData(app);
+        await push.SeedDeviceTokenAsync(customerId, "customer-device-token");
+        await push.SeedDeviceTokenAsync(barber.User.Id, "barber-device-token");
+
+        var startAt = DateTimeOffset.UtcNow.AddDays(2);
+        var bookingId = await CreateBookingAsync(app, barber, startAt);
+
+        var result = await app.RunPushTickAsync();
+
+        // Обе стороны получают своё событие: клиент — «вы записались», мастер — «новая запись».
+        Assert.Equal(2, result.Sent);
+        Assert.Equal(0, result.Skipped);
+
+        var captured = Assert.Single(
+            sender.Messages,
+            message => message.Token == "barber-device-token");
+        Assert.Equal("Новая запись: Integration Test", captured.Message.Title);
+        Assert.Equal(PushMessage.BARBER_BOOKING_CREATED_TYPE, captured.Message.Type);
+        Assert.Equal(bookingId, captured.Message.BookingId);
+        Assert.StartsWith("Haircut Push Master Event Barber · ", captured.Message.Body);
+        Assert.EndsWith(
+            " · салон «Salon Push Master Event Barber»",
+            captured.Message.Body,
+            StringComparison.Ordinal);
+
+        var barberRow = Assert.Single(
+            await push.GetNotificationsAsync(barber.User.Id),
+            notification => notification.Kind == PushNotificationKind.BarberBookingCreated);
+        Assert.Equal(PushDelivery.Sent, barberRow.Delivery);
     }
 
     [Fact(Timeout = 180_000)]
@@ -135,6 +193,9 @@ public sealed class PushBookingCreatedTests
         Assert.Equal(PushNotificationKind.BookingCreatedByBarber, row.Kind);
         Assert.Equal(body.Id, row.BookingId);
         Assert.Equal(PushDelivery.Sent, row.Delivery);
+
+        // Ручную запись внёс сам мастер: события мастеру нет.
+        Assert.Empty(await push.GetNotificationsAsync(barber.User.Id));
 
         var captured = Assert.Single(sender.Messages);
         Assert.Equal("Вас записали: салон «Salon Push Manual Barber»", captured.Message.Title);

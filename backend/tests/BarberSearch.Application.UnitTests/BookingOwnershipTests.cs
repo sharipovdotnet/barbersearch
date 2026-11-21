@@ -222,6 +222,7 @@ public class BookingOwnershipTests
             new FakeBarberProfileRepository(),
             new FakeCurrentUser(clientId),
             push,
+            new FakeBarberBookingPushNotifier(),
             email,
             NullLogger<CancelBookingHandler>.Instance);
 
@@ -258,6 +259,7 @@ public class BookingOwnershipTests
             new FakeBarberProfileRepository(),
             new FakeCurrentUser(customer.Id),
             new FakeBookingStatusPushNotifier(),
+            new FakeBarberBookingPushNotifier(),
             email,
             NullLogger<CancelBookingHandler>.Instance);
 
@@ -292,6 +294,7 @@ public class BookingOwnershipTests
             new FakeBarberProfileRepository(),
             new FakeCurrentUser(customer.Id),
             new FakeBookingStatusPushNotifier(),
+            new FakeBarberBookingPushNotifier(),
             CreateEmailNotifier(users, outbox, isMobileApp: true),
             NullLogger<CancelBookingHandler>.Instance);
 
@@ -316,6 +319,7 @@ public class BookingOwnershipTests
             new FakeBarberProfileRepository(),
             new FakeCurrentUser(Guid.CreateVersion7()),
             push,
+            new FakeBarberBookingPushNotifier(),
             new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
@@ -343,6 +347,7 @@ public class BookingOwnershipTests
             new FakeBarberProfileRepository(),
             new FakeCurrentUser(Guid.CreateVersion7()),
             push,
+            new FakeBarberBookingPushNotifier(),
             new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
@@ -374,6 +379,7 @@ public class BookingOwnershipTests
             profiles,
             new FakeCurrentUser(barberId),
             new FakeBookingStatusPushNotifier(),
+            new FakeBarberBookingPushNotifier(),
             new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
@@ -401,6 +407,7 @@ public class BookingOwnershipTests
             profiles,
             new FakeCurrentUser(barberId),
             push,
+            new FakeBarberBookingPushNotifier(),
             new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
@@ -433,6 +440,7 @@ public class BookingOwnershipTests
             profiles,
             new FakeCurrentUser(barberId),
             push,
+            new FakeBarberBookingPushNotifier(),
             new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
@@ -465,6 +473,7 @@ public class BookingOwnershipTests
             profiles,
             new FakeCurrentUser(barberId),
             push,
+            new FakeBarberBookingPushNotifier(),
             new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
@@ -490,6 +499,7 @@ public class BookingOwnershipTests
             new FakeBarberProfileRepository(),
             new FakeCurrentUser(Guid.CreateVersion7(), isAdmin: true),
             push,
+            new FakeBarberBookingPushNotifier(),
             new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 
@@ -527,6 +537,7 @@ public class BookingOwnershipTests
             profiles,
             new FakeCurrentUser(barberId),
             push,
+            new FakeBarberBookingPushNotifier(),
             new FakeBookingChangeEmailNotifier(),
             NullLogger<CancelBookingHandler>.Instance);
 

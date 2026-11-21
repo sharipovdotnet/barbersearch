@@ -22,9 +22,11 @@ namespace BarberSearch.Domain.Push;
 /// важно то, что было актуально тогда, поэтому внешних ключей на каталог у таблицы нет.
 /// </para>
 /// <para>
-/// Персональных данных клиента здесь нет и быть не должно (152-ФЗ): ни имени, ни телефона,
-/// ни заметки — только салон, мастер, услуга и время. Текст сообщения собирается из этих
-/// полей (<c>PushMessages</c>), поэтому ПДн в push физически неоткуда взяться.
+/// События клиенту персональных данных не несут (152-ФЗ): ни имени, ни телефона, ни заметки —
+/// только салон, мастер, услуга и время. События мастеру (виды 9 и 10) добавляют
+/// <see cref="CustomerName"/>: без имени мастер не понимает, кто придёт, а телефон и заметка
+/// клиента остаются закрытыми. Текст сообщения собирается из этих полей
+/// (<c>PushMessages</c>), поэтому других ПДн в push физически неоткуда взяться.
 /// </para>
 /// <para>
 /// «Сейчас» домен не читает: момент следующей попытки и предел попыток приходят аргументами
@@ -59,6 +61,11 @@ public sealed class PushNotification : Entity
     private const string BARBER_NAME_CODE = "pushNotification.create.barberName";
 
     /// <summary>
+    /// Публичный код ошибки «снимок имени клиента длиннее предела»; <c>400</c>.
+    /// </summary>
+    private const string CUSTOMER_NAME_CODE = "pushNotification.create.customerName";
+
+    /// <summary>
     /// Публичный код ошибки «снимок пояса салона длиннее предела»; <c>400</c>.
     /// </summary>
     private const string TIME_ZONE_CODE = "pushNotification.create.salonTimeZoneId";
@@ -74,7 +81,9 @@ public sealed class PushNotification : Entity
     public PushNotificationKind Kind { get; private set; }
 
     /// <summary>
-    /// Получатель: клиент, записавшийся на визит.
+    /// Получатель: клиент, записавшийся на визит, или владелец профиля мастера для видов
+    /// <see cref="PushNotificationKind.BarberBookingCreated"/> и
+    /// <see cref="PushNotificationKind.BarberBookingCancelled"/>.
     /// </summary>
     public Guid UserId { get; private set; }
 
@@ -104,6 +113,18 @@ public sealed class PushNotification : Entity
     /// Снимок названия услуги; <c>null</c> — услуга на момент создания была недоступна.
     /// </summary>
     public string? ServiceName { get; private set; }
+
+    /// <summary>
+    /// Снимок имени клиента; заполняется только для событий мастеру
+    /// (<see cref="PushNotificationKind.BarberBookingCreated"/> и
+    /// <see cref="PushNotificationKind.BarberBookingCancelled"/>).
+    /// </summary>
+    /// <remarks>
+    /// Клиентские события имя не хранят и не отправляют: получатель и так знает, кто он.
+    /// Мастеру имя нужно, чтобы понять, кто придёт; телефон и заметка клиента сюда
+    /// по-прежнему не попадают (152-ФЗ).
+    /// </remarks>
+    public string? CustomerName { get; private set; }
 
     /// <summary>
     /// Снимок пояса салона (IANA). По нему время в тексте показывается в поясе салона,
@@ -156,6 +177,10 @@ public sealed class PushNotification : Entity
     /// <param name="barberName">Снимок имени мастера.</param>
     /// <param name="serviceName">Снимок названия услуги.</param>
     /// <param name="salonTimeZoneId">Снимок пояса салона (IANA).</param>
+    /// <param name="customerName">
+    /// Снимок имени клиента — только для событий мастеру; клиентские виды передают
+    /// <c>null</c>.
+    /// </param>
     public static Result<PushNotification, Failure> Create(
         PushNotificationKind kind,
         Guid userId,
@@ -164,7 +189,8 @@ public sealed class PushNotification : Entity
         string? salonName,
         string? barberName,
         string? serviceName,
-        string? salonTimeZoneId)
+        string? salonTimeZoneId,
+        string? customerName = null)
     {
         var errors = DomainErrors.Collect();
 
@@ -200,7 +226,7 @@ public sealed class PushNotification : Entity
                 nameof(startAt)));
         }
 
-        AddSnapshotErrors(errors, salonName, barberName, serviceName, salonTimeZoneId);
+        AddSnapshotErrors(errors, salonName, barberName, serviceName, salonTimeZoneId, customerName);
 
         if (errors.Count != 0)
         {
@@ -216,6 +242,7 @@ public sealed class PushNotification : Entity
             SalonName = NormalizeSnapshot(salonName),
             BarberName = NormalizeSnapshot(barberName),
             ServiceName = NormalizeSnapshot(serviceName),
+            CustomerName = NormalizeSnapshot(customerName),
             SalonTimeZoneId = NormalizeSnapshot(salonTimeZoneId),
             Delivery = PushDelivery.Pending
         };
@@ -330,7 +357,8 @@ public sealed class PushNotification : Entity
         string? salonName,
         string? barberName,
         string? serviceName,
-        string? salonTimeZoneId)
+        string? salonTimeZoneId,
+        string? customerName)
     {
         if (NormalizeSnapshot(serviceName) is { Length: > Constants.MAX_NOTIFICATION_SERVICE_NAME_LENGTH })
         {
@@ -363,6 +391,17 @@ public sealed class PushNotification : Entity
                  {Constants.MAX_NOTIFICATION_BARBER_NAME_LENGTH} characters.
                  """,
                 nameof(barberName)));
+        }
+
+        if (NormalizeSnapshot(customerName) is { Length: > Constants.MAX_NOTIFICATION_CUSTOMER_NAME_LENGTH })
+        {
+            errors.Add(Error.Validation(
+                CUSTOMER_NAME_CODE,
+                $"""
+                 The customer name snapshot cannot be longer than
+                 {Constants.MAX_NOTIFICATION_CUSTOMER_NAME_LENGTH} characters.
+                 """,
+                nameof(customerName)));
         }
 
         if (NormalizeSnapshot(salonTimeZoneId) is { Length: > Constants.MAX_NOTIFICATION_TIME_ZONE_ID_LENGTH })

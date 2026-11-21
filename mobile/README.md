@@ -470,12 +470,16 @@ refresh drops the resolved row; the hub then refreshes in turn. The wording is t
 
 ## Push notifications
 
-The channel carries seven kinds of Android notification. The hour-before reminder
+The channel carries nine kinds of Android notification: seven for the customer and two for the
+master. The hour-before reminder
 (`booking.reminder`) announces a **confirmed** booking; the booking-creation event
 (`booking.created`) covers both "you booked" and "the barber booked you"; and five booking-change
 events announce a confirmation (`booking.confirmed`), a cancellation (`booking.cancelled`), a
 reschedule (`booking.rescheduled`), and a customer's own cancellation or reschedule made outside
-the app (`booking.cancelledByCustomer`, `booking.rescheduledByCustomer`). The customer's own
+the app (`booking.cancelledByCustomer`, `booking.rescheduledByCustomer`). The two master events go
+to the profile owner: `barber.booking.created` when a customer books on their own, and
+`barber.booking.cancelled` when a customer or an administrator cancels; a barber's own create or
+cancel sends none. The customer's own
 action produces a push only when it happened outside the app: a booking, cancel or reschedule from
 the app shows its result on the screen (a cancel or reschedule also queues an email), while the
 same action from the web pushes. All texts are composed
@@ -490,19 +494,25 @@ zone and the «сегодня»/«завтра» word. A typical reminder:
 
 The body says `завтра` when the visit is on the salon's next local date; an unknown IANA zone falls
 back to UTC, and missing snapshots simply drop out of the body (an empty salon gives the fallback
-title «Через час — визит к мастеру»). There is no customer name, phone or note in the message —
-only the salon, master, service and time. The data payload carries the event `type` and, when the
-server has it, the `bookingId`: the reminder sends
+title «Через час — визит к мастеру»). A customer message carries no customer name, phone or note —
+only the salon, master, service and time; the two master messages put the customer's name in the
+title (`Новая запись: Анна Петрова` / `Запись отменена: Анна Петрова`) and keep the salon in
+the body, and never a phone or a note. The data payload carries the event `type`
+and, when the server has it, the `bookingId`: the reminder sends
 `{"type":"booking.reminder","bookingId":"<guid>"}`, the creation event
 `{"type":"booking.created","bookingId":"<guid>"}`, and the status events use
 `booking.confirmed`, `booking.cancelled`, `booking.rescheduled`, `booking.cancelledByCustomer`
-and `booking.rescheduledByCustomer` with the same shape; the client
-never requires the id. All seven arrive on the Android channel `reminders` / «Напоминания», all
-reuse the «Присылать напоминания» toggle (switching it off unregisters the device, so none of them
-can be delivered), and all open the «Записи» tab on a tap. The creation and status events are
+and `booking.rescheduledByCustomer` with the same shape; the master events use
+`barber.booking.created` and `barber.booking.cancelled`, also with only `type` and `bookingId`, and
+the client never requires the id. All nine arrive on the Android channel `reminders` /
+«Напоминания», all reuse the «Присылать напоминания» toggle (switching it off unregisters the
+device, so none of them can be delivered); the seven customer events open the «Записи» tab on a
+tap, while either master event opens `barber-cabinet` — its default section, client bookings, not
+the «Записи» tab. The creation and status events are
 composed on the worker's next tick, so an event can trail the action by up to one tick, and a guest
-booking (no account) gets no push. The cancellation text deliberately carries no reason: the push
-message stays free of customer data, and the reason would need a new snapshot and its own privacy
+booking (no account) gets no customer push — though an administrator's cancellation of one still
+notifies the master. The cancellation text deliberately carries no reason: the customer message
+stays free of customer data, and the reason would need a new snapshot and its own privacy
 review.
 
 On the three write requests it makes for a booking — create (`POST api/bookings`), cancel

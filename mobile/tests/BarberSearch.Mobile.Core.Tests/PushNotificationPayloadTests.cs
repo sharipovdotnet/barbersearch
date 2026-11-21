@@ -1,3 +1,4 @@
+using BarberSearch.Mobile.Core.Navigation;
 using BarberSearch.Mobile.Core.Push;
 
 namespace BarberSearch.Mobile.Core.Tests;
@@ -173,6 +174,66 @@ public sealed class PushNotificationPayloadTests
         Assert.Equal(PushNotificationPayload.BookingRescheduledByCustomerType, payload.Type);
         Assert.Equal(BookingId, payload.BookingId);
         Assert.Equal("//bookings", payload.Route);
+    }
+
+    [Fact]
+    public void TryParse_BarberBookingCreatedExtras_OpensCabinet()
+    {
+        // Новая запись клиента: событие адресовано мастеру, поэтому ведёт в кабинет,
+        // чей раздел по умолчанию — записи клиентов.
+        var extras = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["type"] = PushNotificationPayload.BarberBookingCreatedType,
+            ["bookingId"] = BookingId.ToString("D"),
+        };
+
+        var parsed = PushNotificationPayload.TryParse(extras, out var payload);
+
+        Assert.True(parsed);
+        Assert.NotNull(payload);
+        Assert.Equal(PushNotificationPayload.BarberBookingCreatedType, payload.Type);
+        Assert.Equal(BookingId, payload.BookingId);
+        Assert.Equal(BarberCabinetRoutes.Cabinet, payload.Route);
+    }
+
+    [Fact]
+    public void TryParse_BarberBookingCancelledExtras_OpensCabinet()
+    {
+        var extras = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["type"] = PushNotificationPayload.BarberBookingCancelledType,
+            ["bookingId"] = BookingId.ToString("D"),
+        };
+
+        var parsed = PushNotificationPayload.TryParse(extras, out var payload);
+
+        Assert.True(parsed);
+        Assert.NotNull(payload);
+        Assert.Equal(PushNotificationPayload.BarberBookingCancelledType, payload.Type);
+        Assert.Equal(BookingId, payload.BookingId);
+        Assert.Equal(BarberCabinetRoutes.Cabinet, payload.Route);
+    }
+
+    [Fact]
+    public void Route_EveryCustomerType_OpensBookingsTab()
+    {
+        // Два новых события мастера не должны перетянуть на себя маршрут клиентских
+        // уведомлений: все семь по-прежнему открывают «Записи».
+        string[] customerTypes =
+        [
+            PushNotificationPayload.ReminderType,
+            PushNotificationPayload.BookingCreatedType,
+            PushNotificationPayload.BookingConfirmedType,
+            PushNotificationPayload.BookingCancelledType,
+            PushNotificationPayload.BookingRescheduledType,
+            PushNotificationPayload.BookingCancelledByCustomerType,
+            PushNotificationPayload.BookingRescheduledByCustomerType,
+        ];
+
+        Assert.All(customerTypes, type =>
+            Assert.Equal(
+                PushNotificationPayload.BookingsRoute,
+                new PushNotificationPayload(type, null).Route));
     }
 
     [Fact]

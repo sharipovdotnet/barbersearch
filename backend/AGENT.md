@@ -4,10 +4,10 @@
 > Code state: **15 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **629 domain + 1140 application + 456 infrastructure + 353 integration (2578 total)**;
-> the three unit projects are green locally (2026-11-18); the integration project compiles, but
-> its run was not possible in this environment (no Docker) — integration runs on PostgreSQL
-> (`BARBERSEARCH_TEST_POSTGRES`) or in CI.
+> Tests: **697 domain + 1196 application + 460 infrastructure** unit tests, all green locally
+> (2026-11-21); the integration project compiles, and the push-focused subset (30 tests) is green
+> on a local PostgreSQL 16 via `BARBERSEARCH_TEST_POSTGRES`; the full integration suite was not
+> run in this session.
 
 ---
 
@@ -669,9 +669,9 @@ EmailOutboxMessage (Entity)  — строка transactional outbox писем (�
                                инфраструктурная запись, бизнес-инвариантов у неё нет
 PushDeviceToken (Entity)     — токен устройства клиента (§20); не агрегат: адрес доставки,
                                уникален, внешний ключ на users с ON DELETE CASCADE
-PushNotification (Entity)    — строка очереди push-уведомлений клиенту (§20); не агрегат:
+PushNotification (Entity)    — строка очереди push-уведомлений о брони (§20); не агрегат:
                                снимок визита + состояние доставки, уникальна по тройке
-                               (booking_id, kind, start_at)
+                               (booking_id, kind, start_at); получатель — клиент или мастер
 ```
 
 AR = `AggregateRoot`, which derives from `Entity`.
@@ -742,7 +742,7 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `BarberService` | `Price >= 0`, `DurationMinutes > 0` |
 | `EmailOutboxMessage` | `Create`: непустые `DeduplicationKey` (≤128) и тела, получатель — валидный адрес (≤254), тема 1..256, `now` не `default`, `NextAttemptAt = now`; `IsReady(now)` — не обработана и `NextAttemptAt <= now`; `RecordFailure` увеличивает `Attempts`, пишет код ошибки (≤200) и не раньше «сейчас», на `MaxAttempts`-й неудаче ставит `FailedAt`; `MarkSent` идемпотентен и сбрасывает `LastError` (§19) |
 | `PushDeviceToken` | `Register`: непустой `UserId`, токен после `Trim()` 1..512 (`pushDeviceToken.token.invalid` / `.token.tooLong`), `Platform` — определённое значение `PushPlatform` (`pushDeviceToken.platform.unknown`), `now` не `default`; `Touch` не откатывает `LastSeenAt` назад и идемпотентен; `TransferTo` требует непустые user/now. Уникальность токена и предел пяти устройств на пользователя держат БД/репозиторий, не агрегат (§20.3) |
-| `PushNotification` | `Create`: непустые `UserId`/`BookingId`, не `default` `StartAt`; снимки после `Trim()` — салон/услуга ≤200, мастер ≤120, IANA-пояс ≤100 (`pushNotification.create.*`); новое напоминание всегда `Pending`; `MarkSent`/`MarkSkipped`/`MarkFailed` — только из `Pending`, иначе `409`; `MarkFailed` увеличивает `DeliveryAttempts`, на пределе (по умолчанию 5, жёсткий максимум `Constants.MAX_NOTIFICATION_DELIVERY_ATTEMPTS`) ставит `Failed`, иначе — `NextAttemptAt` аргументом; `LastError` — код первой ошибки (≤500), не текст сервиса и не ПДн (§20) |
+| `PushNotification` | `Create`: непустые `UserId`/`BookingId`, не `default` `StartAt`; снимки после `Trim()` — салон/услуга ≤200, мастер ≤120, IANA-пояс ≤100, имя клиента ≤200 (`Constants.MAX_NOTIFICATION_CUSTOMER_NAME_LENGTH`; пустое — `null`) (`pushNotification.create.*`); новое напоминание всегда `Pending`; `MarkSent`/`MarkSkipped`/`MarkFailed` — только из `Pending`, иначе `409`; `MarkFailed` увеличивает `DeliveryAttempts`, на пределе (по умолчанию 5, жёсткий максимум `Constants.MAX_NOTIFICATION_DELIVERY_ATTEMPTS`) ставит `Failed`, иначе — `NextAttemptAt` аргументом; `LastError` — код первой ошибки (≤500), не текст сервиса и не ПДн (§20) |
 
 **Портфолио: внешняя ссылка и загруженный файл (2026-11-11, issue-84).** У фотографии два
 доменных пути создания, и они не взаимозаменяемы. `AddPhoto` по-прежнему принимает только
@@ -891,11 +891,15 @@ All persisted enums have **explicit numeric values** (§10.10).
   Числовые значения закреплены check-ограничением `ck_push_notifications_delivery`.
 - `PushNotificationKind`: `Reminder=1, BookingCreatedByCustomer=2, BookingCreatedByBarber=3,
   BookingConfirmed=4, BookingCancelledByBarber=5, BookingRescheduledByBarber=6,
-  BookingCancelledByCustomer=7, BookingRescheduledByCustomer=8` — вид push-уведомления клиенту
-  (§20). Вместе с `booking_id` и `start_at` входит в уникальный индекс
+  BookingCancelledByCustomer=7, BookingRescheduledByCustomer=8, BarberBookingCreated=9,
+  BarberBookingCancelled=10` — вид push-уведомления о брони: 1–8 адресованы клиенту, 9/10 —
+  мастеру, владельцу профиля (§20). Вместе с `booking_id` и `start_at` входит в уникальный индекс
   `ux_push_notifications_booking_id`, поэтому напоминание, событие создания и события статуса
   одной брони сосуществуют, а повторный перенос на новое время создаёт новую строку. Числа
-  закреплены `ck_push_notifications_kind` (`kind IN (1..8)`).
+  закреплены `ck_push_notifications_kind` (`kind IN (1..10)`); имя клиента
+  (`PushNotification.CustomerName`) заполняется только у 9/10 — предел
+  `Constants.MAX_NOTIFICATION_CUSTOMER_NAME_LENGTH` (200), иначе
+  `pushNotification.create.customerName`.
 - `PushPlatform`: `Android=1, Ios=2` — платформа устройства; в этом срезе обслуживается
   только `Android` (FCM HTTP v1), `Ios` зарезервирован под APNs и не требует миграции
   схемы. JSON принимает только имена (`"Android"`), целые значения запрещены
@@ -5094,25 +5098,34 @@ push-события статуса, поэтому письмо и уведом�
 > записи: сотрудником салона — «Ваша запись подтверждена / отменена / перенесена»
 > (`booking.confirmed` / `booking.cancelled` / `booking.rescheduled`), самим клиентом не в
 > приложении — «Вы отменили / перенесли запись» (`booking.cancelledByCustomer` /
-> `booking.rescheduledByCustomer`). Молчание зависит от поверхности: своё действие в приложении
+> `booking.rescheduledByCustomer`). Мастер — владелец профиля (`barber_profiles.user_id`) —
+> получает вторую пару событий: «клиент записался сам» (`barber.booking.created`) и «клиент или
+> администратор отменил запись» (`barber.booking.cancelled`); собственные создание и отмену он
+> не получает. Молчание зависит от поверхности: своё действие в приложении
 > push не создаёт — экран уже подтвердил результат, — а с веба и других поверхностей создаёт
-> (§20.11). Текст собирает сервер по-русски; в сообщении только салон, мастер,
-> услуга и время — персональных данных клиента нет (152-ФЗ). События ставятся в очередь в том
-> же запросе, что и изменение брони, и уходят на следующем тике; гостю
-> (`Booking.UserId == null`) push не ставится. Воркер, две таблицы и транспорт FCM HTTP v1 —
-> проект `BarberSearch.Infrastructure.Push` (13-й в решении). В бою канал **выключен** до
+> (§20.11). Текст собирает сервер по-русски; в клиентском сообщении только салон, мастер,
+> услуга и время, а в событии мастеру к ним добавлено имя клиента — и ничего больше: ни
+> телефона, ни заметки (152-ФЗ). События ставятся в очередь в том же запросе, что и изменение
+> брони, и уходят на следующем тике; гостю (`Booking.UserId == null`) клиентский push не
+> ставится; гостевой визит вносит сам барбер, поэтому события создания мастеру у него нет, а
+> отмена администратором такой брони мастеру приходит — получатель здесь владелец профиля, а
+> не клиент. Воркер, две таблицы и транспорт FCM HTTP v1 — проект
+> `BarberSearch.Infrastructure.Push` (13-й в решении). В бою канал **выключен** до
 > поправки Политики конфиденциальности (§20.9); в Development включён без ключей и работает
 > как режим разработки — текст пишется в журнал, строка становится `Skipped`.
 
 ### 20.1 Зачем
 
 Список «Записи» показывает визит, но телефон сам о нём не напоминает, а неявка стоит барберу
-слота. Канал решает три задачи: за час до подтверждённого визита прислать одно системное
+слота. Канал решает четыре задачи: за час до подтверждённого визита прислать одно системное
 уведомление с салоном, мастером, услугой и временем; сразу после создания брони —
 подтвердить запись отдельным текстом для самозаписи клиента, сделанной не в приложении, и
 для записи, которую внёс барбер; и сообщить клиенту, когда запись меняет салон —
 подтверждает, отменяет или переносит её, — а также когда он сам отменил или перенёс её с
-другой поверхности (§20.11). Это по-прежнему **только доставка**: у клиента нет
+другой поверхности (§20.11). Четвёртая — сторона мастера: увидеть новую запись клиента и её
+отмену сразу, не открывая кабинет; клиент записывается сам, а снять его бронь может и
+администратор, поэтому без push мастер узнаёт об отмене только при следующем взгляде в
+«Записи». Это по-прежнему **только доставка**: у клиента нет
 инбокса, статуса прочтения и истории уведомлений, строка живёт до доставки и удаляется
 ретенцией. В срез не входят iOS/APNs (`PushPlatform.Ios` зарезервирован), deep link на
 конкретную запись, маркетинговые рассылки и уведомления о модерации.
@@ -5152,6 +5165,24 @@ scoped и держат `ApplicationDbContext`. Уборка запускаетс
 предупреждением с идентификатором брони и кодами ошибок и не меняет результат команды
 (§20.11).
 
+**События мастеру** ставит отдельный уведомитель `IBarberBookingPushNotifier`
+(`Application/Push/BarberBooking/`), и вызывают его те же два обработчика. `CreateBookingHandler`
+зовёт `BarberBookingPush.NotifyCreatedAsync` внутри транзакции `IUnitOfWork`, сразу после
+`AddAsync` и клиентского уведомителя, поэтому строка мастера и бронь коммитятся вместе;
+`CancelBookingHandler` — `BarberBookingPush.NotifyCancelledAsync(..., cancelledByBarber:
+isBarberCancellation, ...)` после сохранения перехода, как и событие статуса. Общий путь —
+тот же `BookingPushEnqueuer`, перегрузка с именем клиента, поэтому гейт `Push:Enabled`, снимок
+каталога и дедуплицирующая вставка у клиентских и мастерских событий одни и те же. Гейты
+здесь по автору, а не по поверхности: создание не ставится, если запись внёс сам барбер
+(`createdByBarber` — заданный `CustomerId` или гость) или если бронь принадлежит самому
+владельцу профиля, отмена — если барбер отменил свою
+запись (`isBarberCancellation`, у администратора всегда `false`); отмена администратором
+ставится всегда. Получатель — владелец профиля (`barber_profiles.user_id`), а не
+`bookings.user_id`, поэтому отмена гостевой брони администратором тоже уходит мастеру (само
+создание гостевого визита вносит барбер, и события создания у него нет), а клиент push'а о
+своей отмене по-прежнему не получает. Сбой уведомителя логируется предупреждением с
+идентификатором брони и кодами ошибок и не меняет результат команды.
+
 1. **Создание напоминаний** — `CreateDuePushNotificationsHandler`. Окно: `now < start_at <= now + lead`, где
    `lead` — `Push:ReminderLeadMinutes` (60). Выбираются только `Confirmed`-брони с
    `user_id IS NOT NULL` (гостю push отправить некуда) и `created_at <= start_at − lead`.
@@ -5179,7 +5210,10 @@ scoped и держат `ApplicationDbContext`. Уборка запускаетс
    `window closed`; `Pending`-самозапись клиента — ожидаемое состояние и доставляется.
    События статуса перепроверяются по своему поводу: подтверждение — только пока бронь
    `Confirmed`, отмена — только пока `Cancelled`, перенос — только пока визит активен; плюс
-   общие «бронь исчезла», «перенесена» и «окно закрыто» (§20.11).
+   общие «бронь исчезла», «перенесена» и «окно закрыто» (§20.11). События мастеру идут по
+   правилам своей стороны: создание — пока бронь не `Cancelled` (`Pending`-самозапись
+   доставляется, как у клиентского создания), отмена — только пока `Cancelled`; общие
+   «бронь исчезла», «перенесена» и «окно закрыто» действуют и здесь.
    Дальше: push не настроен — dev mode либо `Pending` (см. 20.5); нет устройств —
    `no registered device`. В доставку идут только
    токены `PushPlatform.Android`: `Ios`-строки хранятся для будущего APNs-слайса, через FCM не
@@ -5200,21 +5234,29 @@ scoped и держат `ApplicationDbContext`. Уборка запускаетс
    Это по одному неограниченному `ExecuteDelete` на таблицу, как уведомления барбера и
    `email_outbox`: отдельной пачки или курсора у ретенции нет.
 
-### 20.3 Схема (миграции `20261115154114_AddPushNotifications`, `20261117173619_AddPushNotificationKind`, `20261117195211_AddPushBookingStatusEvents`, `20261117211158_AddCustomerBookingPushEvents`)
+### 20.3 Схема (миграции `20261115154114_AddPushNotifications`, `20261117173619_AddPushNotificationKind`, `20261117195211_AddPushBookingStatusEvents`, `20261117211158_AddCustomerBookingPushEvents`, `20261121073610_AddBarberBookingPushNotifications`)
 
 | Таблица | Колонки | Ограничения и индексы |
 |---|---|---|
 | `push_device_tokens` | `id` uuid PK (UUIDv7 из домена), `user_id` uuid NOT NULL, `token` varchar(512) NOT NULL, `platform` smallint NOT NULL, `last_seen_at` timestamptz, `created_at`/`updated_at` timestamptz | FK `fk_push_device_tokens_users_user_id` → `users(id)` `ON DELETE CASCADE`; `ck_push_device_tokens_platform` (`platform IN (1, 2)`); `ck_push_device_tokens_token_length` (`char_length(token) BETWEEN 1 AND 512`); `ux_push_device_tokens_token` (unique); `ix_push_device_tokens_user_id` |
-| `push_notifications` | `id` uuid PK, `user_id` uuid NOT NULL, `kind` smallint NOT NULL, `booking_id` uuid NOT NULL, `start_at` timestamptz NOT NULL, `salon_name` varchar(200) NULL, `barber_name` varchar(120) NULL, `service_name` varchar(200) NULL, `salon_time_zone_id` varchar(100) NULL, `delivery` smallint NOT NULL, `delivery_attempts` int NOT NULL, `next_attempt_at` timestamptz NULL, `last_error` varchar(500) NULL, `created_at`/`updated_at` timestamptz | FK `fk_push_notifications_users_user_id` → `users(id)` `ON DELETE CASCADE`; `ck_push_notifications_kind` (`kind IN (1, 2, 3, 4, 5, 6, 7, 8)`); `ck_push_notifications_delivery` (`delivery IN (0,1,2,3)`); `ck_push_notifications_delivery_attempts` (`delivery_attempts BETWEEN 0 AND 5`); `ux_push_notifications_booking_id` (unique по `(booking_id, kind, start_at)`); `ix_push_notifications_user_id`; `ix_push_notifications_dispatch` (`(created_at) WHERE delivery = 0 AND delivery_attempts < 5`) |
+| `push_notifications` | `id` uuid PK, `user_id` uuid NOT NULL, `kind` smallint NOT NULL, `booking_id` uuid NOT NULL, `start_at` timestamptz NOT NULL, `salon_name` varchar(200) NULL, `barber_name` varchar(120) NULL, `service_name` varchar(200) NULL, `customer_name` varchar(200) NULL, `salon_time_zone_id` varchar(100) NULL, `delivery` smallint NOT NULL, `delivery_attempts` int NOT NULL, `next_attempt_at` timestamptz NULL, `last_error` varchar(500) NULL, `created_at`/`updated_at` timestamptz | FK `fk_push_notifications_users_user_id` → `users(id)` `ON DELETE CASCADE`; `ck_push_notifications_kind` (`kind IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)`); `ck_push_notifications_delivery` (`delivery IN (0,1,2,3)`); `ck_push_notifications_delivery_attempts` (`delivery_attempts BETWEEN 0 AND 5`); `ux_push_notifications_booking_id` (unique по `(booking_id, kind, start_at)`); `ix_push_notifications_user_id`; `ix_push_notifications_dispatch` (`(created_at) WHERE delivery = 0 AND delivery_attempts < 5`) |
 
 `kind` — `PushNotificationKind` (`1` — `Reminder`, `2` — `BookingCreatedByCustomer`,
 `3` — `BookingCreatedByBarber`, `4` — `BookingConfirmed`, `5` — `BookingCancelledByBarber`,
 `6` — `BookingRescheduledByBarber`, `7` — `BookingCancelledByCustomer`,
-`8` — `BookingRescheduledByCustomer`). Миграция `AddPushNotificationKind` добавляет колонку с
+`8` — `BookingRescheduledByCustomer`, `9` — `BarberBookingCreated`, `10` —
+`BarberBookingCancelled`). Виды 1–8 адресованы клиенту, 9 и 10 — мастеру. Миграция
+`AddPushNotificationKind` добавляет колонку с
 `DEFAULT 1`, чтобы существующие напоминания получили вид `Reminder`, и тут же снимает
 `DEFAULT`: дальше значение приходит из домена явно. Миграция `AddCustomerBookingPushEvents`
 только пересоздаёт `ck_push_notifications_kind` до `kind IN (1, 2, 3, 4, 5, 6, 7, 8)`:
-уникальный индекс `(booking_id, kind, start_at)` и данные она не меняет. Виды 7 и 8 —
+уникальный индекс `(booking_id, kind, start_at)` и данные она не меняет. Миграция
+`AddBarberBookingPushNotifications` добавляет nullable `customer_name varchar(200)` (предел —
+`Constants.MAX_NOTIFICATION_CUSTOMER_NAME_LENGTH` = 200, длиннее — код
+`pushNotification.create.customerName`; уведомитель обрезает имя до предела, поэтому ошибка
+домена остаётся последней защитой) и пересоздаёт тот же check до
+`kind IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)`; индекс и данные она не меняет. Имя клиента
+заполняют только виды 9 и 10 — у клиентских событий `customer_name` всегда `NULL`. Виды 7 и 8 —
 собственные отмена и перенос клиента **не в приложении** (§20.11); в приложении вместо push
 уходит письмо (§19.11). Уникальность тройки
 `(booking_id, kind, start_at)` позволяет напоминанию, событию создания и событиям статуса
@@ -5390,14 +5432,28 @@ valid». Такой ответ —
 причину в карточке записи. Напоминание, оба события создания и прежние три события статуса
 остаются байт в байт прежними.
 
+События мастеру — отдельная семья из двух заголовков и одного тела. Заголовок:
+`Новая запись: Анна Петрова` для создания и `Запись отменена: Анна Петрова` для отмены;
+без имени клиента — `Новая запись` / `Запись отменена`. Имя — снимок: у зарегистрированного
+клиента это `FirstName` + `LastName` аккаунта, у гостя — гостевые поля брони; телефон и
+заметка не читаются вовсе (20.9). Тело общее у обоих и собирается `ComposeBarberBody`
+(`PushMessages`): `Стрижка · сегодня в 14:30 · салон «Барбершоп»` — сначала услуга, потом день
+и время, салон последним, отсутствующие части выпадают по отдельности. Порядок отличается от
+клиентского тела намеренно: получатель знает и мастера, и салон, ему нужны клиент, услуга и
+время, поэтому имени барбера в теле нет. `{day}` — `сегодня`/`завтра` по локальной дате салона,
+иначе дата в родительном падеже, время — в поясе салона с UTC-фолбэком: событие приходит сразу,
+а запись может быть на любой день горизонта. Типы в `data` — `barber.booking.created` и
+`barber.booking.cancelled`; `data` по-прежнему несёт только `type` и `bookingId`. Заголовки и
+тело проверяются на точное совпадение, как и клиентские.
+
 ### 20.8 Файлы
 
 | Слой | Где |
 |---|---|
 | Domain | `Domain/Push/PushPlatform.cs`, `PushDelivery.cs`, `PushNotificationKind.cs`, `PushDeviceToken.cs`, `PushNotification.cs`; константы длины — `Domain/Constants.cs` |
-| Application | `Push/PushOptions.cs`, `PushMessage.cs`, `PushMessages.cs`, `PushReminderBooking.cs`, `PushBookingSnapshot.cs`, `PushBookingEnqueuer.cs`, `ServiceAccountKey.cs`, порты `IPushSender`/`IPushNotificationRepository`/`IPushDeviceTokenRepository`/`IPushSourceRepository`; `Push/BookingCreated/IBookingCreatedPushNotifier.cs`, `Push/BookingCreated/BookingCreatedPushNotifier.cs`; `Push/BookingStatus/BookingStatusChange.cs`, `IBookingStatusPushNotifier.cs`, `BookingStatusPushNotifier.cs`, `BookingStatusPush.cs`; `Abstractions/IClientSurface.cs` — гейт поверхности; `Bookings/BookingChangeMessage.cs`, `Bookings/BookingChangeEmail/*` — письмо-пара приложения (19.11); `Push/RegisterPushDevice/*`, `Push/UnregisterPushDevice/*`, `Push/CreateDuePushNotifications/*`, `Push/DeliverPendingPushNotifications/*`, `Push/CleanupPushNotifications/*` |
+| Application | `Push/PushOptions.cs`, `PushMessage.cs`, `PushMessages.cs`, `PushReminderBooking.cs`, `PushBookingSnapshot.cs`, `PushBookingEnqueuer.cs`, `ServiceAccountKey.cs`, порты `IPushSender`/`IPushNotificationRepository`/`IPushDeviceTokenRepository`/`IPushSourceRepository`; `Push/BookingCreated/IBookingCreatedPushNotifier.cs`, `Push/BookingCreated/BookingCreatedPushNotifier.cs`; `Push/BookingStatus/BookingStatusChange.cs`, `IBookingStatusPushNotifier.cs`, `BookingStatusPushNotifier.cs`, `BookingStatusPush.cs`; `Push/BarberBooking/IBarberBookingPushNotifier.cs`, `BarberBookingPushNotifier.cs`, `BarberBookingPush.cs` — события мастеру; `Abstractions/IClientSurface.cs` — гейт поверхности; `Bookings/BookingChangeMessage.cs`, `Bookings/BookingChangeEmail/*` — письмо-пара приложения (19.11); `Push/RegisterPushDevice/*`, `Push/UnregisterPushDevice/*`, `Push/CreateDuePushNotifications/*`, `Push/DeliverPendingPushNotifications/*`, `Push/CleanupPushNotifications/*` |
 | Contracts | `Contracts/Push/RegisterPushDevice/RegisterPushDeviceRequest.cs`, `Contracts/Push/UnregisterPushDevice/UnregisterPushDeviceRequest.cs`; коды — `Contracts/Common/ApiErrorCodes.cs` (`Push.Send`/`Unavailable`/`TokenUnregistered`, префиксы `pushNotification.*`) |
-| Infrastructure.Postgresql | `Configurations/PushDeviceTokenConfiguration.cs`, `Configurations/PushNotificationConfiguration.cs`; `Repositories/PushDeviceTokenRepository.cs`, `PushNotificationRepository.cs`, `PushSourceRepository.cs`; `Migrations/20261115154114_AddPushNotifications*`, `Migrations/20261117173619_AddPushNotificationKind*`, `Migrations/20261117195211_AddPushBookingStatusEvents*`, `Migrations/20261117211158_AddCustomerBookingPushEvents*`; DbSet-ы в `ApplicationDbContext` |
+| Infrastructure.Postgresql | `Configurations/PushDeviceTokenConfiguration.cs`, `Configurations/PushNotificationConfiguration.cs`; `Repositories/PushDeviceTokenRepository.cs`, `PushNotificationRepository.cs`, `PushSourceRepository.cs`; `Migrations/20261115154114_AddPushNotifications*`, `Migrations/20261117173619_AddPushNotificationKind*`, `Migrations/20261117195211_AddPushBookingStatusEvents*`, `Migrations/20261117211158_AddCustomerBookingPushEvents*`, `Migrations/20261121073610_AddBarberBookingPushNotifications*`; DbSet-ы в `ApplicationDbContext` |
 | Infrastructure.Push | `FcmPushSender.cs`, `FcmAccessTokenProvider.cs`, `PushSenderExtensions.cs`; проект ссылается на `Application`, `Contracts`, `Shared` |
 | Web | `Controllers/PushDevicesController.cs`, `Push/PushDispatchService.cs`, `Push/PushTickResult.cs`, `Auth/HttpContextClientSurface.cs` (заголовок `X-Client-Surface`), `Program.cs` (`AddPushSender` + воркер), `Deployment/StartupSettings.cs` (диапазоны), `appsettings*.json` |
 
@@ -5414,17 +5470,25 @@ valid». Такой ответ —
 `mobile/.../Core/Legal/PrivacyPolicy.cs`) и синхронно
 `frontend/src/i18n/messages/en/privacy.json`, иначе тесты согласия и `auth.register.consentVersion`
 разойдутся. Режим разработки ничего не нарушает: он не делает HTTP-запросов, не логирует токен и
-помечает строку `Skipped`. В самом push нет ПДн клиента — ни в напоминании, ни в событиях
+помечает строку `Skipped`. В клиентском push нет ПДн клиента — ни в напоминании, ни в событиях
 брони (создание и смена статуса): только снимок салона, мастера, услуги и времени (D3),
-поэтому и текст, и `data` физически не могут унести имя, телефон или заметку.
+поэтому и текст, и `data` клиентского события физически не могут унести имя, телефон или
+заметку. События мастеру — исключение по адресату, а не по каналу: без имени клиента мастер не
+понимает, кто придёт, а это имя он и так видит в «Записях». Поэтому в заголовке видов 9 и 10
+есть `FirstName` + `LastName` клиента или гостевые поля брони; телефона и заметки там нет, а
+`data` остаётся прежним — только `type` и `bookingId`. На устройство клиента по-прежнему не
+уходит ничего о нём самом, на устройство мастера — имя его клиента. Позиция production от
+этого не меняется: `Push:Enabled=false` остаётся до поправки Политики выше, включать канал
+раньше неё нельзя.
 
 ### 20.10 Тесты
 
-- **Domain (629):** `PushDeviceTokenTests` — валидация токена/платформы/времени, `Touch` без
+- **Domain (697):** `PushDeviceTokenTests` — валидация токена/платформы/времени, `Touch` без
   отката назад, `TransferTo`; `PushNotificationTests` — обязательные поля, пределы снимков, вид
-  уведомления (`1..8`, включая `4`/`5`/`6`/`7`/`8`) и отказ неизвестному виду, переходы
+  уведомления (`1..10`, включая `4`/`5`/`6`/`7`/`8`/`9`/`10`), предел `customer_name` (пустое
+  имя хранится как `NULL`) и отказ неизвестному виду, переходы
   `MarkSent`/`MarkSkipped`/`MarkFailed`, обрезка `last_error`, бюджет попыток.
-- **Application (1163):** `PushMessageTests` — точные заголовок/тело напоминания, обоих событий
+- **Application (1196):** `PushMessageTests` — точные заголовок/тело напоминания, обоих событий
   создания и всех пяти событий статуса (с салоном и без, `сегодня`/`завтра`, дата в родительном
   падеже по поясу салона, UTC для неизвестного пояса, деградация без мастера/услуги, типы
   `booking.confirmed`/`booking.cancelled`/`booking.rescheduled`/`booking.cancelledByCustomer`/
@@ -5468,10 +5532,13 @@ valid». Такой ответ —
   Development; `PushCleanupTests` — обе границы ретенции и значения по умолчанию. Фейки —
   `Fakes/FakePush*Repository.cs`, `FakePushSender.cs`, `FakeBookingCreatedPushNotifier.cs`,
   `FakeBookingStatusPushNotifier.cs`.
-- **Infrastructure (456):** `PushModelTests` — таблицы, колонка `kind`, check-ограничения
-  (`kind IN (1, 2, 3, 4, 5, 6, 7, 8)`), составной уникальный индекс `(booking_id, kind, start_at)`
+- **Infrastructure (460):** `PushModelTests` — таблицы, колонки `kind` и `customer_name`
+  (nullable, предел 200), check-ограничения
+  (`kind IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)`), составной уникальный индекс
+  `(booking_id, kind, start_at)`
   и отсутствие старого индекса по одному `booking_id`, наличие миграций
-  `AddPushBookingStatusEvents` и `AddCustomerBookingPushEvents`, каскадный FK на `users` у обеих
+  `AddPushBookingStatusEvents`, `AddCustomerBookingPushEvents` и
+  `AddBarberBookingPushNotifications`, каскадный FK на `users` у обеих
   таблиц и отсутствие FK на
   бронь, фильтр dispatch-индекса; `PushOptionsTests` — `IsConfigured`, разбор ключа, ленивое
   чтение; `PushStartupSettingsTests` — диапазоны секции `Push` и
@@ -5481,7 +5548,7 @@ valid». Такой ответ —
   проекта как `push.unavailable`, `400` кривого тела как `push.send`, `401/403` с обновлением
   access-токена и одним повтором, кэш OAuth-токена, отсутствие секретов в ошибках
   (`RecordingLogger`).
-- **Integration (360; 29 push, 7 новых):** `PushDeviceApiTests` — аноним `401`, идемпотентная
+- **Integration (push-подмножество 30/30; полный прогон не выполнялся):** `PushDeviceApiTests` — аноним `401`, идемпотентная
   регистрация и снятие, передача токена другому аккаунту, чужой `unregister` без эффекта,
   пустой токен `400 pushDeviceToken.token.invalid`, `GREATEST` для старых часов и параллельные
   регистрации, не превышающие предел устройств; `PushReminderTests` — создание и доставка в
@@ -5508,14 +5575,38 @@ valid». Такой ответ —
   подтверждение гостевой брони не создаёт строк. `TestApp` включает `Push__Enabled=true`,
   ставит интервал 3600 с и позволяет вызвать `RunPushTickAsync`; `CapturingPushSender`
   подменяет FCM.
-- Сборка решения — 0 warnings / 0 errors, `has-pending-model-changes` чисто; SQL миграций
-  `AddPushBookingStatusEvents` и `AddCustomerBookingPushEvents` проверены через
-  `dotnet ef migrations script` (первая — только пересоздание уникального индекса и
-  check-ограничения, вторая — только check-ограничение вида до `1..8`; без потери данных).
-  Накат на живую PostgreSQL в этой
-  сессии не выполнялся — Docker недоступен; интеграционные тесты собраны, но не прогнаны.
-  Реальная доставка FCM не выполнялась: проекта Firebase нет, поэтому проверены транспорт
-  (HTTP-фейк) и весь путь create → deliver → cleanup на реальной БД.
+- **События мастеру** — те же наборы расширены, поэтому счётчики в шапках выше — на момент
+  предыдущего среза: домен — числа `9`/`10` и предел `customer_name` (пустое имя — `NULL`,
+  длиннее 200 — `pushNotification.create.customerName`); Application —
+  `PushBarberBookingNotifierTests` (гейты автора: создание барбером — в том числе гостевой
+  визит — не ставится, бронь самого владельца профиля — тоже, отмена барбером не ставится,
+  отмена администратором ставится; получатель —
+  владелец профиля, а не `bookings.user_id`; имя из аккаунта и из гостевых полей; сбой поиска
+  владельца; дедупликация; disabled), `PushMessageTests` (`BarberCreated_*` и
+  `BarberCancelled_*`: точные `Новая запись[: имя]` / `Запись отменена[: имя]`, тело
+  `услуга · сегодня в 14:30 · салон «…»`, `сегодня`/`завтра`/родительный падеж, UTC для
+  неизвестного пояса, деградация без услуги и салона), `PushDeliveryTests`
+  (`Deliver_ForBarberCreated*` / `Deliver_ForBarberCancellation*` — доставка `Pending`,
+  удаление, повторная отмена, перенос, закрытое окно; метки `barber creation event` /
+  `barber cancellation event` в режиме разработки); Infrastructure — `customer_name` в модели
+  и check до `1..10`, наличие миграции `AddBarberBookingPushNotifications`; Mobile — три
+  случая маршрута (оба мастерских типа открывают `barber-cabinet`, все семь клиентских
+  по-прежнему `//bookings`). Интеграционные строки —
+  `CreateBooking_ThroughTheCustomerApi_DeliversTheMasterEvent`,
+  `CreateFromApp_CreatesNoCustomerPushRowButNotifiesTheBarber` и
+  `CancelFromApp_CreatesNoCustomerPushRowButNotifiesTheBarber`; прежние сценарии создания и
+  отмены дополнительно проверяют вторую строку — вид 9/10 и снимок `CustomerName` («Integration
+  Test» в тестовых данных), а гейт поверхности у мастера отсутствует: создание из приложения
+  клиентской строки не даёт, а событие мастеру даёт.
+- Сборка решения — 0 warnings / 0 errors; `has-pending-model-changes` чисто. SQL новой миграции
+  `AddBarberBookingPushNotifications` проверен через `dotnet ef migrations script`:
+  `DROP CONSTRAINT ck_push_notifications_kind`, `ADD customer_name varchar(200)`,
+  `ADD CONSTRAINT … CHECK (kind IN (1..10))`, данные не трогаются.
+  Юнит-наборы зелёные: Domain 697/697, Application 1196/1196, Infrastructure 460/460.
+  Push-подмножество интеграционных тестов прогнано на локальной PostgreSQL 16 (не Docker):
+  30/30, включая новые события мастеру; полный интеграционный набор в этой сессии не
+  запускался. Реальная доставка FCM не выполнялась — проекта Firebase нет, поэтому проверены
+  транспорт (HTTP-фейк) и путь create → deliver → cleanup на реальной БД.
 
 ### 20.11 События статуса записи (added 2026-11-18)
 
@@ -5539,8 +5630,9 @@ valid». Такой ответ —
 инструмента без заголовка создают событие — человек был не в приложении. Отсутствие заголовка
 и неизвестное значение — «другая поверхность» (fail-safe): старый клиент и curl продолжают
 уведомлять, а `400` за заголовок нет, потому что это диагностический признак, а не контракт.
-Мобильного приложения для барбера нет, поэтому уведомлять исполнителя тоже некуда — это канал
-только для клиента. Гостевая
+Мобильное приложение одно для обеих ролей, но своих подтверждений, отмен и переносов
+исполнитель не получает — он их и совершил; событие мастеру есть только у создания и отмены
+записи (§20.2). Гостевая
 бронь (`Booking.UserId == null`) получателя не имеет; уведомитель возвращает успешный no-op,
 а не ошибку. Подтверждение всегда делает барбер или администратор, поэтому у него отдельной
 проверки авторства нет — клиент подтвердить запись не может. Перенос **на то же время** —

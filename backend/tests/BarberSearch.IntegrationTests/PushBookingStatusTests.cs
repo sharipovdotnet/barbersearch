@@ -254,9 +254,17 @@ public sealed class PushBookingStatusTests
         Assert.Equal(booking.Id, row.BookingId);
         Assert.Equal(customer.Id, row.UserId);
 
+        // Мастер получает вторую сторону отмены: получатель — владелец профиля.
+        var barberRow = Assert.Single(await push.GetNotificationsAsync(barber.User.Id));
+        Assert.Equal(PushNotificationKind.BarberBookingCancelled, barberRow.Kind);
+        Assert.Equal(booking.Id, barberRow.BookingId);
+        Assert.Equal("Integration Test", barberRow.CustomerName);
+
         var result = await app.RunPushTickAsync();
 
+        // Клиентское событие уходит на устройство, событие мастеру ждёт устройства барбера.
         Assert.Equal(1, result.Sent);
+        Assert.Equal(1, result.Skipped);
 
         var captured = Assert.Single(sender.Messages);
         Assert.Equal(

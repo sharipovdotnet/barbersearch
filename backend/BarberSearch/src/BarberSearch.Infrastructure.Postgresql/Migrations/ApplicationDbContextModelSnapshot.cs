@@ -1215,6 +1215,11 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("CustomerName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("customer_name");
+
                     b.Property<short>("Delivery")
                         .HasColumnType("smallint")
                         .HasColumnName("delivery");
@@ -1283,7 +1288,7 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
                             t.HasCheckConstraint("ck_push_notifications_delivery_attempts", "delivery_attempts BETWEEN 0 AND 5");
 
-                            t.HasCheckConstraint("ck_push_notifications_kind", "kind IN (1, 2, 3, 4, 5, 6, 7, 8)");
+                            t.HasCheckConstraint("ck_push_notifications_kind", "kind IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)");
                         });
                 });
 
