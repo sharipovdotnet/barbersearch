@@ -26,6 +26,8 @@ public sealed class BarberBookingCreateViewModelTests
     private const string OverlapText = "Это время только что заняли. Выберите другое.";
     private const string GuestNameRequiredText = "Укажите имя гостя.";
     private const string GuestPhoneRequiredText = "Укажите телефон гостя.";
+    private const string GuestPhoneInvalidText =
+        "Похоже, в номере опечатка. Нужен российский мобильный номер, например +7 900 000-00-00.";
 
     private static readonly Guid CreatedBookingId =
         Guid.Parse("9e100000-0000-4000-8000-0000000000e1");
@@ -224,6 +226,61 @@ public sealed class BarberBookingCreateViewModelTests
         Assert.Equal(BarberCabinetFixtures.SalonId, request.SalonId);
         Assert.Equal(viewModel.SelectedSlot!.StartAt, request.StartAt);
         Assert.Equal(viewModel.SelectedSlot.EndAt, request.EndAt);
+    }
+
+    [Theory]
+    [InlineData("9991234567", "+79991234567")]
+    [InlineData("8 (999) 123-45-67", "+7 (999) 123-45-67")]
+    [InlineData("+7 999 123-45-67", "+7 999 123-45-67")]
+    public void GuestPhone_Input_GetsRussianCountryCode(string input, string expected)
+    {
+        var harness = new Harness();
+
+        harness.ViewModel.GuestPhone = input;
+
+        Assert.Equal(expected, harness.ViewModel.GuestPhone);
+    }
+
+    [Fact]
+    public void GuestPhone_AfterRejectedFormat_ClearsFieldErrorOnEdit()
+    {
+        var harness = new Harness();
+        var viewModel = harness.ViewModel;
+
+        viewModel.GuestPhone = "999";
+        viewModel.GuestPhoneError = GuestPhoneInvalidText;
+
+        viewModel.GuestPhone = "9991";
+
+        Assert.Null(viewModel.GuestPhoneError);
+        Assert.False(viewModel.HasGuestPhoneError);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_GuestPhoneRejected_ShowsFieldErrorWithoutFormText()
+    {
+        var harness = new Harness();
+
+        await harness.PrepareFormAsync();
+        harness.SelectFirstSlot();
+        harness.Bookings.Create = (_, _) => Task.FromException<Guid>(
+            BarberCabinetApiError.Create(HttpStatusCode.BadRequest, "booking.create.guestPhone"));
+
+        var viewModel = harness.ViewModel;
+
+        viewModel.SelectGuestModeCommand.Execute(null);
+        viewModel.GuestFirstName = "Иван";
+        viewModel.GuestPhone = "999123";
+
+        await viewModel.SubmitCommand.ExecuteAsync(null);
+
+        var request = Assert.Single(harness.Bookings.CreateRequests);
+
+        Assert.Equal("+7999123", request.GuestPhone);
+        Assert.Equal(GuestPhoneInvalidText, viewModel.GuestPhoneError);
+        Assert.True(viewModel.HasGuestPhoneError);
+        Assert.Null(viewModel.SubmitError);
+        Assert.False(viewModel.HasSubmitError);
     }
 
     [Fact]

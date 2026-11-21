@@ -208,6 +208,32 @@ public class BookingTests
             error => error.Code == "booking.create.guestPhone");
     }
 
+    [Theory]
+    [InlineData("12345")]
+    [InlineData("+7 495 123-45-67")]
+    [InlineData("+49 170 1234567")]
+    [InlineData("+7 999 123-45-67 доб. 1")]
+    public void Create_ForGuestWithInvalidPhone_Fails(string guestPhone)
+    {
+        var result = Booking.Create(
+            null,
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            Start,
+            Start.AddMinutes(30),
+            1000m,
+            "guest-key",
+            guestFirstName: "Ivan",
+            guestPhone: guestPhone);
+
+        Assert.True(result.IsFailure);
+
+        var error = Assert.Single(result.Error.Errors, error => error.Code == "booking.create.guestPhone");
+
+        Assert.Equal("guestPhone", error.InvalidField);
+    }
+
     [Fact]
     public void Create_ForGuestWithTooLongFirstName_Fails()
     {

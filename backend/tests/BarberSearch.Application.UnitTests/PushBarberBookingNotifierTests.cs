@@ -297,7 +297,7 @@ public class PushBarberBookingNotifierTests
                 $"key-{Guid.NewGuid()}",
                 guestFirstName: "Гость",
                 guestLastName: "Клиентов",
-                guestPhone: "+70000000000").Value;
+                guestPhone: "+79990000000").Value;
 
         private static Booking CreateBooking(Guid userId, Guid barberProfileId)
             => Booking.Create(

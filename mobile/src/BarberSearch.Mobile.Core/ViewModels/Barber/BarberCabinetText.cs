@@ -368,9 +368,16 @@ public static class BarberCabinetText
                 false);
         }
 
+        if (HasCode(apiException, CreateGuestPhoneCode))
+        {
+            return new BarberBookingCreateFailure(
+                Loc.T("Похоже, в номере опечатка. Нужен российский мобильный номер, например +7 900 000-00-00."),
+                false,
+                GuestPhoneInvalid: true);
+        }
+
         if (HasCode(apiException, CreateCustomerCode)
-            || HasCode(apiException, CreateGuestFirstNameCode)
-            || HasCode(apiException, CreateGuestPhoneCode))
+            || HasCode(apiException, CreateGuestFirstNameCode))
         {
             return new BarberBookingCreateFailure(Loc.T("Укажите имя и телефон клиента."), false);
         }
@@ -549,7 +556,14 @@ public static class BarberCabinetText
 /// <c>true</c>, когда время заняли или салон с услугой исчезли: помочь может только
 /// перечитанная сетка той же даты, а форма остаётся заполненной.
 /// </param>
-public sealed record BarberBookingCreateFailure(string Message, bool ReloadSlots);
+/// <param name="GuestPhoneInvalid">
+/// <c>true</c>, когда сервер отверг телефон гостя: текст относится к полю, а не ко всей
+/// форме, поэтому форма не показывает его общей строкой.
+/// </param>
+public sealed record BarberBookingCreateFailure(
+    string Message,
+    bool ReloadSlots,
+    bool GuestPhoneInvalid = false);
 
 /// <summary>
 /// Результат неудачного переноса визита.

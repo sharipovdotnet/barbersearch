@@ -188,6 +188,13 @@ public sealed partial class BarberBookingCreateViewModel : ObservableObject
     private static string GuestNameRequiredText => Loc.T("Укажите имя гостя.");
     private static string GuestPhoneRequiredText => Loc.T("Укажите телефон гостя.");
 
+    /// <summary>
+    /// Причина отказа телефона: сервер принимает только российский мобильный, и человек
+    /// должен увидеть формат, а не «не удалось записать клиента».
+    /// </summary>
+    private static string GuestPhoneInvalidText =>
+        Loc.T("Похоже, в номере опечатка. Нужен российский мобильный номер, например +7 900 000-00-00.");
+
     private readonly IBarberClientsApi _clientsApi;
     private readonly IBarberBookingsApi _bookingsApi;
     private readonly TimeProvider _timeProvider;
@@ -975,7 +982,16 @@ public sealed partial class BarberBookingCreateViewModel : ObservableObject
         {
             var failure = BarberCabinetText.CreateError(exception, SubmitFailedText);
 
-            SubmitError = failure.Message;
+            if (failure.GuestPhoneInvalid)
+            {
+                // Отказ относится к полю: текст под ним объясняет формат, а общая строка
+                // формы «не удалось записать клиента» только повторяла бы факт отказа.
+                GuestPhoneError = failure.Message;
+            }
+            else
+            {
+                SubmitError = failure.Message;
+            }
 
             if (failure.ReloadSlots)
             {
@@ -1955,12 +1971,28 @@ public sealed partial class BarberBookingCreateViewModel : ObservableObject
     partial void OnGuestLastNameChanged(string value) => OnAttemptInputChanged();
 
     /// <summary>
-    /// Телефон гостя изменился: ошибка поля снимается.
+    /// Телефон гостя изменился: дописывается код страны, ошибка поля снимается.
     /// </summary>
+    /// <remarks>
+    /// Набранная национальная часть («9991234567») сразу получает <c>+7</c>, поэтому в
+    /// поле всегда виден российский номер в привычном виде <c>+79…</c>. Повторный вход
+    /// сюда после подстановки уже ничего не меняет, и только тогда начинается новая
+    /// логическая попытка отправки.
+    /// </remarks>
     /// <param name="value">Новый телефон.</param>
     partial void OnGuestPhoneChanged(string value)
     {
         GuestPhoneError = null;
+
+        var prefixed = PhoneInput.EnsureCountryCode(value);
+
+        if (!string.Equals(prefixed, value, StringComparison.Ordinal))
+        {
+            GuestPhone = prefixed;
+
+            return;
+        }
+
         OnAttemptInputChanged();
     }
 

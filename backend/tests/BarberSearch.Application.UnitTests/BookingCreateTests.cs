@@ -734,6 +734,33 @@ public class BookingCreateTests
         Assert.Equal(0, context.Bookings.AddCalls);
     }
 
+    [Theory]
+    [InlineData("12345")]
+    [InlineData("+7 495 123-45-67")]
+    [InlineData("+49 170 1234567")]
+    public async Task CreateByBarber_GuestWithInvalidPhone_ReturnsGuestPhoneValidation(string guestPhone)
+    {
+        var context = CreateContext();
+        var handler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: context.Profile.Id);
+        var request = CreateRequest(context.Profile.Id, context.Service.Id, "invalid-phone-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(
+                request,
+                ConfirmImmediately: true,
+                GuestFirstName: "Ivan",
+                GuestPhone: guestPhone),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.VALIDATION, result.Error.Errors[0].Type);
+        Assert.Equal("booking.create.guestPhone", result.Error.Errors[0].Code);
+        Assert.Equal(0, context.Bookings.AddCalls);
+    }
+
     [Fact]
     public async Task CreateByBarber_ForeignProfileForGuest_ReturnsForbidden()
     {
