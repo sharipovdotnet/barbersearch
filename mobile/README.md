@@ -479,7 +479,11 @@ reschedule (`booking.rescheduled`), and a customer's own cancellation or resched
 the app (`booking.cancelledByCustomer`, `booking.rescheduledByCustomer`). The two master events go
 to the profile owner: `barber.booking.created` when a customer books on their own, and
 `barber.booking.cancelled` when a customer or an administrator cancels; a barber's own create or
-cancel sends none. The customer's own
+cancel sends none. The split is by event family, not by account role: the app is shared by
+clients, masters and administrators, and the server never filters a recipient by `UserRole`. A
+master or an administrator who books another master is that master's customer and receives all
+seven customer events on the same device, while the profile they own keeps receiving the two
+master events. The customer's own
 action produces a push only when it happened outside the app: a booking, cancel or reschedule from
 the app shows its result on the screen (a cancel or reschedule also queues an email), while the
 same action from the web pushes. All texts are composed

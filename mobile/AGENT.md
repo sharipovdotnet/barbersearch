@@ -390,7 +390,11 @@ in Core owns both base addresses.
   `barber.booking.created` (a customer booked the barber on their own) and
   `barber.booking.cancelled` (a customer or an administrator cancelled); the barber's own create
   and cancel produce none, and the recipient is the profile owner, so an administrator's
-  cancellation of a guest booking notifies the master too. All nine texts are composed by the
+  cancellation of a guest booking notifies the master too. The split is by event family, not by
+  account role: the same app serves customers, masters and admins, and the backend never filters
+  a recipient by `UserRole`. A master or an admin who books another master is that master's
+  customer and receives all seven customer events on the same device, while the profile they own
+  keeps receiving the two master events. All nine texts are composed by the
   server and all nine reuse the same `reminders` channel and the same «Присылать напоминания»
   switch; the seven customer texts open «Записи», while the two master texts open `barber-cabinet`
   (its default section — client bookings). Switching reminders off unregisters the device, so
