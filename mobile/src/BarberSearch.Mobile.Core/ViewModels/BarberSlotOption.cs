@@ -51,7 +51,7 @@ public sealed partial class BarberSlotOption : ObservableObject
     /// Команда выбора слота.
     /// </summary>
     /// <remarks>
-    /// Чипы строятся шаблоном внутри <c>FlexLayout</c>, и «дотянуться» до ViewModel через
+    /// Чипы строятся шаблоном внутри <c>SlotGrid</c>, и «дотянуться» до ViewModel через
     /// <c>RelativeSource</c> в скомпилированных привязках нельзя. Команда передаётся пункту
     /// при сборке списка — шаблон остаётся простым, а логика выбора живёт в ViewModel.
     /// </remarks>

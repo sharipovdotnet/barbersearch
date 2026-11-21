@@ -955,6 +955,22 @@ in Core owns both base addresses.
   phone will. The photo page's file picker and its JPEG preparation are the new members of that
   untested platform set: `MauiPortfolioPhotoPicker` is exercised only by a real phone.
 
+- **The slot chips are one uniform grid, not the web's content-sized wrap.** The web shows only
+  the start of a slot («18:30») and lets `flex-wrap` size each chip by its text, which works because
+  five characters are always five characters. The phone keeps the range «18:30–19:15» (the booking
+  summary repeats it), and a range that starts at 9 is shorter than one that starts at 18, so the
+  free wrap produced chips of different widths and rows that did not line up. `Controls/SlotGrid`
+  therefore measures the available width, chooses two, three or up to six columns and gives every
+  chip the same width and every row the same height; spacing moves from each chip's margin to the
+  grid's `ColumnSpacing`/`RowSpacing`, and the 44 pt tap target still comes from the `Button` style.
+  The minimum chip width is 110 pt — the range plus its 12 pt padding — so a 360 pt phone gets two
+  columns and a 411 pt phone three, instead of shrinking the text. The same control replaces the
+  `FlexLayout` in all four slot pickers: the public card, «Записать клиента», the customer's
+  reschedule and the cabinet's. This is a deliberate deviation from §8's content-sized chips,
+  recorded here rather than left silent; `SlotGridMetrics` in Core owns the column arithmetic and
+  its tests (12 cases, 1504 total) cover both phone widths, the tablet cap, the no-spacing case and
+  the unusable-width fallback.
+
 ## 6. What the backend still lacks
 
 The mobile MVP is blocked by two backend changes (`backend/`) that do not exist yet:
