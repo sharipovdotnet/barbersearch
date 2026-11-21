@@ -720,6 +720,15 @@ adb reverse tcp:5243 tcp:5243
 adb reverse tcp:5173 tcp:5173
 ```
 
+A green build followed by `ADB1000: … Попытка чтения после конца потока` is not a compile or backend
+failure: the adb link to the phone died while Fast Deployment was still pushing assemblies to it.
+Over Wi-Fi the deploy moves tens of megabytes onto the phone, so a weak 2.4 GHz link (`adb shell cmd
+wifi status` shows the RSSI and link speed) drops the transfer halfway and the device turns `offline`.
+The cable is the fix; on Wi-Fi, get the phone onto 5 GHz or near the access point, restart the server
+(`adb kill-server`, `adb start-server`), make `adb devices -l` list the phone as `device`, re-select
+the device in Visual Studio, re-apply the two forwards, and launch again — `AGENT.md` §4 has the
+details, including why rebuilding neither the app nor the backend helps.
+
 A phone on the same Wi-Fi can skip the forward and be built against the machine's own address
 instead — the backend then has to listen on the LAN interface, and the firewall has to allow both
 ports:
