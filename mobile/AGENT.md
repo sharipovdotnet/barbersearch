@@ -218,6 +218,19 @@ in Core owns both base addresses.
   phone the thumb is on the picture, so the frames are paged by swiping a `CarouselView` and the
   system back button closes the page. The caption and the «N из M» counter stay; the arrow buttons
   and the keyboard shortcuts of the web are deliberately dropped.
+- **The «Работы» tiles are a uniform square grid, not the web's CSS grid and not the old
+  `FlexLayout`.** `FlexLayout.Basis="48%"` put two 142 pt tiles of a 296 pt row at 300 pt once each
+  tile's 8 pt margin was added, so every tile wrapped onto its own row and left the right half
+  empty, while the fixed `HeightRequest="160"` gave each width a different aspect.
+  `Controls/PhotoGrid` and `PhotoGridMetrics` in Core own the arithmetic instead: the columns come
+  from the available width, two on phones and up to four where the width allows, and the web's
+  3/4-column breakpoints become that cap rather than CSS media queries. Spacing lives on the grid's
+  `ColumnSpacing` and `RowSpacing` at 8 pt both ways — the vertical gap is deliberate and the person
+  likes it — instead of on the tile's margin, and every cell is square because the width sets the
+  height: the same look as the web's `aspect-square` with `object-cover`, with the
+  `RoundRectangle 8` radius kept. Tests add 12 cases (1516 total): the 320, 360 and 411 pt phones,
+  the tablet cap, the no-spacing widening, the unusable-width and non-positive-minimum fallbacks,
+  and the exact column packing.
 - **Reviews live in a nested section, not in the card ViewModel.** Pagination, a per-page cache, an
   error on the *next* page that must keep the rows already shown and a retry with the same cursor is
   a life cycle of its own, and the card file was already over a thousand lines.
