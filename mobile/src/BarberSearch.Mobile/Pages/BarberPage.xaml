@@ -76,7 +76,7 @@
                     </Grid>
                 </Border>
 
-                <!-- Работы: две плитки в ряд; пустое портфолио секции не создаёт. -->
+                <!-- Работы: квадратные плитки в две колонки; пустое портфолио секции не создаёт. -->
                 <Border
                     Margin="0,0,0,12"
                     Padding="16"
@@ -89,19 +89,12 @@
                             FontFamily="GeistSemiBold"
                             FontSize="16"
                             Text="{loc:Translate Key='Работы'}" />
-                        <FlexLayout
-                            AlignContent="Start"
-                            BindableLayout.ItemsSource="{Binding Photos}"
-                            Direction="Row"
-                            Wrap="Wrap">
+                        <controls:PhotoGrid BindableLayout.ItemsSource="{Binding Photos}" ColumnSpacing="8" RowSpacing="8">
                             <BindableLayout.ItemTemplate>
                                 <DataTemplate x:DataType="vm:BarberPhotoOption">
                                     <Border
-                                        Margin="0,0,8,8"
                                         Padding="0"
                                         BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
-                                        FlexLayout.Basis="48%"
-                                        HeightRequest="160"
                                         SemanticProperties.Description="{Binding AltText}"
                                         SemanticProperties.Hint="{Binding OpenHint}"
                                         StrokeShape="RoundRectangle 8"
@@ -113,7 +106,7 @@
                                     </Border>
                                 </DataTemplate>
                             </BindableLayout.ItemTemplate>
-                        </FlexLayout>
+                        </controls:PhotoGrid>
                     </VerticalStackLayout>
                 </Border>
 
