@@ -84,6 +84,28 @@ resolves to an unrelated style, and `BottomNavigationView` refuses it. No code i
 `src/BarberSearch.Mobile/obj` and `bin` (or Rebuild) and install again. The same mismatch makes any
 other `Resource.*` id wrong, so treat the crash as a build-cache symptom, not a theme bug.
 
+A build that succeeds and then fails with `ADB1000: Mono.AndroidTools.AdbException: Попытка чтения
+после конца потока` and an inner `System.IO.EndOfStreamException` is a deploy failure, not a compile
+or backend one. In Debug `EmbedAssembliesIntoApk` is `false`, so after the APK is signed the deploy
+still pushes the assemblies and fast-deploy files over the adb sync channel — tens of megabytes in
+hundreds of files — and the exception means that channel closed mid-push. The usual culprit is the
+Wi-Fi link to the phone, not the phone being asleep: `adb shell cmd wifi status` on the failing setup
+reported `RSSI: -77`, `Link speed: 6Mbps`, `isUsable: false`, ICMP lost 25 % of 1472-byte packets
+with RTT spikes to two seconds, and a single `adb push` of the 14 MB APK ran at 0.4 MB/s and ended in
+`failed to read copy response: EOF` with the device `offline` after half a minute — the fast-deploy
+push never survives that. The handover is messy: VS reports the truncated stream as `ADB1000`, the CLI
+as `XA0129` naming the file fast-deploy died on (`Set EmbedAssembliesIntoApk to true to skip`) or
+`XA0010: Выбранное устройство не запущено` when the device is not there at all. Nothing in the app or
+the backend causes or fixes it, and no rebuild helps. The cable is the real fix; wireless works once
+the phone reports a sane link (5 GHz, or an RSSI better than about −65 dBm and a link speed in the
+hundreds of Mbps). Note also that every toggle of «Wireless debugging» changes the port adbd listens
+on, so the `IP:port` VS still has selected is no longer the phone, and `adb devices -l` has to show it
+as `device` before the run; the build caches the last target in `obj/Debug/net10.0-android/adb.props`
+and `devices.cache`, which is why the stale serial survives a rebuild of the app. Recovery:
+`adb kill-server; adb start-server`, re-select the device in the VS Android target dropdown if the old
+`IP:port` entry is gone, re-apply `adb reverse tcp:5243 tcp:5243` and `tcp:5173`, run again. Over a
+good link the same project deploys unattended, which is how the emulator and a cabled phone behave.
+
 Push needs no Firebase project at build time. Without `Resources/Raw/push.json` the Android app
 compiles and behaves exactly as before: no notification permission, no «Присылать напоминания» row,
 no Firebase initialization. A project is needed only to exercise real delivery; see §5 and the
