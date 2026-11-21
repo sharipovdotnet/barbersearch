@@ -3,6 +3,7 @@
     x:Class="BarberSearch.Mobile.Pages.BarberPage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:controls="clr-namespace:BarberSearch.Mobile.Controls"
     xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:BarberCardViewModel"
@@ -249,11 +250,10 @@
                                 Text="{Binding EmptySlotsText}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
-                            <FlexLayout BindableLayout.ItemsSource="{Binding Slots}" Wrap="Wrap">
+                            <controls:SlotGrid BindableLayout.ItemsSource="{Binding Slots}">
                                 <BindableLayout.ItemTemplate>
                                     <DataTemplate x:DataType="vm:BarberSlotOption">
                                         <Button
-                                            Margin="0,0,8,8"
                                             Padding="12,8"
                                             BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
                                             Command="{Binding SelectCommand}"
@@ -278,7 +278,7 @@
                                         </Button>
                                     </DataTemplate>
                                 </BindableLayout.ItemTemplate>
-                            </FlexLayout>
+                            </controls:SlotGrid>
 
                             <Label
                                 IsVisible="{Binding ShowSlotsHint}"
