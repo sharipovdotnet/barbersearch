@@ -352,7 +352,7 @@
                                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                                     <DatePicker
                                         Date="{Binding NewExceptionDate, Mode=TwoWay}"
-                                        Format="D"
+                                        Format="ddd, d MMMM yyyy"
                                         MaximumDate="{Binding ExceptionMaxDate}"
                                         MinimumDate="{Binding ExceptionMinDate}" />
                                 </VerticalStackLayout>
@@ -485,7 +485,7 @@
                                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                                     <DatePicker
                                         Date="{Binding NewTimeOffStartDate, Mode=TwoWay}"
-                                        Format="D"
+                                        Format="ddd, d MMMM yyyy"
                                         MaximumDate="{Binding TimeOffMaxDate}"
                                         MinimumDate="{Binding TimeOffMinDate}" />
                                 </VerticalStackLayout>
@@ -496,7 +496,7 @@
                                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                                     <DatePicker
                                         Date="{Binding NewTimeOffEndDate, Mode=TwoWay}"
-                                        Format="D"
+                                        Format="ddd, d MMMM yyyy"
                                         MaximumDate="{Binding TimeOffMaxDate}"
                                         MinimumDate="{Binding TimeOffMinDate}" />
                                 </VerticalStackLayout>

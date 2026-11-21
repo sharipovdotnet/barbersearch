@@ -50,7 +50,7 @@
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                 <DatePicker
                     Date="{Binding SelectedDate, Mode=TwoWay}"
-                    Format="D"
+                    Format="ddd, d MMMM yyyy"
                     MaximumDate="{Binding MaximumDate}"
                     MinimumDate="{Binding MinimumDate}" />
             </VerticalStackLayout>

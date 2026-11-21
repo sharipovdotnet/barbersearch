@@ -182,6 +182,12 @@ in Core owns both base addresses.
   month group title carries the year, the slot picker and visit moments live within ±90 days, and
   a review and the policy edition keep an explicit year. The clock is injected as `TimeProvider`,
   as on «Записи», so the rule is tested without waiting for a new year.
+- **The date pickers use `ddd, d MMMM yyyy`, not the standard long `D`.** The long form on a
+  Russian phone — «суббота, 21 ноября 2026 г.» — is clipped in the narrow two-column schedule
+  forms, while the short weekday keeps the year those forms need: «сб, 21 ноября 2026». The
+  trailing «г.» is left out because it is part of the ru-RU long pattern, not a
+  culture-independent literal, and the same custom pattern must read «Sat, 21 November 2026» on
+  an English device.
 - **Registration is a page over the profile stack, and it signs in by itself.** Until this slice a
   customer could only be created on the web, which made a phone-only sign-up a dead end. The screen
   repeats `frontend/src/components/register-form.tsx` — the same fields in the same order, the same
