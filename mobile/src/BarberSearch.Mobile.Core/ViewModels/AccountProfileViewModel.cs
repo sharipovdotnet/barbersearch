@@ -9,6 +9,7 @@ using BarberSearch.Mobile.Core.Formatting;
 using BarberSearch.Mobile.Core.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DomainPhoneNumber = BarberSearch.Domain.Common.ValueObjects.PhoneNumber;
 
 namespace BarberSearch.Mobile.Core.ViewModels;
 
@@ -459,11 +460,21 @@ public sealed partial class AccountProfileViewModel : ObservableObject
     /// <remarks>
     /// Сравниваются сырые значения, как в вебе: правка одних пробелов тоже считается
     /// изменением, иначе кнопка «Сохранить» не дала бы отправить обрезанное значение.
+    /// Исключение — нестираемое начало <c>+79</c> в пустом поле: оно появляется от одного
+    /// фокуса, и без этого «Сохранить» просыпалась бы у нетронутой формы.
     /// </remarks>
     public bool IsDirty => _formInitialized
         && (FirstName != _baselineFirstName
             || LastName != _baselineLastName
-            || PhoneNumber != _baselinePhone);
+            || ComparablePhone != _baselinePhone);
+
+    /// <summary>
+    /// Телефон для сравнения с сохранённым: начало <c>+79</c> без цифр — ещё не правка.
+    /// </summary>
+    private string ComparablePhone =>
+        string.Equals(PhoneNumber, PhoneInput.MobilePrefix, StringComparison.Ordinal)
+            ? string.Empty
+            : PhoneNumber;
 
     /// <summary>
     /// Можно ли нажать «Сохранить».
@@ -709,9 +720,11 @@ public sealed partial class AccountProfileViewModel : ObservableObject
     /// </summary>
     /// <remarks>
     /// Локальные проверки выполняются при нажатии и показываются под полями. Телефон
-    /// обрезается и пустой уходит <c>null</c>; аватар передаётся обратно без изменений.
-    /// Успех — <c>204</c>, затем локальные значения и baseline обновляются: повторный
-    /// <c>GET</c> не нужен.
+    /// обрезается и пустой уходит <c>null</c>; начатый, но неполный номер отвергается здесь
+    /// же, по общему доменному правилу, не дожидаясь <c>400</c>. Один префикс <c>+79</c> —
+    /// это пустое поле, а не номер. Аватар передаётся обратно без изменений. Успех —
+    /// <c>204</c>, затем локальные значения и baseline обновляются: повторный <c>GET</c>
+    /// не нужен.
     /// </remarks>
     [RelayCommand]
     private async Task SaveAsync()
@@ -727,6 +740,17 @@ public sealed partial class AccountProfileViewModel : ObservableObject
 
         ClearFormErrors();
 
+        if (!PhoneInput.HasNationalDigits(phoneNumber))
+        {
+            // Начало +79 без единой цифры национальной части — это ещё не номер, а пустое
+            // поле: телефон необязателен, и стирать префикс вручную человеку не нужно.
+            phoneNumber = string.Empty;
+        }
+        else if (!DomainPhoneNumber.IsValid(phoneNumber))
+        {
+            PhoneNumberError = PhoneInvalidText;
+        }
+
         if (firstName.Length == 0)
         {
             FirstNameError = NameRequiredText;
@@ -737,7 +761,7 @@ public sealed partial class AccountProfileViewModel : ObservableObject
             LastNameError = LastNameRequiredText;
         }
 
-        if (HasFirstNameError || HasLastNameError)
+        if (HasFirstNameError || HasLastNameError || HasPhoneNumberError)
         {
             return;
         }
@@ -1233,13 +1257,29 @@ public sealed partial class AccountProfileViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Правка телефона сбрасывает ошибку под полем и прошлое сообщение об успехе.
+    /// Правка телефона дописывает код страны, сбрасывает ошибку под полем и прошлое
+    /// сообщение об успехе.
     /// </summary>
+    /// <remarks>
+    /// Набранная национальная часть («9991234567») сразу получает <c>+7</c>, а нестираемое
+    /// начало <c>+79</c> и курсор держит <c>PhonePrefixBehavior</c> — то же поле, что в
+    /// «Записать клиента» и «Создать салон». Повторный вход сюда после подстановки ничего
+    /// не меняет и только тогда начинает новую логическую попытку: ошибка поля уже снята.
+    /// </remarks>
+    /// <param name="value">Новый телефон.</param>
     partial void OnPhoneNumberChanged(string value)
     {
-        _ = value;
-
         PhoneNumberError = null;
+
+        var prefixed = PhoneInput.EnsureCountryCode(value);
+
+        if (!string.Equals(prefixed, value, StringComparison.Ordinal))
+        {
+            PhoneNumber = prefixed;
+
+            return;
+        }
+
         OnFormInputChanged();
     }
 

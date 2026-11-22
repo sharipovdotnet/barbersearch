@@ -7,6 +7,7 @@ using BarberSearch.Domain.Users;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Account;
 using BarberSearch.Mobile.Core.Auth;
+using BarberSearch.Mobile.Core.Formatting;
 using BarberSearch.Mobile.Core.ViewModels;
 
 namespace BarberSearch.Mobile.Core.Tests;
@@ -42,7 +43,7 @@ public sealed class AccountProfileViewModelTests
         Assert.True(harness.ViewModel.ShowContent);
         Assert.Equal("Ева", harness.ViewModel.FirstName);
         Assert.Equal("Клиентова", harness.ViewModel.LastName);
-        Assert.Equal("+70000000003", harness.ViewModel.PhoneNumber);
+        Assert.Equal("+79000000003", harness.ViewModel.PhoneNumber);
         Assert.Equal(UserEmail, harness.ViewModel.Email);
         Assert.Equal("Клиент", harness.ViewModel.RoleText);
         Assert.NotEmpty(harness.ViewModel.CreatedAtText);
@@ -148,6 +149,73 @@ public sealed class AccountProfileViewModelTests
         Assert.Equal(AvatarUrl, request.AvatarUrl);
     }
 
+    [Theory]
+    [InlineData("9991234567", "+79991234567")]
+    [InlineData("8 (999) 123-45-67", "+7 (999) 123-45-67")]
+    [InlineData("+7 999 123-45-67", "+7 999 123-45-67")]
+    public void PhoneNumber_Input_GetsRussianCountryCode(string input, string expected)
+    {
+        var harness = new Harness();
+
+        harness.ViewModel.PhoneNumber = input;
+
+        // То же поле, что в «Записать клиента»: набранная национальная часть получает +7,
+        // а нестираемое начало +79 и курсор держит PhonePrefixBehavior.
+        Assert.Equal(expected, harness.ViewModel.PhoneNumber);
+    }
+
+    [Fact]
+    public async Task SaveAsync_InvalidPhone_ShowsFieldErrorWithoutRequest()
+    {
+        var harness = new Harness();
+        await harness.ViewModel.InitializeAsync();
+
+        harness.ViewModel.FirstName = "Анна";
+        harness.ViewModel.PhoneNumber = "999123";
+
+        await harness.ViewModel.SaveCommand.ExecuteAsync(null);
+
+        // Начатый, но неполный номер отвергается до запроса: общий доменный PhoneNumber
+        // и общий текст PhoneInputText, без второй копии правила в профиле.
+        Assert.Equal("+7999123", harness.ViewModel.PhoneNumber);
+        Assert.True(harness.ViewModel.HasPhoneNumberError);
+        Assert.Equal(PhoneInputText.Invalid, harness.ViewModel.PhoneNumberError);
+        Assert.Empty(harness.AccountApi.UpdateRequests);
+    }
+
+    [Fact]
+    public async Task SaveAsync_PrefixOnlyPhone_SendsNullPhone()
+    {
+        var harness = new Harness();
+        await harness.ViewModel.InitializeAsync();
+
+        harness.ViewModel.PhoneNumber = PhoneInput.MobilePrefix;
+
+        await harness.ViewModel.SaveCommand.ExecuteAsync(null);
+
+        // Один +79 без цифр национальной части — это пустое необязательное поле, а не
+        // неполный номер: человеку не нужно стирать начало вручную.
+        var request = Assert.Single(harness.AccountApi.UpdateRequests);
+        Assert.Null(request.PhoneNumber);
+        Assert.Equal(string.Empty, harness.ViewModel.PhoneNumber);
+        Assert.False(harness.ViewModel.HasPhoneNumberError);
+    }
+
+    [Fact]
+    public async Task PhoneNumber_PrefixOnlyOnEmptyProfile_IsNotDirty()
+    {
+        var harness = new Harness();
+        harness.AccountApi.Profile = () => Task.FromResult(ProfileOf(phoneNumber: null));
+        await harness.ViewModel.InitializeAsync();
+
+        // Фокус на пустом поле показывает +79: это состояние поля, а не правка, иначе
+        // «Сохранить» просыпалась бы у нетронутой формы.
+        harness.ViewModel.PhoneNumber = PhoneInput.MobilePrefix;
+
+        Assert.False(harness.ViewModel.IsDirty);
+        Assert.False(harness.ViewModel.CanSave);
+    }
+
     [Fact]
     public async Task SaveAsync_NotDirty_DoesNothing()
     {
@@ -206,14 +274,14 @@ public sealed class AccountProfileViewModelTests
     {
         var harness = new Harness();
         await harness.ViewModel.InitializeAsync();
-        harness.ViewModel.PhoneNumber = "+7 900 000-00-0";
+        harness.ViewModel.PhoneNumber = "+79991234567";
         harness.AccountApi.Update = () => Task.FromException(
             ApiError(HttpStatusCode.BadRequest, "user.updateProfile.phoneNumber"));
 
         await harness.ViewModel.SaveCommand.ExecuteAsync(null);
 
-        // Причина под полем: человек должен понять, что номер не российский мобильный,
-        // а не гадать по общему «Не удалось сохранить профиль.».
+        // Локальная проверка такой номер пропускает, поэтому 400 доходит до поля: серверный
+        // код остаётся страховкой на случай правила, которого нет в домене телефона.
         Assert.True(harness.ViewModel.HasPhoneNumberError);
         Assert.Equal(
             "Похоже, в номере опечатка. Нужен российский мобильный номер, например +7 900 000-00-00.",
@@ -228,7 +296,7 @@ public sealed class AccountProfileViewModelTests
         var harness = new Harness();
         await harness.ViewModel.InitializeAsync();
         harness.ViewModel.LastName = "Другая";
-        harness.ViewModel.PhoneNumber = "+7 495 123-45-67";
+        harness.ViewModel.PhoneNumber = "+79991234567";
         harness.AccountApi.Update = () => Task.FromException(
             new BarberSearchApiException(
                 HttpStatusCode.BadRequest,
@@ -249,12 +317,12 @@ public sealed class AccountProfileViewModelTests
     {
         var harness = new Harness();
         await harness.ViewModel.InitializeAsync();
-        harness.ViewModel.PhoneNumber = "+7 900 000-00-0";
+        harness.ViewModel.PhoneNumber = "+79991234567";
         harness.AccountApi.Update = () => Task.FromException(
             ApiError(HttpStatusCode.BadRequest, "user.updateProfile.phoneNumber"));
         await harness.ViewModel.SaveCommand.ExecuteAsync(null);
 
-        harness.ViewModel.PhoneNumber = "+7 900 000-00-01";
+        harness.ViewModel.PhoneNumber = "+79991234568";
 
         Assert.False(harness.ViewModel.HasPhoneNumberError);
     }
@@ -322,7 +390,7 @@ public sealed class AccountProfileViewModelTests
         harness.ViewModel.CancelCommand.Execute(null);
 
         Assert.Equal("Ева", harness.ViewModel.FirstName);
-        Assert.Equal("+70000000003", harness.ViewModel.PhoneNumber);
+        Assert.Equal("+79000000003", harness.ViewModel.PhoneNumber);
         Assert.False(harness.ViewModel.IsDirty);
     }
 
@@ -845,13 +913,14 @@ public sealed class AccountProfileViewModelTests
 
     private static MyProfileResponse ProfileOf(
         string firstName = "Ева",
-        DateTimeOffset? createdAt = null) =>
+        DateTimeOffset? createdAt = null,
+        string? phoneNumber = "+79000000003") =>
         new(
             Guid.CreateVersion7(),
             UserEmail,
             firstName,
             "Клиентова",
-            "+70000000003",
+            phoneNumber,
             AvatarUrl,
             UserRole.Customer,
             null,

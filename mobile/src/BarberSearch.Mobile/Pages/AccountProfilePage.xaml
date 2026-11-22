@@ -3,6 +3,7 @@
     x:Class="BarberSearch.Mobile.Pages.AccountProfilePage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:behaviors="clr-namespace:BarberSearch.Mobile.Behaviors"
     xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
     x:DataType="vm:AccountProfileViewModel"
@@ -216,7 +217,11 @@
                             Keyboard="Telephone"
                             MaxLength="{Binding MaxPhoneLength}"
                             Placeholder="+7 900 000-00-00"
-                            Text="{Binding PhoneNumber}" />
+                            Text="{Binding PhoneNumber}">
+                            <Entry.Behaviors>
+                                <behaviors:PhonePrefixBehavior />
+                            </Entry.Behaviors>
+                        </Entry>
                         <Label
                             FontSize="12"
                             IsVisible="{Binding HasPhoneNumberError}"
