@@ -551,10 +551,13 @@ in Core owns both base addresses.
   `+79` plus them. The prefix is therefore not deletable — an empty value normalizes back to
   `+79` — and separators are deliberately dropped, because the field is a plain `Entry` with a
   telephone keyboard and a mask would only fight the caret. `PhonePrefixBehavior` fills `+79`
-  when the field is attached empty or receives focus, applies the rule on every `TextChanged`,
+  when the field receives focus, applies the rule on every `TextChanged` of the focused field,
   recomputes the caret by the digits to its left and restores it through `Dispatcher.Dispatch`
-  after each rewrite, and refuses to leave the caret inside `+79`; the value that reaches the
-  ViewModel is canonical (`+79991234567`), which is what the backend `PhoneNumber` rule accepts.
+  after each rewrite, and refuses to leave the caret inside `+79`. Blurring a field that holds
+  only the prefix clears it, so an untouched «Телефон» looks as before — the grey placeholder
+  `+79000000000` — and the skeleton appears only while the cursor is in the field; the value that
+  reaches the ViewModel is canonical (`+79991234567`), which is what the backend `PhoneNumber`
+  rule accepts.
   A field holding only the prefix is not a filled phone: `HasGuestContacts` asks
   `PhoneInput.HasNationalDigits`, so «Записать» stays disabled. Tests add 35 cases (1570 total):
   the normalizer table (empty, `+7`, national, local `8`, formatted and pasted numbers, the

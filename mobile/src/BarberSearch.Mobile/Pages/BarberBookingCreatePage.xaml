@@ -178,7 +178,7 @@
                     <Entry
                         Keyboard="Telephone"
                         MaxLength="32"
-                        Placeholder="+7 900 000-00-00"
+                        Placeholder="+79000000000"
                         Text="{Binding GuestPhone}">
                         <Entry.Behaviors>
                             <behaviors:PhonePrefixBehavior />

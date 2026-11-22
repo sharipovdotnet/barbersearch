@@ -25,7 +25,9 @@ namespace BarberSearch.Mobile.Behaviors;
 /// <para>
 /// Пустое поле при получении фокуса сразу показывает <c>+79</c>: набранное с клавиатуры
 /// дописывается после него, а стереть начало нельзя ни <c>Backspace</c>, ни <c>Delete</c>,
-/// ни выделением всего текста.
+/// ни выделением всего текста. Без фокуса поле остаётся пустым и показывает подсказку с
+/// примером номера — как до появления начала: <c>+79</c> без единой набранной цифры при
+/// потере фокуса убирается, чтобы подсказка вернулась.
 /// </para>
 /// </remarks>
 public sealed class PhonePrefixBehavior : Behavior<Entry>
@@ -35,7 +37,7 @@ public sealed class PhonePrefixBehavior : Behavior<Entry>
     private bool _isRestoringCaret;
 
     /// <summary>
-    /// Подписывается на события поля и подставляет начало номера, если поле пустое.
+    /// Подписывается на события поля: начало номера подставляется при получении фокуса.
     /// </summary>
     /// <param name="bindable">Поле «Телефон».</param>
     protected override void OnAttachedTo(Entry bindable)
@@ -46,9 +48,8 @@ public sealed class PhonePrefixBehavior : Behavior<Entry>
 
         bindable.TextChanged += OnTextChanged;
         bindable.Focused += OnFocused;
+        bindable.Unfocused += OnUnfocused;
         bindable.PropertyChanged += OnEntryPropertyChanged;
-
-        EnsurePrefix(bindable);
     }
 
     /// <summary>
@@ -59,6 +60,7 @@ public sealed class PhonePrefixBehavior : Behavior<Entry>
     {
         bindable.TextChanged -= OnTextChanged;
         bindable.Focused -= OnFocused;
+        bindable.Unfocused -= OnUnfocused;
         bindable.PropertyChanged -= OnEntryPropertyChanged;
 
         _entry = null;
@@ -83,6 +85,33 @@ public sealed class PhonePrefixBehavior : Behavior<Entry>
     }
 
     /// <summary>
+    /// Поле потеряло фокус: начало без набранных цифр убирается, чтобы вернулась подсказка
+    /// с примером номера.
+    /// </summary>
+    /// <param name="sender">Поле «Телефон».</param>
+    /// <param name="e">Параметры события фокуса.</param>
+    private void OnUnfocused(object? sender, FocusEventArgs e)
+    {
+        if (_entry is not { } entry || PhoneInput.HasNationalDigits(entry.Text))
+        {
+            return;
+        }
+
+        // Пустой текст TextChanged пропускает, пока поле не в фокусе, поэтому начало не
+        // вернётся само и в поле останется подсказка, как до этого изменения.
+        _isNormalizing = true;
+
+        try
+        {
+            entry.Text = string.Empty;
+        }
+        finally
+        {
+            _isNormalizing = false;
+        }
+    }
+
+    /// <summary>
     /// Текст поля изменился: значение нормализуется, курсор ставится после цифр.
     /// </summary>
     /// <param name="sender">Поле «Телефон».</param>
@@ -90,6 +119,13 @@ public sealed class PhonePrefixBehavior : Behavior<Entry>
     private void OnTextChanged(object? sender, TextChangedEventArgs e)
     {
         if (_isNormalizing || _entry is not { } entry)
+        {
+            return;
+        }
+
+        // Пустое поле без фокуса — это подсказка с примером номера, а не начало ввода:
+        // нормализация вернула бы сюда +79 и подсказка бы не показывалась.
+        if (!entry.IsFocused && string.IsNullOrEmpty(e.NewTextValue))
         {
             return;
         }
