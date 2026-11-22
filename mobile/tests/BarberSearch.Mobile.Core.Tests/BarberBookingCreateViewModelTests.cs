@@ -285,6 +285,55 @@ public sealed class BarberBookingCreateViewModelTests
     }
 
     [Fact]
+    public async Task GuestContacts_FillingOrder_NotifiesSubmitState()
+    {
+        var phoneLast = new Harness();
+
+        await phoneLast.PrepareFormAsync();
+        phoneLast.SelectFirstSlot();
+        phoneLast.ViewModel.SelectGuestModeCommand.Execute(null);
+
+        var phoneLastNotifications = new List<string?>();
+
+        phoneLast.ViewModel.PropertyChanged += (_, e) => phoneLastNotifications.Add(e.PropertyName);
+
+        phoneLast.ViewModel.GuestFirstName = "Иван";
+        phoneLastNotifications.Clear();
+
+        phoneLast.ViewModel.GuestPhone = "+79991234567";
+
+        // Кнопка обязана проснуться сразу, без повторного выбора времени: телефон
+        // заполняют последним так же часто, как и первым.
+        Assert.True(phoneLast.ViewModel.CanSubmit);
+        Assert.True(phoneLast.ViewModel.SubmitCommand.CanExecute(null));
+        Assert.Contains(nameof(BarberBookingCreateViewModel.CanSubmit), phoneLastNotifications);
+        Assert.Contains(nameof(BarberBookingCreateViewModel.HasClient), phoneLastNotifications);
+
+        var nameLast = new Harness();
+
+        await nameLast.PrepareFormAsync();
+        nameLast.SelectFirstSlot();
+        nameLast.ViewModel.SelectGuestModeCommand.Execute(null);
+
+        var nameLastNotifications = new List<string?>();
+
+        nameLast.ViewModel.PropertyChanged += (_, e) => nameLastNotifications.Add(e.PropertyName);
+
+        nameLast.ViewModel.GuestPhone = "+79991234567";
+
+        Assert.False(nameLast.ViewModel.CanSubmit);
+
+        nameLastNotifications.Clear();
+
+        nameLast.ViewModel.GuestFirstName = "Иван";
+
+        Assert.True(nameLast.ViewModel.CanSubmit);
+        Assert.True(nameLast.ViewModel.SubmitCommand.CanExecute(null));
+        Assert.Contains(nameof(BarberBookingCreateViewModel.CanSubmit), nameLastNotifications);
+        Assert.Contains(nameof(BarberBookingCreateViewModel.HasClient), nameLastNotifications);
+    }
+
+    [Fact]
     public async Task SubmitAsync_GuestPhoneRejected_ShowsFieldErrorWithoutFormText()
     {
         var harness = new Harness();
