@@ -558,21 +558,25 @@ in Core owns both base addresses.
   `+79000000000` — and the skeleton appears only while the cursor is in the field; the value that
   reaches the ViewModel is canonical (`+79991234567`), which is what the backend `PhoneNumber`
   rule accepts.
-  «Создать салон» uses the same field instead of its own copy: the `Entry` carries
-  `PhonePrefixBehavior`, the ViewModel adds the code with `PhoneInput.EnsureCountryCode`, and the
-  optional number is checked before submitting by the domain `PhoneNumber`. A started but
+  «Личные данные» and «Создать салон» use the same field instead of their own copy: the `Entry`
+  carries `PhonePrefixBehavior`, the ViewModel adds the code with `PhoneInput.EnsureCountryCode`,
+  and the optional number is checked before submitting by the domain `PhoneNumber`. A started but
   incomplete number therefore stays in the form — the same «Похоже, в номере опечатка…» line
-  appears under it — while `400 salon.phoneNumber` fills that line from the server answer. The
-  prefix alone is not a phone here either: `OptionalPhone` asks `PhoneInput.HasNationalDigits`
-  and sends `null`. The explanation text now lives once in `PhoneInputText` for the profile, the
+  appears under it without a request — while `400 salon.phoneNumber` or
+  `400 user.updateProfile.phoneNumber` fills that line from the server answer if a rule the domain
+  does not know rejects it. The prefix alone is not a phone in either optional form:
+  `OptionalPhone` in the salon and the profile's save ask `PhoneInput.HasNationalDigits` and send
+  `null`. The explanation text now lives once in `PhoneInputText` for the profile, the
   guest and the salon instead of three copies.
   A field holding only the prefix is not a filled phone: `HasGuestContacts` asks
-  `PhoneInput.HasNationalDigits`, so «Записать» stays disabled. Tests add 35 cases: the
+  `PhoneInput.HasNationalDigits`, so «Записать» stays disabled. Tests add 41 cases: the
   normalizer table (empty, `+7`, national, local `8`, formatted and pasted numbers, the prefix
   alone, a letter, an over-long paste), its idempotency, the prefix-only detection and the
   ViewModel's disabled/enabled `CanSubmit`; five salon cases (the code added while typing, the
-  incomplete number, the valid number, the prefix-only phone and the server code) bring the suite
-  to 1659, and the old 32-character limit case now uses a genuinely over-long value.
+  incomplete number, the valid number, the prefix-only phone and the server code) and six
+  profile cases (the code added while typing, the incomplete number rejected before a request,
+  the prefix-only phone that still sends `null` and does not make the form dirty) bring the suite
+  to 1665, and the old 32-character limit case now uses a genuinely over-long value.
 
 - **A failed read retries itself while the screen is visible, and «Повторить» stays as «retry now».**
   On a phone a manual retry asks the person to notice the failure, guess when the network came back
