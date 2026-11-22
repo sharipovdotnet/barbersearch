@@ -45,8 +45,7 @@ public sealed partial class AccountProfileViewModel : ObservableObject
     /// Причина отказа телефона: сервер принимает только российский мобильный, и человек
     /// должен увидеть формат, а не «не удалось сохранить».
     /// </summary>
-    private static string PhoneInvalidText =>
-        Loc.T("Похоже, в номере опечатка. Нужен российский мобильный номер, например +7 900 000-00-00.");
+    private static string PhoneInvalidText => PhoneInputText.Invalid;
 
     private static string NetworkText => Loc.T("Нет связи с сервером. Проверьте подключение и повторите попытку.");
     private static string TooManyRequestsText => Loc.T("Слишком много запросов. Подождите минуту и повторите.");

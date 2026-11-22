@@ -363,7 +363,7 @@ public sealed class BarberSalonCreateViewModelTests
         var harness = new Harness();
 
         harness.FillValid();
-        harness.ViewModel.PhoneNumber = new string('9', 33);
+        harness.ViewModel.PhoneNumber = string.Concat("+7", new string('9', 31));
 
         await harness.ViewModel.SubmitCommand.ExecuteAsync(null);
 
@@ -372,17 +372,75 @@ public sealed class BarberSalonCreateViewModelTests
     }
 
     [Fact]
-    public async Task SubmitAsync_PhoneAtLimit_IsAccepted()
+    public async Task SubmitAsync_IncompletePhone_ShowsTypoError()
     {
         var harness = new Harness();
 
         harness.FillValid();
-        harness.ViewModel.PhoneNumber = new string('9', 32);
+        harness.ViewModel.PhoneNumber = "+7999123456";
+
+        await harness.ViewModel.SubmitCommand.ExecuteAsync(null);
+
+        Assert.Equal(
+            "Похоже, в номере опечатка. Нужен российский мобильный номер, например +7 900 000-00-00.",
+            harness.ViewModel.PhoneNumberError);
+        Assert.Null(harness.ViewModel.FormError);
+        Assert.Empty(harness.Salons.Requests);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_ValidPhone_IsAccepted()
+    {
+        var harness = new Harness();
+
+        harness.FillValid();
+        harness.ViewModel.PhoneNumber = "+7 999 123-45-67";
 
         await harness.ViewModel.SubmitCommand.ExecuteAsync(null);
 
         Assert.Null(harness.ViewModel.PhoneNumberError);
-        Assert.Equal(new string('9', 32), Assert.Single(harness.Salons.Requests).PhoneNumber);
+        Assert.Equal("+7 999 123-45-67", Assert.Single(harness.Salons.Requests).PhoneNumber);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_PrefixOnlyPhone_SendsNoPhone()
+    {
+        var harness = new Harness();
+
+        harness.FillValid();
+        harness.ViewModel.PhoneNumber = "+79";
+
+        await harness.ViewModel.SubmitCommand.ExecuteAsync(null);
+
+        Assert.Null(harness.ViewModel.PhoneNumberError);
+        Assert.Null(Assert.Single(harness.Salons.Requests).PhoneNumber);
+    }
+
+    [Fact]
+    public void TypingNationalPhone_AddsCountryCode()
+    {
+        var viewModel = new Harness().ViewModel;
+
+        viewModel.PhoneNumber = "9991234567";
+
+        Assert.Equal("+79991234567", viewModel.PhoneNumber);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_ServerPhoneCode_FillsPhoneError()
+    {
+        var harness = new Harness();
+
+        harness.FillValid();
+        harness.Salons.Create = (_, _) => Task.FromException<Guid>(
+            BarberCabinetApiError.Create(HttpStatusCode.BadRequest, "salon.phoneNumber"));
+
+        await harness.ViewModel.SubmitCommand.ExecuteAsync(null);
+
+        Assert.Equal(
+            "Похоже, в номере опечатка. Нужен российский мобильный номер, например +7 900 000-00-00.",
+            harness.ViewModel.PhoneNumberError);
+        Assert.Null(harness.ViewModel.FormError);
     }
 
     [Fact]
@@ -428,7 +486,7 @@ public sealed class BarberSalonCreateViewModelTests
         harness.ViewModel.Address = "  Ленина, 1  ";
         harness.ViewModel.Country = "  Россия  ";
         harness.ViewModel.TimeZoneId = "  Europe/Moscow  ";
-        harness.ViewModel.PhoneNumber = "  +7 495 000-00-00  ";
+        harness.ViewModel.PhoneNumber = "  +7 999 000-00-00  ";
         harness.ViewModel.WebsiteUrl = "  https://example.com  ";
 
         await harness.ViewModel.SubmitCommand.ExecuteAsync(null);
@@ -440,7 +498,7 @@ public sealed class BarberSalonCreateViewModelTests
         Assert.Equal("Ленина, 1", request.Address);
         Assert.Equal("Россия", request.Country);
         Assert.Equal("Europe/Moscow", request.TimeZoneId);
-        Assert.Equal("+7 495 000-00-00", request.PhoneNumber);
+        Assert.Equal("+7 999 000-00-00", request.PhoneNumber);
         Assert.Equal("https://example.com", request.WebsiteUrl);
         Assert.Equal(PlaceKind.Salon, request.Kind);
         Assert.True(request.IsListed);

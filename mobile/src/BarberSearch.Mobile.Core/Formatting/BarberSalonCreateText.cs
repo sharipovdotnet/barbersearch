@@ -17,9 +17,9 @@ namespace BarberSearch.Mobile.Core.Formatting;
 /// </para>
 /// <para>
 /// Клиентские проверки — только те, что веб делает сам: обязательность полей, диапазон
-/// координат, формат сайта и длину телефона. Длину названия, адреса, города и страны сервер
-/// не ограничивает — выдумывать лимит нельзя. Часовой пояс выбирается из списка, поэтому
-/// свободный ввод проверяется как «пусто».
+/// координат, формат сайта, длину телефона и российский мобильный номер. Длину названия,
+/// адреса, города и страны сервер не ограничивает — выдумывать лимит нельзя. Часовой пояс
+/// выбирается из списка, поэтому свободный ввод проверяется как «пусто».
 /// </para>
 /// </remarks>
 public static class BarberSalonCreateText
@@ -69,6 +69,15 @@ public static class BarberSalonCreateText
     /// Телефон длиннее 32 символов.
     /// </summary>
     public static string PhoneTooLong => Loc.T("Не длиннее 32 символов.");
+
+    /// <summary>
+    /// Телефон не является российским мобильным номером.
+    /// </summary>
+    /// <remarks>
+    /// Проверка та же, что у профиля и телефона гостя: её выполняет серверный
+    /// <c>PhoneNumber</c>, а текст общий у всех трёх форм.
+    /// </remarks>
+    public static string PhoneInvalid => PhoneInputText.Invalid;
 
     /// <summary>
     /// Клиентская ошибка видимости: тип места не может быть в каталоге.
@@ -153,7 +162,8 @@ public static class BarberSalonCreateText
             WebsiteUrl: HasCode(exception, "salon.websiteUrl") ? WebsiteInvalid : null,
             Latitude: HasCode(exception, "salon.latitude") ? LatitudeRange : null,
             Longitude: HasCode(exception, "salon.longitude") ? LongitudeRange : null,
-            IsListed: HasCode(exception, "salon.isListed.kind") ? ListingForced : null);
+            IsListed: HasCode(exception, "salon.isListed.kind") ? ListingForced : null,
+            PhoneNumber: HasCode(exception, "salon.phoneNumber") ? PhoneInvalid : null);
     }
 
     /// <summary>
@@ -241,6 +251,7 @@ public static class BarberSalonCreateText
 /// <param name="Latitude">Ошибка широты.</param>
 /// <param name="Longitude">Ошибка долготы.</param>
 /// <param name="IsListed">Ошибка видимости в каталоге.</param>
+/// <param name="PhoneNumber">Ошибка телефона.</param>
 public sealed record SalonCreateFieldErrors(
     string? Name = null,
     string? Address = null,
@@ -250,4 +261,5 @@ public sealed record SalonCreateFieldErrors(
     string? WebsiteUrl = null,
     string? Latitude = null,
     string? Longitude = null,
-    string? IsListed = null);
+    string? IsListed = null,
+    string? PhoneNumber = null);

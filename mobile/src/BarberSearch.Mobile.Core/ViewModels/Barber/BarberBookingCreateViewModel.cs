@@ -192,8 +192,7 @@ public sealed partial class BarberBookingCreateViewModel : ObservableObject
     /// Причина отказа телефона: сервер принимает только российский мобильный, и человек
     /// должен увидеть формат, а не «не удалось записать клиента».
     /// </summary>
-    private static string GuestPhoneInvalidText =>
-        Loc.T("Похоже, в номере опечатка. Нужен российский мобильный номер, например +7 900 000-00-00.");
+    private static string GuestPhoneInvalidText => PhoneInputText.Invalid;
 
     private readonly IBarberClientsApi _clientsApi;
     private readonly IBarberBookingsApi _bookingsApi;

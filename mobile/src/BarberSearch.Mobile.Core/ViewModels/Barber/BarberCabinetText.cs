@@ -371,7 +371,7 @@ public static class BarberCabinetText
         if (HasCode(apiException, CreateGuestPhoneCode))
         {
             return new BarberBookingCreateFailure(
-                Loc.T("Похоже, в номере опечатка. Нужен российский мобильный номер, например +7 900 000-00-00."),
+                PhoneInputText.Invalid,
                 false,
                 GuestPhoneInvalid: true);
         }

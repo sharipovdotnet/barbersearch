@@ -10,6 +10,7 @@ using BarberSearch.Mobile.Core.Formatting;
 using BarberSearch.Mobile.Core.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DomainPhoneNumber = BarberSearch.Domain.Common.ValueObjects.PhoneNumber;
 
 namespace BarberSearch.Mobile.Core.ViewModels.Barber;
 
@@ -437,7 +438,9 @@ public sealed partial class BarberSalonCreateViewModel : ObservableObject
     /// <para>
     /// Проверки повторяют веб: обязательные название, адрес, город, страна и часовой пояс,
     /// числовые координаты в диапазоне, необязательный сайт формата <c>http(s)</c> не длиннее
-    /// 2048 символов и необязательный телефон не длиннее 32 символов.
+    /// 2048 символов и необязательный телефон не длиннее 32 символов. Телефон дополнительно
+    /// обязан быть российским мобильным — по тому же правилу, что у профиля и гостя, — но
+    /// проверяется оно здесь, до отправки: маска поля оставляет неполный номер видимым.
     /// </para>
     /// <para>
     /// Запись не повторяется сама: после сбоя неизвестно, создан ли салон, и человек сам
@@ -470,7 +473,7 @@ public sealed partial class BarberSalonCreateViewModel : ObservableObject
             latitude,
             longitude,
             PostalCode: null,
-            PhoneNumber: Optional(PhoneNumber),
+            PhoneNumber: OptionalPhone(PhoneNumber),
             WebsiteUrl: Optional(WebsiteUrl),
             kind,
             isListed);
@@ -622,12 +625,28 @@ public sealed partial class BarberSalonCreateViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Телефон изменился: ошибка поля снимается.
+    /// Телефон изменился: дописывается код страны, ошибка поля снимается.
     /// </summary>
+    /// <remarks>
+    /// Поле ведёт себя как телефон гостя в «Записать клиента»: набранная национальная часть
+    /// сразу получает <c>+7</c>, а нестираемое начало <c>+79</c> и курсор держит
+    /// <c>PhonePrefixBehavior</c>. Повторный вход сюда после подстановки ничего не
+    /// меняет и только тогда начинает новую логическую попытку: ошибка поля уже снята.
+    /// </remarks>
     /// <param name="value">Новый телефон.</param>
     partial void OnPhoneNumberChanged(string value)
     {
         SetError(ref _phoneNumberError, nameof(PhoneNumberError));
+
+        var prefixed = PhoneInput.EnsureCountryCode(value);
+
+        if (!string.Equals(prefixed, value, StringComparison.Ordinal))
+        {
+            PhoneNumber = prefixed;
+
+            return;
+        }
+
         FormError = null;
     }
 
@@ -731,6 +750,18 @@ public sealed partial class BarberSalonCreateViewModel : ObservableObject
                 BarberSalonCreateText.PhoneTooLong);
             isValid = false;
         }
+        else if (PhoneInput.HasNationalDigits(PhoneNumber)
+            && !DomainPhoneNumber.IsValid(PhoneNumber.Trim()))
+        {
+            // Телефон необязателен, но начатый номер обязан быть российским мобильным:
+            // маска поля оставляет только неполный скелет, и без этой проверки он ушёл бы
+            // на сервер, чтобы вернуться тем же отказом уже после отправки.
+            SetError(
+                ref _phoneNumberError,
+                nameof(PhoneNumberError),
+                BarberSalonCreateText.PhoneInvalid);
+            isValid = false;
+        }
 
         return isValid;
     }
@@ -816,6 +847,18 @@ public sealed partial class BarberSalonCreateViewModel : ObservableObject
 
         return trimmed.Length == 0 ? null : trimmed;
     }
+
+    /// <summary>
+    /// Телефон для запроса: начало <c>+79</c> без единой набранной цифры — это ещё не номер.
+    /// </summary>
+    /// <remarks>
+    /// Пока поле в фокусе, в нём стоит скелет <c>+79</c>, и отправка не должна принять его за
+    /// заполненный телефон. Потеря фокуса убирает начало, но кнопку можно нажать и без неё.
+    /// </remarks>
+    /// <param name="value">Текст поля телефона.</param>
+    /// <returns>Канонический номер либо <c>null</c>, если номера нет.</returns>
+    private static string? OptionalPhone(string value) =>
+        PhoneInput.HasNationalDigits(value) ? Optional(value) : null;
 
     /// <summary>
     /// Координата в виде строки формы: инвариантная культура, <c>null</c> не затирает поле.
@@ -954,6 +997,12 @@ public sealed partial class BarberSalonCreateViewModel : ObservableObject
         if (errors.IsListed is { } isListed)
         {
             SetError(ref _isListedError, nameof(IsListedError), isListed);
+            matched = true;
+        }
+
+        if (errors.PhoneNumber is { } phoneNumber)
+        {
+            SetError(ref _phoneNumberError, nameof(PhoneNumberError), phoneNumber);
             matched = true;
         }
 
