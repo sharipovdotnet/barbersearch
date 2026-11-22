@@ -548,10 +548,16 @@ public sealed partial class BarberBookingCreateViewModel : ObservableObject
         : string.Empty;
 
     /// <summary>
-    /// У нового клиента заполнены обязательные имя и телефон.
+    /// У нового клиента заполнены обязательные имя и телефон; одно начало <c>+79</c>
+    /// телефоном не считается.
     /// </summary>
+    /// <remarks>
+    /// Поле всегда показывает скелет российского мобильного, поэтому непустая строка ещё не
+    /// значит «номер введён»: пока после <c>+79</c> нет ни одной цифры, обязательный телефон
+    /// остаётся незаполненным и кнопка «Записать» неактивна.
+    /// </remarks>
     public bool HasGuestContacts => !string.IsNullOrWhiteSpace(GuestFirstName)
-        && !string.IsNullOrWhiteSpace(GuestPhone);
+        && PhoneInput.HasNationalDigits(GuestPhone);
 
     /// <summary>
     /// Клиент для брони известен: выбран из сервиса или заполнен вручную.
@@ -1955,20 +1961,25 @@ public sealed partial class BarberBookingCreateViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Имя гостя изменилось: ошибка поля снимается.
+    /// Имя гостя изменилось: ошибка поля снимается, состояние кнопки пересчитывается.
     /// </summary>
     /// <param name="value">Новое имя.</param>
     partial void OnGuestFirstNameChanged(string value)
     {
         GuestNameError = null;
         OnAttemptInputChanged();
+        NotifyFormState();
     }
 
     /// <summary>
-    /// Фамилия гостя изменилась.
+    /// Фамилия гостя изменилась: состояние кнопки пересчитывается.
     /// </summary>
     /// <param name="value">Новая фамилия.</param>
-    partial void OnGuestLastNameChanged(string value) => OnAttemptInputChanged();
+    partial void OnGuestLastNameChanged(string value)
+    {
+        OnAttemptInputChanged();
+        NotifyFormState();
+    }
 
     /// <summary>
     /// Телефон гостя изменился: дописывается код страны, ошибка поля снимается.
@@ -1977,7 +1988,9 @@ public sealed partial class BarberBookingCreateViewModel : ObservableObject
     /// Набранная национальная часть («9991234567») сразу получает <c>+7</c>, поэтому в
     /// поле всегда виден российский номер в привычном виде <c>+79…</c>. Повторный вход
     /// сюда после подстановки уже ничего не меняет, и только тогда начинается новая
-    /// логическая попытка отправки.
+    /// логическая попытка отправки. Состояние кнопки «Записать» пересчитывается здесь же:
+    /// телефон заполняют последним так же часто, как и первым, и без этого уведомления
+    /// кнопка просыпалась только после повторного выбора времени.
     /// </remarks>
     /// <param name="value">Новый телефон.</param>
     partial void OnGuestPhoneChanged(string value)
@@ -1994,6 +2007,7 @@ public sealed partial class BarberBookingCreateViewModel : ObservableObject
         }
 
         OnAttemptInputChanged();
+        NotifyFormState();
     }
 
     /// <summary>

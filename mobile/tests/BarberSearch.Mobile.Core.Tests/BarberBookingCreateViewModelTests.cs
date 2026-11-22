@@ -3,6 +3,7 @@ using BarberSearch.Contracts.BarberClients;
 using BarberSearch.Contracts.BarberProfiles.GetBarberBookingOptions;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Mobile.Core.Api;
+using BarberSearch.Mobile.Core.Formatting;
 using BarberSearch.Mobile.Core.ViewModels.Barber;
 
 namespace BarberSearch.Mobile.Core.Tests;
@@ -254,6 +255,82 @@ public sealed class BarberBookingCreateViewModelTests
 
         Assert.Null(viewModel.GuestPhoneError);
         Assert.False(viewModel.HasGuestPhoneError);
+    }
+
+    [Fact]
+    public async Task GuestContacts_PhoneWithOnlyPrefix_IsNotFilled()
+    {
+        var harness = new Harness();
+
+        await harness.PrepareFormAsync();
+        harness.SelectFirstSlot();
+
+        var viewModel = harness.ViewModel;
+
+        viewModel.SelectGuestModeCommand.Execute(null);
+        viewModel.GuestFirstName = "Иван";
+        viewModel.GuestPhone = PhoneInput.MobilePrefix;
+
+        Assert.False(viewModel.HasGuestContacts);
+        Assert.False(viewModel.HasClient);
+        Assert.False(viewModel.CanSubmit);
+        Assert.False(viewModel.SubmitCommand.CanExecute(null));
+
+        viewModel.GuestPhone = "+79991234567";
+
+        Assert.True(viewModel.HasGuestContacts);
+        Assert.True(viewModel.HasClient);
+        Assert.True(viewModel.CanSubmit);
+        Assert.True(viewModel.SubmitCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task GuestContacts_FillingOrder_NotifiesSubmitState()
+    {
+        var phoneLast = new Harness();
+
+        await phoneLast.PrepareFormAsync();
+        phoneLast.SelectFirstSlot();
+        phoneLast.ViewModel.SelectGuestModeCommand.Execute(null);
+
+        var phoneLastNotifications = new List<string?>();
+
+        phoneLast.ViewModel.PropertyChanged += (_, e) => phoneLastNotifications.Add(e.PropertyName);
+
+        phoneLast.ViewModel.GuestFirstName = "Иван";
+        phoneLastNotifications.Clear();
+
+        phoneLast.ViewModel.GuestPhone = "+79991234567";
+
+        // Кнопка обязана проснуться сразу, без повторного выбора времени: телефон
+        // заполняют последним так же часто, как и первым.
+        Assert.True(phoneLast.ViewModel.CanSubmit);
+        Assert.True(phoneLast.ViewModel.SubmitCommand.CanExecute(null));
+        Assert.Contains(nameof(BarberBookingCreateViewModel.CanSubmit), phoneLastNotifications);
+        Assert.Contains(nameof(BarberBookingCreateViewModel.HasClient), phoneLastNotifications);
+
+        var nameLast = new Harness();
+
+        await nameLast.PrepareFormAsync();
+        nameLast.SelectFirstSlot();
+        nameLast.ViewModel.SelectGuestModeCommand.Execute(null);
+
+        var nameLastNotifications = new List<string?>();
+
+        nameLast.ViewModel.PropertyChanged += (_, e) => nameLastNotifications.Add(e.PropertyName);
+
+        nameLast.ViewModel.GuestPhone = "+79991234567";
+
+        Assert.False(nameLast.ViewModel.CanSubmit);
+
+        nameLastNotifications.Clear();
+
+        nameLast.ViewModel.GuestFirstName = "Иван";
+
+        Assert.True(nameLast.ViewModel.CanSubmit);
+        Assert.True(nameLast.ViewModel.SubmitCommand.CanExecute(null));
+        Assert.Contains(nameof(BarberBookingCreateViewModel.CanSubmit), nameLastNotifications);
+        Assert.Contains(nameof(BarberBookingCreateViewModel.HasClient), nameLastNotifications);
     }
 
     [Fact]
