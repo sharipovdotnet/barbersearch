@@ -3,6 +3,7 @@ using BarberSearch.Contracts.BarberClients;
 using BarberSearch.Contracts.BarberProfiles.GetBarberBookingOptions;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Mobile.Core.Api;
+using BarberSearch.Mobile.Core.Formatting;
 using BarberSearch.Mobile.Core.ViewModels.Barber;
 
 namespace BarberSearch.Mobile.Core.Tests;
@@ -254,6 +255,33 @@ public sealed class BarberBookingCreateViewModelTests
 
         Assert.Null(viewModel.GuestPhoneError);
         Assert.False(viewModel.HasGuestPhoneError);
+    }
+
+    [Fact]
+    public async Task GuestContacts_PhoneWithOnlyPrefix_IsNotFilled()
+    {
+        var harness = new Harness();
+
+        await harness.PrepareFormAsync();
+        harness.SelectFirstSlot();
+
+        var viewModel = harness.ViewModel;
+
+        viewModel.SelectGuestModeCommand.Execute(null);
+        viewModel.GuestFirstName = "Иван";
+        viewModel.GuestPhone = PhoneInput.MobilePrefix;
+
+        Assert.False(viewModel.HasGuestContacts);
+        Assert.False(viewModel.HasClient);
+        Assert.False(viewModel.CanSubmit);
+        Assert.False(viewModel.SubmitCommand.CanExecute(null));
+
+        viewModel.GuestPhone = "+79991234567";
+
+        Assert.True(viewModel.HasGuestContacts);
+        Assert.True(viewModel.HasClient);
+        Assert.True(viewModel.CanSubmit);
+        Assert.True(viewModel.SubmitCommand.CanExecute(null));
     }
 
     [Fact]

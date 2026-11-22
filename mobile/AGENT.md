@@ -534,13 +534,32 @@ in Core owns both base addresses.
   number became a booking. `Booking` now validates the same way the profile does — through the
   shared `PhoneNumber` value object — and answers `400 booking.create.guestPhone`; this is the
   backend rule for both clients, while the phone-side UX is the mobile part. `PhoneInput` in Core
-  adds the code as soon as the person starts a national number: `9991234567` becomes
+  adds the code to a value that arrives without it (`EnsureCountryCode`): `9991234567` becomes
   `+79991234567`, the local `8 (999) 123-45-67` becomes `+7 (999) 123-45-67`, `7 999…` gets the
   missing `+`, and a number that already begins with `+` is not reformatted, so editing digits in
-  the middle does not move the cursor. `GuestPhoneInvalid` on `BarberBookingCreateFailure` puts the
+  the middle does not move the cursor. The field itself no longer relies on that rule: it locks the
+  `+79` skeleton and drops separators, which is the next bullet. `GuestPhoneInvalid` on `BarberBookingCreateFailure` puts the
   profile's «Похоже, в номере опечатка…» under the field instead of the form-level «Не удалось
   записать клиента.», and the next keystroke clears it. No new catalog key: both texts already
   existed for «Личные данные».
+
+- **The mobile phone field locks the `+79` skeleton; the web field has no mask.** The web's
+  «Телефон» is a plain text input validated only on submit, so a half-typed number sits in the
+  form until the person presses «Записать». On a phone the entry cannot hold anything but the
+  beginning of a valid Russian mobile: `PhoneInput.NormalizeMobile` takes the ASCII digits,
+  drops the country `7`/`8` and the mandatory first `9`, keeps the next nine digits and renders
+  `+79` plus them. The prefix is therefore not deletable — an empty value normalizes back to
+  `+79` — and separators are deliberately dropped, because the field is a plain `Entry` with a
+  telephone keyboard and a mask would only fight the caret. `PhonePrefixBehavior` fills `+79`
+  when the field is attached empty or receives focus, applies the rule on every `TextChanged`,
+  recomputes the caret by the digits to its left and restores it through `Dispatcher.Dispatch`
+  after each rewrite, and refuses to leave the caret inside `+79`; the value that reaches the
+  ViewModel is canonical (`+79991234567`), which is what the backend `PhoneNumber` rule accepts.
+  A field holding only the prefix is not a filled phone: `HasGuestContacts` asks
+  `PhoneInput.HasNationalDigits`, so «Записать» stays disabled. Tests add 35 cases (1570 total):
+  the normalizer table (empty, `+7`, national, local `8`, formatted and pasted numbers, the
+  prefix alone, a letter, an over-long paste), its idempotency, the prefix-only detection and the
+  ViewModel's disabled/enabled `CanSubmit`.
 
 - **A failed read retries itself while the screen is visible, and «Повторить» stays as «retry now».**
   On a phone a manual retry asks the person to notice the failure, guess when the network came back

@@ -548,10 +548,16 @@ public sealed partial class BarberBookingCreateViewModel : ObservableObject
         : string.Empty;
 
     /// <summary>
-    /// У нового клиента заполнены обязательные имя и телефон.
+    /// У нового клиента заполнены обязательные имя и телефон; одно начало <c>+79</c>
+    /// телефоном не считается.
     /// </summary>
+    /// <remarks>
+    /// Поле всегда показывает скелет российского мобильного, поэтому непустая строка ещё не
+    /// значит «номер введён»: пока после <c>+79</c> нет ни одной цифры, обязательный телефон
+    /// остаётся незаполненным и кнопка «Записать» неактивна.
+    /// </remarks>
     public bool HasGuestContacts => !string.IsNullOrWhiteSpace(GuestFirstName)
-        && !string.IsNullOrWhiteSpace(GuestPhone);
+        && PhoneInput.HasNationalDigits(GuestPhone);
 
     /// <summary>
     /// Клиент для брони известен: выбран из сервиса или заполнен вручную.

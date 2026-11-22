@@ -3,6 +3,7 @@
     x:Class="BarberSearch.Mobile.Pages.BarberBookingCreatePage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:behaviors="clr-namespace:BarberSearch.Mobile.Behaviors"
     xmlns:controls="clr-namespace:BarberSearch.Mobile.Controls"
     xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
     xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
@@ -178,7 +179,11 @@
                         Keyboard="Telephone"
                         MaxLength="32"
                         Placeholder="+7 900 000-00-00"
-                        Text="{Binding GuestPhone}" />
+                        Text="{Binding GuestPhone}">
+                        <Entry.Behaviors>
+                            <behaviors:PhonePrefixBehavior />
+                        </Entry.Behaviors>
+                    </Entry>
                     <Label
                         FontSize="12"
                         IsVisible="{Binding HasGuestPhoneError}"
