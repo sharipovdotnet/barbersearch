@@ -225,7 +225,7 @@ public sealed class PushBookingCreatedTests
                 CustomerId: null,
                 GuestFirstName: "Гость",
                 GuestLastName: null,
-                GuestPhone: "+70000000000",
+                GuestPhone: "+79990000000",
                 BarberServiceId: barber.Service.Id,
                 SalonId: barber.Salon.Id,
                 StartAt: startAt,

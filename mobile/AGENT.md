@@ -528,6 +528,20 @@ in Core owns both base addresses.
   line, because its form maps only the two name codes; this is a deliberate deviation from §8,
   recorded here rather than left silent.
 
+- **The guest phone in «Записать клиента» gets the country code while typing, and its rejection
+  belongs to the field.** The form used to accept any string in «Новый клиент» and the domain only
+  checked that the guest phone was non-empty and ≤32 characters, so a city, foreign or truncated
+  number became a booking. `Booking` now validates the same way the profile does — through the
+  shared `PhoneNumber` value object — and answers `400 booking.create.guestPhone`; this is the
+  backend rule for both clients, while the phone-side UX is the mobile part. `PhoneInput` in Core
+  adds the code as soon as the person starts a national number: `9991234567` becomes
+  `+79991234567`, the local `8 (999) 123-45-67` becomes `+7 (999) 123-45-67`, `7 999…` gets the
+  missing `+`, and a number that already begins with `+` is not reformatted, so editing digits in
+  the middle does not move the cursor. `GuestPhoneInvalid` on `BarberBookingCreateFailure` puts the
+  profile's «Похоже, в номере опечатка…» under the field instead of the form-level «Не удалось
+  записать клиента.», and the next keystroke clears it. No new catalog key: both texts already
+  existed for «Личные данные».
+
 - **A failed read retries itself while the screen is visible, and «Повторить» stays as «retry now».**
   On a phone a manual retry asks the person to notice the failure, guess when the network came back
   and tap again for every attempt — nobody does that. The «Записи» tab had already chosen the

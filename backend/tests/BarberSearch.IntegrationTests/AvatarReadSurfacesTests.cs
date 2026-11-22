@@ -128,7 +128,7 @@ public sealed class AvatarReadSurfacesTests
             now.AddDays(2).AddHours(2),
             BookingStatus.Confirmed,
             guestFirstName: "Гость Без Фото",
-            guestPhone: "+70000000001");
+            guestPhone: "+79990000001");
 
         await app.AuthenticateAsync(barber.User.Email.Value);
 
@@ -149,7 +149,7 @@ public sealed class AvatarReadSurfacesTests
             page.Items,
             item => item.Id == guestBooking.Id);
         Assert.Null(guest.Customer.AvatarUrl);
-        Assert.Equal("+70000000001", guest.Customer.PhoneNumber);
+        Assert.Equal("+79990000001", guest.Customer.PhoneNumber);
         Assert.Equal("Гость Без Фото", guest.Customer.DisplayName);
     }
 
@@ -191,7 +191,7 @@ public sealed class AvatarReadSurfacesTests
             start.AddHours(1),
             BookingStatus.Confirmed,
             guestFirstName: "Гость Админки",
-            guestPhone: "+70000000002");
+            guestPhone: "+79990000002");
 
         var admin = await app.CreateUserAsync(NewEmail("avatar-admin"), UserRole.Admin);
         await app.AuthenticateAsync(admin.Email.Value);
@@ -213,7 +213,7 @@ public sealed class AvatarReadSurfacesTests
         Assert.Null(listGuest.Customer.AvatarUrl);
         Assert.Null(listGuest.Customer.Id);
         Assert.Null(listGuest.Customer.Email);
-        Assert.Equal("+70000000002", listGuest.Customer.PhoneNumber);
+        Assert.Equal("+79990000002", listGuest.Customer.PhoneNumber);
         Assert.Equal(barberAvatarUrl, listGuest.Barber.AvatarUrl);
 
         // Деталь собирается тем же BuildAdminBookingsQuery/ToAdminResponse: значения совпадают

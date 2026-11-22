@@ -1,4 +1,5 @@
 using BarberSearch.Domain.Common;
+using BarberSearch.Domain.Users.ValueObjects;
 using CSharpFunctionalExtensions;
 using Shared;
 
@@ -40,7 +41,8 @@ public class Booking : AggregateRoot
     private const string GUEST_LAST_NAME_CODE = "booking.create.guestLastName";
 
     /// <summary>
-    /// Публичный код ошибки «телефон гостя пуст или длиннее предела»; <c>400</c>.
+    /// Публичный код ошибки «телефон гостя пуст, длиннее предела или не является
+    /// российским мобильным номером»; <c>400</c>.
     /// </summary>
     private const string GUEST_PHONE_CODE = "booking.create.guestPhone";
 
@@ -178,8 +180,9 @@ public class Booking : AggregateRoot
     /// Гостевые поля — снимок контакта на момент визита, а не аккаунт: пользователь для гостя
     /// не создаётся. Оба вида одновременно недопустимы (<c>booking.create.customerAmbiguous</c>).
     /// Имена нормализуются (края срезаются, повторные пробелы схлопываются), пустая фамилия
-    /// сохраняется как <c>null</c>; телефон только срезается по краям. Ошибки собираются все
-    /// сразу, как и в остальных фабриках домена.
+    /// сохраняется как <c>null</c>; телефон срезается по краям и проверяется общим правилом
+    /// российского мобильного номера. Ошибки собираются все сразу, как и в остальных фабриках
+    /// домена.
     /// </remarks>
     /// <param name="userId">Клиент или <c>null</c> для гостя.</param>
     /// <param name="barberProfileId">Профиль барбера.</param>
@@ -566,6 +569,14 @@ public class Booking : AggregateRoot
                  """,
                 nameof(guestPhone)));
         }
+        else if (PhoneNumber.Validate(
+            normalizedGuestPhone,
+            GUEST_PHONE_CODE,
+            nameof(guestPhone),
+            out _) is { } phoneNumberError)
+        {
+            errors.Add(phoneNumberError);
+        }
     }
 
     /// <summary>
@@ -591,8 +602,9 @@ public class Booking : AggregateRoot
     }
 
     /// <summary>
-    /// Телефон гостя: края срезаются, пустая строка — <c>null</c>. Формат не проверяется:
-    /// номера бывают с пробелами, скобками и «+».
+    /// Телефон гостя: края срезаются, пустая строка — <c>null</c>. Формат здесь не
+    /// проверяется: это делает <see cref="PhoneNumber.Validate"/> при сборке ошибок, а
+    /// хранится исходная принятая запись, чтобы не подменять введённый контакт.
     /// </summary>
     private static string? NormalizeGuestPhone(string? phone)
         => string.IsNullOrWhiteSpace(phone) ? null : phone.Trim();

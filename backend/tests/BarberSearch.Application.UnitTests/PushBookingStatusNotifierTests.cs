@@ -411,7 +411,7 @@ public class PushBookingStatusNotifierTests
             1500m,
             $"key-{Guid.NewGuid()}",
             guestFirstName: "Гость",
-            guestPhone: "+70000000000").Value;
+            guestPhone: "+79990000000").Value;
 
     private static Context CreateContext(bool enabled = true, bool isMobileApp = false)
     {

@@ -340,7 +340,7 @@ internal sealed class TestData
         BookingStatus status = BookingStatus.Pending,
         decimal price = 45m,
         string guestFirstName = "Гость",
-        string? guestPhone = "+70000000000",
+        string? guestPhone = "+79990000000",
         int durationMinutes = 30)
     {
         ArgumentNullException.ThrowIfNull(barber);

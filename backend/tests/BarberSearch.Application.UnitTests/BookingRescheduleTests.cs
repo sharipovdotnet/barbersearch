@@ -760,5 +760,5 @@ public class BookingRescheduleTests
             45m,
             $"guest-key-{Guid.NewGuid():N}",
             guestFirstName: "Гость",
-            guestPhone: "+70000000000").Value;
+            guestPhone: "+79990000000").Value;
 }
