@@ -5,6 +5,7 @@ using BarberSearch.Application.Abstractions;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.BarberServices;
 using BarberSearch.Domain.Bookings;
+using BarberSearch.Domain.Common.ValueObjects;
 using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.PortfolioPhotos;
 using BarberSearch.Domain.Reviews;
@@ -503,6 +504,8 @@ public sealed class AuditTrail
             // Адрес — объект-значение Email: в payload журнала попадает каноническая строка,
             // а не JSON-объект { "value": … } и не результат ToString() по умолчанию.
             Email email => Truncate(email.Value),
+            // Телефон салона — объект-значение PhoneNumber: в журнал идёт канонический номер.
+            PhoneNumber phone => Truncate(phone.Value),
             bool or int or long or decimal or double or float => value,
             Guid guid => guid.ToString(),
             Enum enumeration => enumeration.ToString(),

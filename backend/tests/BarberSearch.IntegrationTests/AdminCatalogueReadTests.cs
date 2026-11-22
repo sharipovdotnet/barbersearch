@@ -323,7 +323,7 @@ public sealed class AdminCatalogueReadTests
             latitude: 59.9386,
             longitude: 30.3141,
             postalCode: "190000",
-            phoneNumber: "+78120000000",
+            phoneNumber: "+79991234571",
             websiteUrl: "https://nord.example/studio");
 
         await SignInAsAdminAsync(app);
@@ -338,7 +338,7 @@ public sealed class AdminCatalogueReadTests
         Assert.Equal("Europe/Moscow", row.GetProperty("timeZoneId").GetString());
         Assert.Equal(59.9386, row.GetProperty("latitude").GetDouble(), 4);
         Assert.Equal(30.3141, row.GetProperty("longitude").GetDouble(), 4);
-        Assert.Equal("+78120000000", row.GetProperty("phoneNumber").GetString());
+        Assert.Equal("+79991234571", row.GetProperty("phoneNumber").GetString());
         Assert.Equal("https://nord.example/studio", row.GetProperty("websiteUrl").GetString());
         Assert.True(row.GetProperty("isActive").GetBoolean());
         Assert.Equal(0, row.GetProperty("usageCount").GetInt32());

@@ -198,7 +198,7 @@ public class AdminCatalogueReadHandlerTests
             "Europe/Moscow",
             59.9386,
             30.3141,
-            "+78120000000",
+            "+79991234571",
             "https://nord.example/",
             IsActive: true,
             Kind: PlaceKind.Salon,
@@ -221,7 +221,7 @@ public class AdminCatalogueReadHandlerTests
         Assert.Equal("Europe/Moscow", row.TimeZoneId);
         Assert.Equal(59.9386, row.Latitude);
         Assert.Equal(30.3141, row.Longitude);
-        Assert.Equal("+78120000000", row.PhoneNumber);
+        Assert.Equal("+79991234571", row.PhoneNumber);
         Assert.Equal("https://nord.example/", row.WebsiteUrl);
         Assert.True(row.IsActive);
         Assert.Equal(3, row.UsageCount);

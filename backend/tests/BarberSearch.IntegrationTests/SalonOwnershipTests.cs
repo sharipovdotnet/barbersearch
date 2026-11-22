@@ -175,7 +175,7 @@ public sealed class SalonOwnershipTests
 
         var salon = await ReadSalonAsync(app, salonId);
         Assert.Equal("Neue Strasse 1", salon.Address);
-        Assert.Equal("+4930123456", salon.PhoneNumber);
+        Assert.Equal("+79991234567", salon.PhoneNumber?.Value);
 
         var otherEmail = $"salon-owner-other-{Guid.NewGuid():N}@barbersearch.test";
         await app.CreateUserAsync(otherEmail, UserRole.Barber);
@@ -200,14 +200,14 @@ public sealed class SalonOwnershipTests
 
         using (var adminContacts = await app.Client.PutAsJsonAsync(
                    $"api/salons/{salonId}/contact-info",
-                   new UpdateSalonContactInfoRequest("+4930999999", null)))
+                   new UpdateSalonContactInfoRequest("+79991234568", null)))
         {
             Assert.Equal(HttpStatusCode.NoContent, adminContacts.StatusCode);
         }
 
         salon = await ReadSalonAsync(app, salonId);
         Assert.Equal("Admin Strasse 1", salon.Address);
-        Assert.Equal("+4930999999", salon.PhoneNumber);
+        Assert.Equal("+79991234568", salon.PhoneNumber?.Value);
 
         // Салон администратора без владельца: барбер не получает к нему доступа, админ — да.
         var ownerless = await data.CreateSalonAsync("Ownerless Salon");
@@ -574,7 +574,7 @@ public sealed class SalonOwnershipTests
             null);
 
     private static UpdateSalonContactInfoRequest NewContactRequest()
-        => new("+4930123456", "https://salon.example/");
+        => new("+79991234567", "https://salon.example/");
 
     private sealed record Owner(Guid UserId, Guid ProfileId, string Email);
 }

@@ -2319,7 +2319,7 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_users_barber_profiles_barber_profile_id");
 
-                    b.OwnsOne("BarberSearch.Domain.Users.ValueObjects.PhoneNumber", "PhoneNumber", b1 =>
+                    b.OwnsOne("BarberSearch.Domain.Common.ValueObjects.PhoneNumber", "PhoneNumber", b1 =>
                         {
                             b1.Property<Guid>("UserId")
                                 .HasColumnType("uuid");

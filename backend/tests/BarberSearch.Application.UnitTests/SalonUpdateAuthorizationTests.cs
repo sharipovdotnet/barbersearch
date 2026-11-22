@@ -159,7 +159,7 @@ public class SalonUpdateAuthorizationTests
             return;
         }
 
-        Assert.Equal("+4930123456", salon.PhoneNumber);
+        Assert.Equal("+79991234567", salon.PhoneNumber?.Value);
         Assert.Equal("https://salon.example/", salon.WebsiteUrl);
     }
 
@@ -175,7 +175,7 @@ public class SalonUpdateAuthorizationTests
             null);
 
     private static UpdateSalonContactInfoCommand NewContactCommand(Guid salonId)
-        => new(salonId, "+4930123456", "https://salon.example/");
+        => new(salonId, "+79991234567", "https://salon.example/");
 
     private static Salon CreateAdminSalon()
         => Salon.Create(

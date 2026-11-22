@@ -86,7 +86,7 @@ public sealed class SalonMutationsAuthorizationTests
 
         using (var contacts = await app.Client.PutAsJsonAsync(
                    $"api/salons/{salon.Id}/contact-info",
-                   new UpdateSalonContactInfoRequest("+4930000000", null)))
+                   new UpdateSalonContactInfoRequest("+79991234569", null)))
         {
             Assert.Equal(HttpStatusCode.NoContent, contacts.StatusCode);
         }
@@ -163,7 +163,7 @@ public sealed class SalonMutationsAuthorizationTests
                     null)),
             await client.PutAsJsonAsync(
                 $"api/salons/{salonId}/contact-info",
-                new UpdateSalonContactInfoRequest("+4930123456", null)),
+                new UpdateSalonContactInfoRequest("+79991234567", null)),
             await client.PostAsync($"api/salons/{salonId}/activation", null),
             await client.DeleteAsync($"api/salons/{salonId}/activation")
         ];

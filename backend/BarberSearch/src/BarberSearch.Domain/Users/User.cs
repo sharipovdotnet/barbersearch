@@ -1,5 +1,6 @@
 using System.Net;
 using BarberSearch.Domain.Common;
+using BarberSearch.Domain.Common.ValueObjects;
 using BarberSearch.Domain.FavoriteBarbers;
 using BarberSearch.Domain.Users.ValueObjects;
 using CSharpFunctionalExtensions;
@@ -66,7 +67,7 @@ public class User : AggregateRoot
     /// Телефон пользователя в каноническом виде <c>+7XXXXXXXXXX</c>; <c>null</c> — номер не задан.
     /// </summary>
     /// <remarks>
-    /// Хранится объект-значение <see cref="BarberSearch.Domain.Users.ValueObjects.PhoneNumber"/>:
+    /// Хранится объект-значение <see cref="BarberSearch.Domain.Common.ValueObjects.PhoneNumber"/>:
     /// в базе и в памяти лежит только канонический вид, поэтому сравнение номеров и поиск
     /// по ним не зависят от того, как номер ввели. Привычные записи (<c>8 (999) 123-45-67</c>,
     /// <c>+7 999 123-45-67</c>, <c>9991234567</c>) нормализует сам объект-значение.
@@ -252,7 +253,7 @@ public class User : AggregateRoot
     /// <remarks>
     /// <para>
     /// Телефон нормализуется в объект-значение
-    /// <see cref="BarberSearch.Domain.Users.ValueObjects.PhoneNumber"/>: в агрегате всегда
+    /// <see cref="BarberSearch.Domain.Common.ValueObjects.PhoneNumber"/>: в агрегате всегда
     /// лежит канонический вид <c>+7XXXXXXXXXX</c>. <c>null</c> и пустая строка снимают номер,
     /// а недопустимое значение возвращает <c>400 user.updateProfile.phoneNumber</c> и не
     /// меняет ни одного поля.

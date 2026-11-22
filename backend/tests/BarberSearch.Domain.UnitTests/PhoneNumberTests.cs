@@ -1,4 +1,4 @@
-using BarberSearch.Domain.Users.ValueObjects;
+using BarberSearch.Domain.Common.ValueObjects;
 using Shared;
 using Xunit;
 
@@ -173,5 +173,14 @@ public class PhoneNumberTests
         Assert.Equal(12, PhoneNumber.VALUE_LENGTH);
         Assert.Equal(32, PhoneNumber.MAX_INPUT_LENGTH);
         Assert.Equal(PhoneNumber.VALUE_LENGTH, CANONICAL.Length);
+    }
+
+    [Fact]
+    public void FromStorage_KeepsLegacyValueWithoutValidation()
+    {
+        var phone = PhoneNumber.FromStorage("+4930123456");
+
+        Assert.Equal("+4930123456", phone.Value);
+        Assert.Equal("+4930123456", (string)phone);
     }
 }

@@ -1,7 +1,7 @@
 using CSharpFunctionalExtensions;
 using Shared;
 
-namespace BarberSearch.Domain.Users.ValueObjects;
+namespace BarberSearch.Domain.Common.ValueObjects;
 
 /// <summary>
 /// Номер мобильного телефона, принадлежащий России.
@@ -224,6 +224,17 @@ public sealed class PhoneNumber : IEquatable<PhoneNumber>
         return true;
     }
 
+    /// <summary>
+    /// Восстанавливает номер из значения в хранилище без проверки формата.
+    /// </summary>
+    /// <remarks>
+    /// Нужен материализации колонки <c>phone_number</c> у пользователя и салона: строки,
+    /// сохранённые до появления проверки, не должны ронять чтение. Запись по-прежнему
+    /// проходит через <see cref="Create"/> или <see cref="Validate"/>.
+    /// </remarks>
+    /// <param name="value">Значение из хранилища.</param>
+    public static PhoneNumber FromStorage(string value) => new(value);
+
     /// <inheritdoc />
     public bool Equals(PhoneNumber? other)
         => other is not null &&
@@ -239,6 +250,16 @@ public sealed class PhoneNumber : IEquatable<PhoneNumber>
 
     /// <inheritdoc />
     public override string ToString() => Value;
+
+    /// <summary>
+    /// Отдаёт каноническую строку явным приведением.
+    /// </summary>
+    /// <remarks>
+    /// Нужно там, где SQL-функция или проекция в DTO требует именно строку, а не
+    /// объект-значение: например, в запросах к таблице <c>salons</c>.
+    /// </remarks>
+    /// <param name="phoneNumber">Номер.</param>
+    public static explicit operator string(PhoneNumber phoneNumber) => phoneNumber.Value;
 
     public static bool operator ==(PhoneNumber? left, PhoneNumber? right)
         => object.Equals(left, right);

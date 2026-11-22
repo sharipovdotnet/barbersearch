@@ -75,7 +75,7 @@ public sealed class AdminCatalogueWriteTests
                 55.7963,
                 49.1088,
                 "420000",
-                "+78432000000",
+                "+79991234574",
                 null));
 
         var service = await ReadRowAsync(app.Client, HAIR_SERVICES, createdService.Id);
@@ -272,7 +272,7 @@ public sealed class AdminCatalogueWriteTests
                     null)),
             await app.Client.PutAsJsonAsync(
                 $"api/salons/{salon.Id}/contact-info",
-                new UpdateSalonContactInfoRequest("+4930123456", null)),
+                new UpdateSalonContactInfoRequest("+79991234567", null)),
             await app.Client.PostAsync($"api/salons/{salon.Id}/activation", null),
             await app.Client.DeleteAsync($"api/salons/{salon.Id}/activation"),
         };
@@ -300,7 +300,7 @@ public sealed class AdminCatalogueWriteTests
         var salon = await data.CreateSalonAsync(
             "Independent Salon",
             city: "Berlin",
-            phoneNumber: "+4930000000",
+            phoneNumber: "+79991234569",
             websiteUrl: "https://salon.example/");
         await SignInAsAdminAsync(app);
 
@@ -322,7 +322,7 @@ public sealed class AdminCatalogueWriteTests
         var afterLocation = await ReadRowAsync(app.Client, SALONS, salon.Id);
         Assert.Equal("Neue Strasse 2", afterLocation.GetProperty("address").GetString());
         Assert.Equal("Potsdam", afterLocation.GetProperty("city").GetString());
-        Assert.Equal("+4930000000", afterLocation.GetProperty("phoneNumber").GetString());
+        Assert.Equal("+79991234569", afterLocation.GetProperty("phoneNumber").GetString());
         Assert.Equal(
             "https://salon.example/",
             afterLocation.GetProperty("websiteUrl").GetString());
@@ -330,13 +330,13 @@ public sealed class AdminCatalogueWriteTests
         // Второй запрос меняет только контакты: адрес не откатывается.
         using (var contacts = await app.Client.PutAsJsonAsync(
                    $"api/salons/{salon.Id}/contact-info",
-                   new UpdateSalonContactInfoRequest("+4930999999", null)))
+                   new UpdateSalonContactInfoRequest("+79991234568", null)))
         {
             Assert.Equal(HttpStatusCode.NoContent, contacts.StatusCode);
         }
 
         var afterContacts = await ReadRowAsync(app.Client, SALONS, salon.Id);
-        Assert.Equal("+4930999999", afterContacts.GetProperty("phoneNumber").GetString());
+        Assert.Equal("+79991234568", afterContacts.GetProperty("phoneNumber").GetString());
         Assert.Null(afterContacts.GetProperty("websiteUrl").GetString());
         Assert.Equal("Neue Strasse 2", afterContacts.GetProperty("address").GetString());
     }

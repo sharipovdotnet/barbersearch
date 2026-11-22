@@ -68,7 +68,7 @@ public sealed class SalonRepository : RepositoryBase<Salon>, ISalonRepository
                 salon.TimeZoneId,
                 salon.Latitude,
                 salon.Longitude,
-                salon.PhoneNumber,
+                salon.PhoneNumber == null ? null : (string)salon.PhoneNumber,
                 salon.WebsiteUrl,
                 salon.IsActive,
                 salon.Kind,

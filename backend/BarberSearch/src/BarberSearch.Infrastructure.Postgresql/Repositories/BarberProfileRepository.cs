@@ -217,7 +217,7 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                     salon.PostalCode,
                     salon.Latitude,
                     salon.Longitude,
-                    salon.PhoneNumber,
+                    salon.PhoneNumber == null ? null : (string)salon.PhoneNumber,
                     salon.WebsiteUrl,
                     salon.OwnerUserId,
                     salon.ModerationStatus,
