@@ -88,6 +88,38 @@ public partial class BarberSalonCreatePage : ContentPage, IQueryAttributable
     }
 
     /// <summary>
+    /// Запоминает тип места, выбранный радиокнопкой.
+    /// </summary>
+    /// <remarks>
+    /// Пять вариантов рисуются <c>BindableLayout</c>, поэтому строка каталога веба повторяется
+    /// здесь как карточка: у формы нет отдельной команды выбора, и выбор пишется в ViewModel
+    /// из code-behind — так же, как выбранный салон в разделе «Салоны».
+    /// </remarks>
+    /// <param name="sender">Радиокнопка варианта.</param>
+    /// <param name="e">Новое состояние радиокнопки.</param>
+    private void OnKindChecked(object? sender, CheckedChangedEventArgs e)
+    {
+        if (e.Value
+            && sender is RadioButton { BindingContext: BarberSalonKindOption option })
+        {
+            _viewModel.SelectedKindOption = option;
+        }
+    }
+
+    /// <summary>
+    /// Выбирает тип места нажатием на всю карточку, а не только на кружок.
+    /// </summary>
+    /// <param name="sender">Распознаватель нажатия карточки.</param>
+    /// <param name="e">Параметр карточки — сам вариант типа места.</param>
+    private void OnKindTapped(object? sender, TappedEventArgs e)
+    {
+        if (e.Parameter is BarberSalonKindOption option)
+        {
+            _viewModel.SelectedKindOption = option;
+        }
+    }
+
+    /// <summary>
     /// Подставляет город из выбранной подсказки и убирает клавиатуру.
     /// </summary>
     /// <param name="sender">Распознаватель нажатия строки.</param>

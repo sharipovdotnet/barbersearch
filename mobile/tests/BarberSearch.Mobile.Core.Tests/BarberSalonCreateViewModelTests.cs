@@ -65,7 +65,9 @@ public sealed class BarberSalonCreateViewModelTests
         Assert.Same(viewModel.KindOptions[0], viewModel.SelectedKindOption);
         Assert.Equal(PlaceKind.Salon, viewModel.SelectedKindOption.Kind);
         Assert.Equal("Барбершоп", viewModel.SelectedKindOption.Label);
-        Assert.Equal("обычный салон со штатом", viewModel.KindHint);
+        Assert.Equal("обычный салон со штатом", viewModel.SelectedKindOption.Hint);
+        Assert.True(viewModel.KindOptions[0].IsSelected);
+        Assert.All(viewModel.KindOptions.Skip(1), option => Assert.False(option.IsSelected));
         Assert.True(viewModel.IsListed);
         Assert.False(viewModel.CanToggleListing);
         Assert.Equal("Отправить на проверку", viewModel.SubmitText);
@@ -125,6 +127,24 @@ public sealed class BarberSalonCreateViewModelTests
     }
 
     [Fact]
+    public void SelectingKind_MarksExactlyOneRadioCard()
+    {
+        var viewModel = new Harness().ViewModel;
+
+        Assert.True(viewModel.KindOptions[0].IsSelected);
+        Assert.All(viewModel.KindOptions.Skip(1), option => Assert.False(option.IsSelected));
+
+        SelectKind(viewModel, PlaceKind.Home);
+
+        Assert.True(
+            viewModel.KindOptions.Single(option => option.Kind == PlaceKind.Home).IsSelected);
+        Assert.Single(viewModel.KindOptions, option => option.IsSelected);
+        Assert.All(
+            viewModel.KindOptions.Where(option => option.Kind != PlaceKind.Home),
+            option => Assert.False(option.IsSelected));
+    }
+
+    [Fact]
     public void KindHelpers_RepeatWebRules()
     {
         Assert.True(BarberSalonKindOption.DefaultIsListed(PlaceKind.Salon));
@@ -149,7 +169,7 @@ public sealed class BarberSalonCreateViewModelTests
 
         Assert.False(viewModel.IsListed);
         Assert.True(viewModel.CanToggleListing);
-        Assert.Equal("принимаете только вы", viewModel.KindHint);
+        Assert.Equal("принимаете только вы", viewModel.SelectedKindOption.Hint);
         Assert.Equal("Создать место", viewModel.SubmitText);
 
         viewModel.IsListed = true;
@@ -166,7 +186,7 @@ public sealed class BarberSalonCreateViewModelTests
 
         Assert.False(viewModel.IsListed);
         Assert.False(viewModel.CanToggleListing);
-        Assert.Equal("адрес виден в карточке", viewModel.KindHint);
+        Assert.Equal("адрес виден в карточке", viewModel.SelectedKindOption.Hint);
         Assert.Equal("Создать место", viewModel.SubmitText);
     }
 

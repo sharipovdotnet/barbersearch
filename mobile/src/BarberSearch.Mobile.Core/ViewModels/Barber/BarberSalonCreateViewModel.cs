@@ -127,6 +127,7 @@ public sealed partial class BarberSalonCreateViewModel : ObservableObject
 
         KindOptions = BarberSalonKindOption.CreateAll();
         _selectedKindOption = KindOptions[0];
+        _selectedKindOption.IsSelected = true;
         _isListed = BarberSalonKindOption.DefaultIsListed(_selectedKindOption.Kind);
 
         TimeZones = SalonTimeZones.Build(TimeZoneInfo.Local.Id);
@@ -139,18 +140,12 @@ public sealed partial class BarberSalonCreateViewModel : ObservableObject
     public IReadOnlyList<BarberSalonKindOption> KindOptions { get; }
 
     /// <summary>
-    /// Выбранный тип места; для пикера — двусторонняя привязка.
+    /// Выбранный тип места; в радио-группе выбран ровно один вариант.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(KindHint))]
     [NotifyPropertyChangedFor(nameof(CanToggleListing))]
     [NotifyPropertyChangedFor(nameof(SubmitText))]
     private BarberSalonKindOption _selectedKindOption;
-
-    /// <summary>
-    /// Подсказка выбранного типа места: «обычный салон со штатом» и соседние.
-    /// </summary>
-    public string KindHint => SelectedKindOption.Hint;
 
     /// <summary>
     /// Переключатель «Показывать в каталоге» доступен: только кабинет.
@@ -520,11 +515,15 @@ public sealed partial class BarberSalonCreateViewModel : ObservableObject
     /// <param name="value">Новый тип места.</param>
     partial void OnSelectedKindOptionChanged(BarberSalonKindOption value)
     {
+        foreach (var option in KindOptions)
+        {
+            option.IsSelected = ReferenceEquals(option, value);
+        }
+
         IsListed = BarberSalonKindOption.DefaultIsListed(value.Kind);
         SetError(ref _isListedError, nameof(IsListedError));
         FormError = null;
 
-        OnPropertyChanged(nameof(KindHint));
         OnPropertyChanged(nameof(CanToggleListing));
         OnPropertyChanged(nameof(SubmitText));
         OnPropertyChanged(nameof(IsListed));

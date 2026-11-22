@@ -11,15 +11,60 @@
     Shell.TabBarIsVisible="False"
     Title="{loc:Translate Key='Создать салон'}">
 
+    <ContentPage.Resources>
+        <!--
+            Только кружок радио: подписи живут рядом с кнопкой, а не в RadioButton.Content.
+            Android не умеет рисовать View внутри Content — ContentPresenter не передаёт
+            содержимому BindingContext варианта, и Text остаётся пустым. Отдельный шаблон
+            даёт кружку тот же primary-цвет и точку, что у веб-радио.
+        -->
+        <ControlTemplate x:Key="PlaceKindRadioTemplate">
+            <Border
+                HeightRequest="16"
+                HorizontalOptions="Start"
+                StrokeShape="RoundRectangle 8"
+                StrokeThickness="1"
+                VerticalOptions="Start"
+                WidthRequest="16">
+                <VisualStateManager.VisualStateGroups>
+                    <VisualStateGroupList>
+                        <VisualStateGroup x:Name="CheckedStates">
+                            <VisualState x:Name="Checked">
+                                <VisualState.Setters>
+                                    <Setter Property="Stroke" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                                    <Setter TargetName="Dot" Property="Opacity" Value="1" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Unchecked">
+                                <VisualState.Setters>
+                                    <Setter Property="Stroke" Value="{AppThemeBinding Light={StaticResource Input}, Dark={StaticResource InputDark}}" />
+                                    <Setter TargetName="Dot" Property="Opacity" Value="0" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateGroupList>
+                </VisualStateManager.VisualStateGroups>
+                <Ellipse
+                    x:Name="Dot"
+                    Fill="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                    HeightRequest="8"
+                    HorizontalOptions="Center"
+                    Opacity="0"
+                    VerticalOptions="Center"
+                    WidthRequest="8" />
+            </Border>
+        </ControlTemplate>
+    </ContentPage.Resources>
+
     <!--
         Создание собственного места приёма: веб-форма владельца в мобильной подаче.
         Это страница Shell поверх кабинета, а не модальное окно веба: возврат (системный
         жест или кнопка «назад») и есть отмена, поэтому отдельной кнопки «Отмена» нет.
 
         Почтового индекса в форме нет: веб тоже скрывает его владельцу при создании.
-        Тип места — пикер с подсказкой вместо пяти радио-строк: на телефоне пять строк
-        с длинными подписями занимают весь первый экран, а выбранный пункт всё равно
-        читается одной строкой. Часовой пояс — курированный список: у нативного Picker
+        Тип места — пять радио-карточек, как радио-группа веба: у каждого варианта своя
+        подпись и своя подсказка, поэтому выбранный пункт не приходится читать одной
+        строкой под пикером. Часовой пояс — курированный список: у нативного Picker
         нет поиска, а поясов в базе IANA больше пятисот.
 
         Подсказки города и адреса — строки прямо под полем, как в «Поиске»: у MAUI нет
@@ -36,7 +81,7 @@
                 Text="{loc:Translate Key='Публичное место проверит администратор, и оно появится в поиске после одобрения. Скрытое место не проходит проверку и доступно для записи сразу.'}"
                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
-            <!-- Тип места: подпись и подсказка меняются вместе с выбором. -->
+            <!-- Тип места: пять радио-карточек веба, у каждой подпись и подсказка. -->
             <Border
                 Padding="16"
                 Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
@@ -47,17 +92,61 @@
                         FontSize="14"
                         Text="{loc:Translate Key='Что это за место?'}" />
 
-                    <Picker
-                        ItemDisplayBinding="{Binding Label, x:DataType=vm:BarberSalonKindOption}"
-                        ItemsSource="{Binding KindOptions}"
-                        SelectedItem="{Binding SelectedKindOption, Mode=TwoWay}"
-                        Title="{loc:Translate Key='Выберите тип'}" />
+                    <!--
+                        Пять карточек — как радио-группа веба. Кружок — RadioButton без
+                        содержимого, подпись и подсказка — соседние Label: так текст
+                        привязан к варианту, а не к ContentPresenter. Вся карточка
+                        нажимается и подсвечивается триггером по IsSelected.
+                    -->
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding KindOptions}" Spacing="8">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BarberSalonKindOption">
+                                <Border
+                                    Padding="12"
+                                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                    StrokeShape="RoundRectangle 10">
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnKindTapped" />
+                                    </Border.GestureRecognizers>
+                                    <Border.Triggers>
+                                        <DataTrigger
+                                            Binding="{Binding IsSelected}"
+                                            TargetType="Border"
+                                            Value="True">
+                                            <Setter Property="Stroke" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                                            <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource PrimarySoft}, Dark={StaticResource PrimarySoftDark}}" />
+                                        </DataTrigger>
+                                    </Border.Triggers>
 
-                    <Label
-                        FontSize="12"
-                        LineBreakMode="WordWrap"
-                        Text="{Binding KindHint}"
-                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12" RowDefinitions="Auto">
+                                        <RadioButton
+                                            CheckedChanged="OnKindChecked"
+                                            ControlTemplate="{StaticResource PlaceKindRadioTemplate}"
+                                            GroupName="salon-place-kind"
+                                            IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                            MinimumHeightRequest="16"
+                                            MinimumWidthRequest="16"
+                                            SemanticProperties.Description="{Binding Label}"
+                                            SemanticProperties.Hint="{Binding Hint}"
+                                            VerticalOptions="Start" />
+
+                                        <VerticalStackLayout Grid.Column="1" Spacing="2">
+                                            <Label
+                                                FontFamily="GeistMedium"
+                                                FontSize="14"
+                                                LineBreakMode="WordWrap"
+                                                Text="{Binding Label}" />
+                                            <Label
+                                                FontSize="12"
+                                                LineBreakMode="WordWrap"
+                                                Text="{Binding Hint}"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        </VerticalStackLayout>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
 
                     <!--
                         Каталог: у барбершопа и студии флаг включён и не снимается,

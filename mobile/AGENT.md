@@ -1027,12 +1027,19 @@ in Core owns both base addresses.
   gesture is the cancel and no «Отмена» row is spent; the creation form reads nothing on open,
   so it arms no retry loop. The write is `POST api/salons/own` with the same body and the same
   validation as the web's owner form; there is no postal code (the web hides it for owner create
-  too), the kind is a `Picker` plus its hint instead of five radio rows, and the time zone is the
-  curated `SalonTimeZones` list because a native `Picker` has no search. City and address
+  too), the kind is the web's five radio cards — each with its own label and one-line hint, the
+  selected card framed and tinted like `has-[:checked]` — and the time zone is the curated
+  `SalonTimeZones` list because a native `Picker` has no search. Each card is a `Border` with the
+  selected frame and the `bg-primary/5` tint; the radio is a 16 pt circle-only `RadioButton` with
+  its own `ControlTemplate`, and the label and hint are its siblings. They are deliberately not
+  `RadioButton.Content`: Android's `ContentPresenter` does not pass the option's `BindingContext`
+  into that content, so the labels came out with empty text. The whole `Border` carries the tap,
+  while the radio keeps the group and the `Checked`/`Unchecked` states. The section's action
+  keeps the web's «Создать салон» wording; submit reads the web's «Отправить на проверку» for a
+  listed place and «Создать место» for a hidden one. City and address
   suggestions are inline rows under their fields, with the same debounce and minimum lengths as
   «Поиск»; `providerId` never leaves the form. Coordinates accept a comma decimal separator —
-  the decimal key of a Russian phone keyboard. Submit reads «Отправить на проверку» for a listed
-  place and «Создать место» for a hidden one. After `201` the page writes «Салон отправлен на
+  the decimal key of a Russian phone keyboard. After `201` the page writes «Салон отправлен на
   проверку.» or «Место приёма создано.» into the section's announcement and pops; the section
   re-reads on `Pop`, so the page does not call `ActivateAsync` itself. The write never retries
   itself, and the page closes itself when the route arrives without an owner or a barber profile.
