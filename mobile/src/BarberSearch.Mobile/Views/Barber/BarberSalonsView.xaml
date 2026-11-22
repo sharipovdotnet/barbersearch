@@ -8,9 +8,13 @@
     x:DataType="vm:BarberSalonsViewModel">
 
     <!--
-        Раздел «Салоны»: привязанные места приёма, основной салон и добавление из
-        публичного каталога. Порядок и признак «основной» приходят с сервера как есть:
-        раздел их не пересобирает.
+        Раздел «Салоны»: привязанные места приёма и основной салон. Порядок и признак
+        «основной» приходят с сервера как есть: раздел их не пересобирает.
+
+        Поиск нового места из публичного каталога живёт отдельной страницей
+        «Добавить салон»: у раздела остаётся прочитанный список и объявления, а форма
+        поиска и привязки открывается второй кнопкой. Так раздел не несёт двух работ
+        сразу, а у формы свой возврат.
 
         Мобильные действия строки (звонок, карта, копирование адреса и переход к
         расписанию этого салона) собраны в code-behind: Core не знает ни Launcher,
@@ -25,17 +29,35 @@
             <VerticalStackLayout Padding="0,0,0,24" Spacing="12">
 
                 <!--
-                    Создание собственного места приёма: путь веба POST api/salons/own.
-                    Кнопка стоит первой и на всю ширину — это главное действие раздела,
-                    а на телефоне палец должен попадать в неё с первого раза. Видна только
-                    после первого успешного чтения: пока список не прочитан, неизвестно,
-                    привязан ли профиль, и форма создания открывалась бы вслепую.
+                    Два главных действия раздела, в порядке веба: сначала создать своё
+                    место приёма (POST api/salons/own), затем добавить существующее из
+                    каталога. В вебе это одна строка с flex-wrap; на телефоне длинные
+                    русские подписи и иконки не делят ширину 320 pt на две равные
+                    колонки, поэтому кнопки стоят друг под другом на всю ширину и по
+                    48 pt — палец попадает в них с первого раза.
+
+                    Иконки — lucide plus и map-pin веба. Цвет идёт за темой через пару
+                    файлов на тему: на основной кнопке подпись PrimaryForeground
+                    (#FAFAFA в светлой, #171717 в тёмной), и один запечённый SVG
+                    не подошёл бы. Ссылка на .png — так же, как у иконок вкладок.
+
+                    Обе кнопки видны только после первого успешного чтения: пока список
+                    не прочитан, неизвестен профиль мастера и нечего привязывать.
                 -->
-                <Button
-                    Clicked="OnCreateSalonClicked"
-                    HeightRequest="48"
-                    IsVisible="{Binding HasLoaded}"
-                    Text="{loc:Translate Key='Создать салон'}" />
+                <VerticalStackLayout IsVisible="{Binding HasLoaded}" Spacing="8">
+                    <Button
+                        Clicked="OnCreateSalonClicked"
+                        ContentLayout="Left,8"
+                        HeightRequest="48"
+                        ImageSource="{AppThemeBinding Light=plus_light.png, Dark=plus_dark.png}"
+                        Text="{loc:Translate Key='Создать салон'}" />
+                    <Button
+                        Clicked="OnAddSalonClicked"
+                        ContentLayout="Left,8"
+                        HeightRequest="48"
+                        ImageSource="{AppThemeBinding Light=map_pin_light.png, Dark=map_pin_dark.png}"
+                        Text="{loc:Translate Key='Добавить салон'}" />
+                </VerticalStackLayout>
 
                 <!-- Баннер о результате привязки или смены основного салона. -->
                 <Border
@@ -353,184 +375,6 @@
                         </DataTemplate>
                     </BindableLayout.ItemTemplate>
                 </VerticalStackLayout>
-
-                <!-- Добавление из публичного каталога: показывается, когда список уже прочитан. -->
-                <Border
-                    Padding="16"
-                    IsVisible="{Binding HasLoaded}"
-                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
-                    StrokeShape="RoundRectangle 10">
-                    <VerticalStackLayout Spacing="8">
-                        <VerticalStackLayout Spacing="2">
-                            <Label
-                                FontFamily="GeistSemiBold"
-                                FontSize="16"
-                                Text="{loc:Translate Key='Добавить салон'}" />
-                            <Label
-                                FontSize="12"
-                                LineBreakMode="WordWrap"
-                                Text="{loc:Translate Key='Найдите салон в каталоге и выберите его. Без салона расписание и запись не работают.'}"
-                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                        </VerticalStackLayout>
-
-                        <VerticalStackLayout Spacing="4">
-                            <Label
-                                FontSize="12"
-                                Text="{loc:Translate Key='Город'}"
-                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                            <Entry
-                                Placeholder="{loc:Translate Key='Например, Екатеринбург'}"
-                                Text="{Binding CatalogCity}" />
-                        </VerticalStackLayout>
-
-                        <VerticalStackLayout Spacing="4">
-                            <Label
-                                FontSize="12"
-                                Text="{loc:Translate Key='Поиск'}"
-                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                            <Entry
-                                Placeholder="{loc:Translate Key='Название или адрес'}"
-                                ReturnCommand="{Binding SearchCatalogCommand}"
-                                ReturnType="Search"
-                                Text="{Binding CatalogQuery}" />
-                        </VerticalStackLayout>
-
-                        <!-- Подсказка о минимуме: строка короче двух символов не ищется. -->
-                        <Label
-                            FontSize="12"
-                            LineBreakMode="WordWrap"
-                            Text="{Binding CatalogHint}"
-                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
-                            <Label.Triggers>
-                                <Trigger
-                                    Property="Text"
-                                    TargetType="Label"
-                                    Value="">
-                                    <Setter Property="IsVisible" Value="False" />
-                                </Trigger>
-                            </Label.Triggers>
-                        </Label>
-
-                        <HorizontalStackLayout
-                            IsVisible="{Binding IsCatalogLoading}"
-                            Spacing="8">
-                            <ActivityIndicator
-                                IsRunning="{Binding IsCatalogLoading}"
-                                IsVisible="{Binding IsCatalogLoading}"
-                                VerticalOptions="Center" />
-                            <Label
-                                Text="{loc:Translate Key='Загружаем каталог…'}"
-                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
-                                VerticalOptions="Center" />
-                        </HorizontalStackLayout>
-
-                        <!-- Каталог не ответил: причина и автоповтор. -->
-                        <VerticalStackLayout IsVisible="{Binding ShowCatalogError}" Spacing="8">
-                            <Label
-                                LineBreakMode="WordWrap"
-                                Text="{Binding CatalogError}"
-                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
-                            <Label
-                                FontSize="12"
-                                IsVisible="{Binding IsCatalogAutoRetrying}"
-                                Text="{loc:Translate Key='Пробуем снова…'}"
-                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                        </VerticalStackLayout>
-
-                        <!-- Ничего не нашлось: та же строка, что в вебе. -->
-                        <Label
-                            FontSize="12"
-                            IsVisible="{Binding ShowCatalogEmpty}"
-                            LineBreakMode="WordWrap"
-                            Text="{loc:Translate Key='Ничего не найдено.'}"
-                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-
-                        <!-- Результаты: строка выбирается радиокнопкой, привязка — кнопкой ниже. -->
-                        <VerticalStackLayout IsVisible="{Binding ShowCatalogResults}" Spacing="4">
-                            <Label
-                                FontSize="12"
-                                Text="{loc:Translate Key='Результаты поиска'}"
-                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Catalog}" Spacing="4">
-                                <BindableLayout.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:BarberSalonCatalogItem">
-                                        <Border
-                                            Padding="4,8"
-                                            Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
-                                            StrokeShape="RoundRectangle 10">
-                                            <RadioButton
-                                                GroupName="salon-catalog-result"
-                                                CheckedChanged="OnCatalogSalonChecked">
-                                                <RadioButton.Content>
-                                                    <VerticalStackLayout
-                                                        x:DataType="vm:BarberSalonCatalogItem"
-                                                        Padding="0,4"
-                                                        Spacing="2">
-                                                        <Label
-                                                            FontFamily="GeistMedium"
-                                                            FontSize="14"
-                                                            LineBreakMode="WordWrap"
-                                                            Text="{Binding Name}" />
-                                                        <Label
-                                                            FontSize="12"
-                                                            LineBreakMode="WordWrap"
-                                                            Text="{Binding FullAddress}"
-                                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                                                        <Label
-                                                            FontSize="12"
-                                                            Text="{Binding KindText}"
-                                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                                                    </VerticalStackLayout>
-                                                </RadioButton.Content>
-                                            </RadioButton>
-                                        </Border>
-                                    </DataTemplate>
-                                </BindableLayout.ItemTemplate>
-                            </VerticalStackLayout>
-                        </VerticalStackLayout>
-
-                        <!-- Первый салон профиля становится основным: у него выбора нет. -->
-                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                            <Switch
-                                IsToggled="{Binding MakePrimary, Mode=TwoWay}"
-                                VerticalOptions="Center">
-                                <Switch.Triggers>
-                                    <DataTrigger
-                                        Binding="{Binding FirstSalonBecomesPrimary}"
-                                        TargetType="Switch"
-                                        Value="True">
-                                        <Setter Property="IsEnabled" Value="False" />
-                                    </DataTrigger>
-                                </Switch.Triggers>
-                            </Switch>
-                            <Label
-                                Grid.Column="1"
-                                FontSize="12"
-                                LineBreakMode="WordWrap"
-                                Text="{Binding PrimaryToggleText}"
-                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
-                                VerticalTextAlignment="Center" />
-                        </Grid>
-
-                        <Label
-                            IsVisible="{Binding HasAddSalonError}"
-                            LineBreakMode="WordWrap"
-                            Text="{Binding AddSalonError}"
-                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
-
-                        <Button
-                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
-                            Command="{Binding DismissAddSalonErrorCommand}"
-                            HorizontalOptions="Start"
-                            IsVisible="{Binding HasAddSalonError}"
-                            Text="{loc:Translate Key='Закрыть'}"
-                            TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
-
-                        <Button
-                            Command="{Binding AddSalonCommand}"
-                            Text="{Binding AddSalonButtonText}" />
-                    </VerticalStackLayout>
-                </Border>
 
             </VerticalStackLayout>
         </ScrollView>

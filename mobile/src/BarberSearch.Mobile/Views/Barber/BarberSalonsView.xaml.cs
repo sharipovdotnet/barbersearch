@@ -5,7 +5,7 @@ using BarberSearch.Mobile.Core.ViewModels.Barber;
 namespace BarberSearch.Mobile.Views.Barber;
 
 /// <summary>
-/// Раздел «Салоны» кабинета мастера: привязанные места, основной салон и каталог.
+/// Раздел «Салоны» кабинета мастера: привязанные места и основной салон.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -16,14 +16,10 @@ namespace BarberSearch.Mobile.Views.Barber;
 /// Мобильные действия строки — звонок в салон, карта, копирование адреса — собраны здесь,
 /// потому что Core не знает платформенных API: <see cref="BarberSalonItem"/> отдаёт
 /// телефон, координаты и адрес, а «позвонить» или «открыть карту» — решение экрана.
-/// Переход к расписанию этого салона и создание нового места поднимают события:
-/// переключение разделов и переход на дочерний экран — дело страницы кабинета, а не раздела.
-/// </para>
-/// <para>
-/// Выбор строки каталога — единственное место, где кодовая часть пишет в состояние
-/// ViewModel: у <see cref="BarberSalonsViewModel"/> нет отдельной команды выбора, а
-/// <see cref="BarberSalonsViewModel.SelectedCatalogSalon"/> уже владеет этим состоянием
-/// и пересчитывает доступность привязки.
+/// Переход к расписанию этого салона, создание нового места и добавление существующего
+/// поднимают события: переключение разделов и переход на дочерний экран — дело страницы
+/// кабинета, а не раздела. Форма добавления живёт отдельной страницей «Добавить салон»:
+/// у раздела остаётся прочитанный список, поэтому выбора строки каталога здесь больше нет.
 /// </para>
 /// </remarks>
 public partial class BarberSalonsView : ContentView
@@ -69,12 +65,29 @@ public partial class BarberSalonsView : ContentView
     public event EventHandler? CreateSalonRequested;
 
     /// <summary>
+    /// Просит страницу открыть форму добавления салона из публичного каталога.
+    /// </summary>
+    /// <remarks>
+    /// Событие без данных: раздел уже знает профиль мастера и признак «есть салоны»,
+    /// а выбор маршрута и передачу владельца раздела делает страница кабинета.
+    /// </remarks>
+    public event EventHandler? AddSalonRequested;
+
+    /// <summary>
     /// Создаёт собственное место приёма: нажатие поднимает событие странице.
     /// </summary>
     /// <param name="sender">Кнопка «Создать салон».</param>
     /// <param name="e">Аргументы нажатия.</param>
     private void OnCreateSalonClicked(object? sender, EventArgs e) =>
         CreateSalonRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>
+    /// Добавляет существующий салон: нажатие поднимает событие странице.
+    /// </summary>
+    /// <param name="sender">Кнопка «Добавить салон».</param>
+    /// <param name="e">Аргументы нажатия.</param>
+    private void OnAddSalonClicked(object? sender, EventArgs e) =>
+        AddSalonRequested?.Invoke(this, EventArgs.Empty);
 
     /// <summary>
     /// Назначает салон основным: сервер сам снимает признак с прежнего.
@@ -210,18 +223,6 @@ public partial class BarberSalonsView : ContentView
         if (sender is Button { BindingContext: BarberSalonItem item })
         {
             ScheduleRequested?.Invoke(this, item.SalonId);
-        }
-    }
-
-    /// <summary>
-    /// Запоминает выбранную строку каталога: привязка доступна только после выбора.
-    /// </summary>
-    private void OnCatalogSalonChecked(object? sender, CheckedChangedEventArgs e)
-    {
-        if (e.Value
-            && sender is RadioButton { BindingContext: BarberSalonCatalogItem item })
-        {
-            _viewModel.SelectedCatalogSalon = item;
         }
     }
 }

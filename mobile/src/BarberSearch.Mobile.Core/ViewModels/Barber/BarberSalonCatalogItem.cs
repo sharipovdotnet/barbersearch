@@ -1,5 +1,6 @@
 using BarberSearch.Contracts.Salons.GetSalonDirectory;
 using BarberSearch.Domain.Salons;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace BarberSearch.Mobile.Core.ViewModels.Barber;
 
@@ -7,11 +8,18 @@ namespace BarberSearch.Mobile.Core.ViewModels.Barber;
 /// Строка публичного каталога салонов: то, что можно привязать к профилю.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Каталог отдаёт ровно поля выбора — идентификатор, название, город, адрес, пояс и вид
 /// места. Контактов и статуса модерации в нём нет: после привязки их покажет
 /// <see cref="BarberSalonItem"/> из ответа «Мои салоны», а не догадка из каталога.
+/// </para>
+/// <para>
+/// <see cref="IsSelected"/> — не выбор для отправки, а состояние кружка: <c>RadioButton</c>
+/// на Android не передаёт своему <c>Content</c> контекст строки, поэтому подписи стоят
+/// рядом с кружком, а сам кружок знает о выборе через это свойство.
+/// </para>
 /// </remarks>
-public sealed class BarberSalonCatalogItem
+public sealed partial class BarberSalonCatalogItem : ObservableObject
 {
     /// <summary>
     /// Создаёт строку из элемента каталога.
@@ -81,4 +89,10 @@ public sealed class BarberSalonCatalogItem
     /// Подпись вида места — та же, что у привязанного салона.
     /// </summary>
     public string KindText => BarberSalonItem.PlaceKindText(Kind);
+
+    /// <summary>
+    /// Строка выбрана радиокнопкой: <c>true</c> только у одного результата за раз.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSelected;
 }

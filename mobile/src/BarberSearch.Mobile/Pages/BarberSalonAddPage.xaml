@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.BarberSalonAddPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels.Barber;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:BarberSalonAddViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="{loc:Translate Key='Добавить салон'}">
+
+    <ContentPage.Resources>
+        <!--
+            Только кружок радио: подписи стоят рядом, а не в RadioButton.Content.
+            Android не передаёт содержимому BindingContext строки, и текст выводился
+            именем типа разметки. Отдельный шаблон даёт кружку тот же primary-цвет
+            и точку, что у веб-радио.
+        -->
+        <ControlTemplate x:Key="CatalogSalonRadioTemplate">
+            <Border
+                HeightRequest="16"
+                HorizontalOptions="Start"
+                StrokeShape="RoundRectangle 8"
+                StrokeThickness="1"
+                VerticalOptions="Start"
+                WidthRequest="16">
+                <VisualStateManager.VisualStateGroups>
+                    <VisualStateGroupList>
+                        <VisualStateGroup x:Name="CheckedStates">
+                            <VisualState x:Name="Checked">
+                                <VisualState.Setters>
+                                    <Setter Property="Stroke" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                                    <Setter TargetName="Dot" Property="Opacity" Value="1" />
+                                </VisualState.Setters>
+                            </VisualState>
+                            <VisualState x:Name="Unchecked">
+                                <VisualState.Setters>
+                                    <Setter Property="Stroke" Value="{AppThemeBinding Light={StaticResource Input}, Dark={StaticResource InputDark}}" />
+                                    <Setter TargetName="Dot" Property="Opacity" Value="0" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateGroupList>
+                </VisualStateManager.VisualStateGroups>
+                <Ellipse
+                    x:Name="Dot"
+                    Fill="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                    HeightRequest="8"
+                    HorizontalOptions="Center"
+                    Opacity="0"
+                    VerticalOptions="Center"
+                    WidthRequest="8" />
+            </Border>
+        </ControlTemplate>
+    </ContentPage.Resources>
+
+    <!--
+        Добавление существующего салона: поиск по публичному каталогу веба
+        (GET api/salons?city=&search=) и привязка к профилю мастера.
+
+        Это страница Shell поверх кабинета, а не модальное окно веба: возврат
+        (системный жест или кнопка «назад») и есть отмена, поэтому отдельной кнопки
+        «Отмена» нет. Заголовок страницы уже говорит «Добавить салон», поэтому
+        подпись под ним не повторяет название, а объясняет, зачем экран: текст тот же,
+        что в веб-диалоге.
+
+        Список «Мои салоны» остаётся в скрытом разделе кабинета: после успешной
+        привязки страница объявляет «Салон добавлен.» и закрывается, а раздел
+        перечитывает список на Pop. Устаревшая привязка (409/404) оставляет страницу
+        открытой с причиной — отдельных чтений скрытого списка здесь нет.
+    -->
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="16">
+
+            <Label
+                FontSize="12"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='Найдите салон в каталоге и выберите его. Без салона расписание и запись не работают.'}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+            <VerticalStackLayout Spacing="4">
+                <Label
+                    FontSize="12"
+                    Text="{loc:Translate Key='Город'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Entry
+                    Placeholder="{loc:Translate Key='Например, Екатеринбург'}"
+                    Text="{Binding CatalogCity}" />
+            </VerticalStackLayout>
+
+            <VerticalStackLayout Spacing="4">
+                <Label
+                    FontSize="12"
+                    Text="{loc:Translate Key='Поиск'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Entry
+                    Placeholder="{loc:Translate Key='Название или адрес'}"
+                    ReturnCommand="{Binding SearchCatalogCommand}"
+                    ReturnType="Search"
+                    Text="{Binding CatalogQuery}" />
+            </VerticalStackLayout>
+
+            <!-- Подсказка о минимуме: строка короче двух символов не ищется. -->
+            <Label
+                FontSize="12"
+                LineBreakMode="WordWrap"
+                Text="{Binding CatalogHint}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
+                <Label.Triggers>
+                    <Trigger
+                        Property="Text"
+                        TargetType="Label"
+                        Value="">
+                        <Setter Property="IsVisible" Value="False" />
+                    </Trigger>
+                </Label.Triggers>
+            </Label>
+
+            <HorizontalStackLayout
+                IsVisible="{Binding IsCatalogLoading}"
+                Spacing="8">
+                <ActivityIndicator
+                    IsRunning="{Binding IsCatalogLoading}"
+                    IsVisible="{Binding IsCatalogLoading}"
+                    VerticalOptions="Center" />
+                <Label
+                    Text="{loc:Translate Key='Загружаем каталог…'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                    VerticalOptions="Center" />
+            </HorizontalStackLayout>
+
+            <!-- Каталог не ответил: причина и автоповтор. -->
+            <VerticalStackLayout IsVisible="{Binding ShowCatalogError}" Spacing="8">
+                <Label
+                    LineBreakMode="WordWrap"
+                    Text="{Binding CatalogError}"
+                    TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                <Label
+                    FontSize="12"
+                    IsVisible="{Binding IsCatalogAutoRetrying}"
+                    Text="{loc:Translate Key='Пробуем снова…'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+            </VerticalStackLayout>
+
+            <!-- Ничего не нашлось: та же строка, что в вебе. -->
+            <Label
+                FontSize="12"
+                IsVisible="{Binding ShowCatalogEmpty}"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='Ничего не найдено.'}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+            <!-- Результаты: строка выбирается целиком, кружок показывает выбор. -->
+            <VerticalStackLayout IsVisible="{Binding ShowCatalogResults}" Spacing="4">
+                <Label
+                    FontSize="12"
+                    Text="{loc:Translate Key='Результаты поиска'}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Catalog}" Spacing="4">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BarberSalonCatalogItem">
+                            <Border
+                                Padding="8"
+                                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                StrokeShape="RoundRectangle 10">
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnCatalogSalonTapped" />
+                                </Border.GestureRecognizers>
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                    <RadioButton
+                                        CheckedChanged="OnCatalogSalonChecked"
+                                        ControlTemplate="{StaticResource CatalogSalonRadioTemplate}"
+                                        GroupName="salon-catalog-result"
+                                        IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                        MinimumHeightRequest="16"
+                                        MinimumWidthRequest="16"
+                                        SemanticProperties.Description="{Binding Name}"
+                                        VerticalOptions="Start" />
+                                    <VerticalStackLayout
+                                        Grid.Column="1"
+                                        Padding="0,2,0,0"
+                                        Spacing="2">
+                                        <Label
+                                            FontFamily="GeistMedium"
+                                            FontSize="14"
+                                            LineBreakMode="WordWrap"
+                                            Text="{Binding Name}" />
+                                        <Label
+                                            FontSize="12"
+                                            LineBreakMode="WordWrap"
+                                            Text="{Binding FullAddress}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                        <Label
+                                            FontSize="12"
+                                            Text="{Binding KindText}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    </VerticalStackLayout>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+            </VerticalStackLayout>
+
+            <!-- Первый салон профиля становится основным: у него выбора нет. -->
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                <Switch
+                    IsToggled="{Binding MakePrimary, Mode=TwoWay}"
+                    VerticalOptions="Center">
+                    <Switch.Triggers>
+                        <DataTrigger
+                            Binding="{Binding FirstSalonBecomesPrimary}"
+                            TargetType="Switch"
+                            Value="True">
+                            <Setter Property="IsEnabled" Value="False" />
+                        </DataTrigger>
+                    </Switch.Triggers>
+                </Switch>
+                <Label
+                    Grid.Column="1"
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding PrimaryToggleText}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                    VerticalTextAlignment="Center" />
+            </Grid>
+
+            <Label
+                IsVisible="{Binding HasAddSalonError}"
+                LineBreakMode="WordWrap"
+                Text="{Binding AddSalonError}"
+                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+
+            <Button
+                BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                Command="{Binding DismissAddSalonErrorCommand}"
+                HorizontalOptions="Start"
+                IsVisible="{Binding HasAddSalonError}"
+                Text="{loc:Translate Key='Закрыть'}"
+                TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+
+            <!-- Привязка — запись: сама не повторяется, подпись меняется от состояния. -->
+            <Button
+                Command="{Binding AddSalonCommand}"
+                HeightRequest="48"
+                Text="{Binding AddSalonButtonText}" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

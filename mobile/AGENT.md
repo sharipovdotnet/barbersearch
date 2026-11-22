@@ -877,14 +877,15 @@ in Core owns both base addresses.
   profile's working set, not a shop window: every attachment comes back, including a salon
   awaiting moderation or rejected, with its status and rejection reason, and «Не в каталоге» for
   a place that is no longer listed; the server's order and primary flag are shown as returned.
-  A new place is found in the public `GET api/salons?city=&search=` directory with the web's
-  300 ms pause and two-character minimum, and the first attachment is made primary. «Сделать
-  основным» (`PUT …/salons/{salonId}/primary`) exists only on the phone: the web can choose the
-  primary salon only while attaching it, while a barber changing workplaces needs one tap. The
-  row also calls the salon, opens it on a map (`geo:`, falling back to a Google Maps link),
+  A new place is found on the separate `barber-salon-add` page (see the «Adding a salon from the
+  directory…» bullet below), which keeps the web's 300 ms pause and two-character minimum, and
+  the first attachment is made primary. «Сделать основным» (`PUT …/salons/{salonId}/primary`)
+  exists only on the phone: the web can choose the primary salon only while attaching it, while
+  a barber changing workplaces needs one tap. The row also calls the salon, opens it on a map
+  (`geo:`, falling back to a Google Maps link),
   copies the address and jumps to that salon's schedule; the first three are platform intents, and
-  a failure there is silent — a shortcut is a hint, not data. Creating a salon and managing its
-  barbers stay on the web (below).
+  a failure there is silent — a shortcut is a hint, not data. Creating a salon has its own page
+  (below), while managing a salon's barbers stays on the web.
 
 - **The bell and the share sheet are the cabinet's other two mobile additions.** The header bell
   is a 44×44 target with a badge capped at «99+» (`BarberProfileText.BadgeCount`). The count is
@@ -1057,6 +1058,43 @@ in Core owns both base addresses.
   проверку.» or «Место приёма создано.» into the section's announcement and pops; the section
   re-reads on `Pop`, so the page does not call `ActivateAsync` itself. The write never retries
   itself, and the page closes itself when the route arrives without an owner or a barber profile.
+
+- **Adding a salon from the directory is its own page, and the section keeps only its list.**
+  «Добавить салон» is the second button in «Салоны» and opens `barber-salon-add` over the
+  cabinet stack; «Создать салон» stays first. Both are full width, 48 pt, visible only after
+  the first successful read and stacked at 8 pt in the web's order. The directory form — city,
+  search, results, the primary switch and the attach submit — used to be a `Border` inside the
+  section. The move is not cosmetic: searching the public directory and picking a place is a
+  task with its own beginning and end, while the section's job is the working list and its
+  row actions; one `ScrollView` answering both questions carried two jobs and two error
+  surfaces. The page follows the web's `SalonPickerDialog`, so the wording, the 300 ms pause,
+  the two-character minimum and the primary-switch behaviour are unchanged, and the
+  `409`/`404` duplicate/missing mapping moved with the catalog. The web's action row is a
+  `flex-wrap` line of two primary buttons with icons; at 320 pt the long Russian labels plus
+  the marks do not fit two equal columns, so the phone stacks two full-width buttons instead
+  of shrinking the labels. Both buttons carry the web's lucide icon before the label — `Plus`
+  for «Создать салон» (`barber-salons-page.tsx`) and `MapPin` for «Добавить салон»
+  (`barber-salon-picker-dialog.tsx`) — at about 18 dp via `ContentLayout="Left,8"`. A single
+  baked SVG cannot follow the button's `PrimaryForeground` (#FAFAFA in the light theme,
+  #171717 in the dark), so each mark ships twice as `plus_light.svg`/`plus_dark.svg` and
+  `map_pin_light.svg`/`map_pin_dark.svg` (lucide geometry on a 24 canvas, stroke 2, 18 dp) and
+  `AppThemeBinding` on `ImageSource` picks the file for the theme; the XAML names them with
+  `.png`, as the tab icons do. `BarberSalonAddViewModel` is a page ViewModel rather than a
+  cabinet section: `Initialize` takes the profile id and `HasSalons` from the section,
+  `Attached` carries «Салон добавлен.» — the page writes it into the section's announcement
+  and pops — and `StartAutoRetry`/`StopAutoRetry` follow `PageVisibility` so the catalog retry
+  stops in the background. The ViewModel never reads or reloads the salon list: the section
+  re-reads on `Pop`. One deliberate mobile deviation: a stale attach (duplicate or missing)
+  shows its reason and keeps the page open without reloading the hidden list, because the page
+  covers it and the list heals on `Pop`; the web reloads only because its dialog sits over a
+  visible list. The result rows keep the same solution as the create-salon kind cards: Android
+  does not pass a row's binding context into `RadioButton.Content`, which rendered the layout
+  type name instead of the labels, so the circle is a separate 16 pt `RadioButton` with the
+  circle-only template, the three labels are its siblings, and the row's `IsSelected` follows
+  `SelectedCatalogSalon`; the whole row is tappable. The catalog cases move to
+  `BarberSalonAddViewModelTests`, together with an empty-section case for
+  `FirstSalonBecomesPrimary`/`PrimaryToggleText` and a radio-marker case; the suite goes from
+  1665 to 1667 tests.
 
 ## 6. What the backend still lacks
 

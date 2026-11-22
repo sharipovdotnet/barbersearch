@@ -312,9 +312,9 @@ public static class MauiProgram
 
         // Дочерние экраны кабинета живут один визит и открываются поверх его стека:
         // форма записи клиента, перенос, заметка, онбординг, инбокс, правка карточки,
-        // редактор услуги, создание салона и экран одного фото портфолио. Свои чтения
-        // каждый из них повторяет сам (AutoRetryLoop регистрируется transient выше),
-        // поэтому второго состояния между заходами нет.
+        // редактор услуги, создание и добавление салона и экран одного фото портфолио.
+        // Свои чтения каждый из них повторяет сам (AutoRetryLoop регистрируется transient
+        // выше), поэтому второго состояния между заходами нет.
         builder.Services.AddTransient<BarberBookingCreateViewModel>();
         builder.Services.AddTransient<BarberBookingRescheduleViewModel>();
         builder.Services.AddTransient<BarberBookingNoteViewModel>();
@@ -323,6 +323,7 @@ public static class MauiProgram
         builder.Services.AddTransient<BarberProfileEditViewModel>();
         builder.Services.AddTransient<BarberServiceEditorViewModel>();
         builder.Services.AddTransient<BarberSalonCreateViewModel>();
+        builder.Services.AddTransient<BarberSalonAddViewModel>();
         builder.Services.AddTransient<BarberPhotoViewModel>();
 
         builder.Services.AddTransient<BarberBookingCreatePage>();
@@ -333,6 +334,7 @@ public static class MauiProgram
         builder.Services.AddTransient<BarberProfileEditPage>();
         builder.Services.AddTransient<BarberServiceEditorPage>();
         builder.Services.AddTransient<BarberSalonCreatePage>();
+        builder.Services.AddTransient<BarberSalonAddPage>();
         builder.Services.AddTransient<BarberPhotoPage>();
 
         builder.Services.AddTransient<SearchPage>();
