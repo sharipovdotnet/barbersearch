@@ -1,6 +1,5 @@
 using System.Net;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfileSalons;
-using BarberSearch.Contracts.Salons.GetSalonDirectory;
 using BarberSearch.Domain.Salons;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.ViewModels.Barber;
@@ -8,12 +7,12 @@ using BarberSearch.Mobile.Core.ViewModels.Barber;
 namespace BarberSearch.Mobile.Core.Tests;
 
 /// <summary>
-/// Проверки раздела «Салоны»: рабочий список со статусами модерации, основной салон,
-/// поиск по публичному каталогу с паузой и привязка первого салона как основного.
+/// Проверки раздела «Салоны»: рабочий список со статусами модерации и основной салон.
 /// </summary>
 /// <remarks>
-/// Пауза каталога приходит делегатом, поэтому debounce проверяется без ожидания таймера.
-/// Записи (привязка, смена основного) не повторяются: после сбоя исход неизвестен.
+/// Записи (смена основного) не повторяются: после сбоя исход неизвестен. Поиск нового
+/// салона и привязка живут на отдельной странице и проверяются в
+/// <see cref="BarberSalonAddViewModelTests"/>.
 /// </remarks>
 public sealed class BarberSalonsViewModelTests
 {
@@ -120,8 +119,6 @@ public sealed class BarberSalonsViewModelTests
         Assert.False(viewModel.ShowError);
         Assert.Equal(EmptyTitleText, viewModel.EmptyTitle);
         Assert.Equal(EmptyDescriptionText, viewModel.EmptyDescription);
-        Assert.True(viewModel.FirstSalonBecomesPrimary);
-        Assert.Equal("Первый салон станет основным", viewModel.PrimaryToggleText);
     }
 
     [Fact]
@@ -232,166 +229,21 @@ public sealed class BarberSalonsViewModelTests
         Assert.Equal(2, harness.Profile.SalonCalls);
     }
 
-    [Fact]
-    public async Task CatalogQuery_BelowMinimumShowsHintAndOnlyTwoCharsSearch()
-    {
-        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var harness = new Harness(delay: (_, cancellationToken) => gate.Task.WaitAsync(cancellationToken));
-
-        await harness.ViewModel.ActivateAsync();
-
-        var viewModel = harness.ViewModel;
-
-        viewModel.CatalogQuery = "H";
-
-        Assert.False(viewModel.CanSearchCatalog);
-        Assert.Contains("минимум 2", viewModel.CatalogHint, StringComparison.Ordinal);
-        Assert.False(viewModel.IsCatalogLoading);
-        Assert.Empty(harness.Search.SalonQueries);
-
-        viewModel.CatalogQuery = "Ha";
-
-        Assert.True(viewModel.CanSearchCatalog);
-        Assert.Equal(string.Empty, viewModel.CatalogHint);
-        Assert.True(viewModel.IsCatalogLoading);
-        Assert.Empty(harness.Search.SalonQueries);
-
-        gate.SetResult();
-
-        await viewModel.CatalogOperation;
-
-        var query = Assert.Single(harness.Search.SalonQueries);
-
-        Assert.Equal(string.Empty, query.City);
-        Assert.Equal("Ha", query.Search);
-        Assert.False(viewModel.IsCatalogLoading);
-        Assert.True(viewModel.ShowCatalogResults);
-        Assert.Equal("Hairo", viewModel.Catalog[0].Name);
-        Assert.Equal("Барбершоп", viewModel.Catalog[0].KindText);
-        Assert.False(viewModel.CanAddSalon);
-    }
-
-    [Fact]
-    public async Task AddSalonAsync_FirstSalon_IsAttachedAsPrimary()
-    {
-        var harness = new Harness(delay: static (_, _) => Task.CompletedTask);
-
-        await harness.ViewModel.ActivateAsync();
-
-        var viewModel = harness.ViewModel;
-
-        viewModel.CatalogQuery = "Ha";
-
-        await viewModel.CatalogOperation;
-
-        viewModel.SelectedCatalogSalon = viewModel.Catalog[0];
-
-        Assert.True(viewModel.FirstSalonBecomesPrimary);
-        Assert.True(viewModel.CanAddSalon);
-
-        await viewModel.AddSalonCommand.ExecuteAsync(null);
-
-        var attach = Assert.Single(harness.Profile.SalonAttaches);
-
-        Assert.Equal(BarberCabinetFixtures.BarberProfileId, attach.ProfileId);
-        Assert.Equal(BarberCabinetFixtures.OtherSalonId, attach.SalonId);
-        Assert.True(attach.IsPrimary);
-        Assert.Equal("Салон добавлен.", viewModel.Announcement);
-        Assert.Null(viewModel.SelectedCatalogSalon);
-        Assert.Empty(viewModel.Catalog);
-        Assert.False(viewModel.IsAddingSalon);
-        Assert.Equal(2, harness.Profile.SalonCalls);
-    }
-
-    [Fact]
-    public async Task AddSalonAsync_Duplicate_ShowsReasonAndReloadsList()
-    {
-        var harness = new Harness(delay: static (_, _) => Task.CompletedTask);
-
-        await harness.ViewModel.ActivateAsync();
-
-        var viewModel = harness.ViewModel;
-
-        viewModel.CatalogQuery = "Ha";
-
-        await viewModel.CatalogOperation;
-
-        viewModel.SelectedCatalogSalon = viewModel.Catalog[0];
-
-        harness.Profile.AddSalon = (_, _, _) => Task.FromException(
-            BarberCabinetApiError.Create(
-                HttpStatusCode.Conflict,
-                "barberProfile.addSalon.duplicate"));
-
-        await viewModel.AddSalonCommand.ExecuteAsync(null);
-
-        Assert.Equal("Этот салон уже добавлен.", viewModel.AddSalonError);
-        Assert.True(viewModel.HasAddSalonError);
-        Assert.Null(viewModel.Announcement);
-        Assert.Equal(2, harness.Profile.SalonCalls);
-    }
-
-    [Fact]
-    public async Task CatalogFailure_RetriesSameQueryUntilLoaded()
-    {
-        var harness = new Harness(
-            delay: static (_, _) => Task.CompletedTask,
-            catalogRetry: BarberCabinetRetry.Fast());
-        var calls = 0;
-
-        harness.Search.Salons = (_, _, _) =>
-        {
-            calls++;
-
-            return calls == 1
-                ? Task.FromException<IReadOnlyList<SalonDirectoryItemResponse>>(
-                    new HttpRequestException("offline"))
-                : Task.FromResult<IReadOnlyList<SalonDirectoryItemResponse>>(
-                    [BarberCabinetData.DirectorySalon()]);
-        };
-
-        await harness.ViewModel.ActivateAsync();
-
-        var viewModel = harness.ViewModel;
-
-        viewModel.CatalogQuery = "Ha";
-
-        await viewModel.CatalogOperation;
-        await viewModel.CatalogRetryCompletion;
-
-        Assert.Equal(2, calls);
-        Assert.Equal(2, harness.Search.SalonQueries.Count);
-        Assert.All(
-            harness.Search.SalonQueries,
-            query => Assert.Equal("Ha", query.Search));
-        Assert.Null(viewModel.CatalogError);
-        Assert.True(viewModel.ShowCatalogResults);
-        Assert.False(viewModel.IsCatalogAutoRetrying);
-    }
-
     /// <summary>
-    /// Собранный раздел: подменённые клиенты, пауза каталога и два цикла повтора.
+    /// Собранный раздел: подменённый клиент профиля и цикл повтора списка.
     /// </summary>
     private sealed class Harness
     {
-        public Harness(
-            Func<TimeSpan, CancellationToken, Task>? delay = null,
-            AutoRetryLoop? salonsRetry = null,
-            AutoRetryLoop? catalogRetry = null)
+        public Harness(AutoRetryLoop? salonsRetry = null)
         {
             ViewModel = new BarberSalonsViewModel(
                 Profile,
-                Search,
-                delay ?? (static (_, _) => Task.CompletedTask),
-                salonsRetry,
-                catalogRetry);
+                salonsRetry);
 
             ViewModel.Initialize(BarberCabinetFixtures.BarberProfileId);
         }
 
         public FakeBarberProfileApi Profile { get; } = new();
-
-        public FakeBarberSearchApi Search { get; } = new();
 
         public BarberSalonsViewModel ViewModel { get; }
     }

@@ -810,8 +810,8 @@ public partial class BarberCabinetPage : ContentPage
     }
 
     /// <summary>
-    /// Создаёт раздел «Салоны» и подписывается на его переходы: к расписанию салона и
-    /// к форме создания собственного места.
+    /// Создаёт раздел «Салоны» и подписывается на его переходы: к расписанию салона,
+    /// к форме создания собственного места и к форме добавления из каталога.
     /// </summary>
     /// <remarks>
     /// Подписка живёт столько же, сколько раздел: он создаётся один раз и до конца
@@ -825,6 +825,7 @@ public partial class BarberCabinetPage : ContentPage
 
         view.ScheduleRequested += OnSalonsScheduleRequested;
         view.CreateSalonRequested += OnSalonsCreateRequested;
+        view.AddSalonRequested += OnSalonsAddRequested;
 
         return view;
     }
@@ -881,6 +882,40 @@ public partial class BarberCabinetPage : ContentPage
             {
                 ["owner"] = view.ViewModel,
                 ["barberProfileId"] = profileId,
+            });
+    }
+
+    /// <summary>
+    /// Открывает форму добавления салона из каталога и передаёт ей раздел владельцем.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Владелец нужен, чтобы форма объявила результат в баннере раздела и закрылась:
+    /// «Салон добавлен.» увидит человек на возврате. Профиль мастера и признак «есть
+    /// салоны» форма берёт у владельца, поэтому отдельных параметров маршрута нет.
+    /// </para>
+    /// <para>
+    /// <c>ActivateAsync</c> здесь не зовётся: кабинет перечитывает активный раздел на Pop
+    /// (<c>OnAppearing</c> → <c>ApplyRequestedSectionAsync</c> → <c>ActivateActiveAsync</c>),
+    /// и второй вызов был бы вторым запросом за одно возвращение.
+    /// </para>
+    /// </remarks>
+    /// <param name="sender">Раздел «Салоны».</param>
+    /// <param name="e">Аргументы события раздела.</param>
+    private async void OnSalonsAddRequested(object? sender, EventArgs e)
+    {
+        if (sender is not BarberSalonsView { ViewModel.BarberProfileId: not null } view)
+        {
+            return;
+        }
+
+        SuspendActivity();
+
+        await Shell.Current.GoToAsync(
+            BarberCabinetRoutes.AddSalon,
+            new Dictionary<string, object>
+            {
+                ["owner"] = view.ViewModel,
             });
     }
 
