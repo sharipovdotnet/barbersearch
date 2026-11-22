@@ -810,7 +810,8 @@ public partial class BarberCabinetPage : ContentPage
     }
 
     /// <summary>
-    /// Создаёт раздел «Салоны» и подписывается на его переход к расписанию салона.
+    /// Создаёт раздел «Салоны» и подписывается на его переходы: к расписанию салона и
+    /// к форме создания собственного места.
     /// </summary>
     /// <remarks>
     /// Подписка живёт столько же, сколько раздел: он создаётся один раз и до конца
@@ -823,6 +824,7 @@ public partial class BarberCabinetPage : ContentPage
         var view = services.GetRequiredService<BarberSalonsView>();
 
         view.ScheduleRequested += OnSalonsScheduleRequested;
+        view.CreateSalonRequested += OnSalonsCreateRequested;
 
         return view;
     }
@@ -845,6 +847,41 @@ public partial class BarberCabinetPage : ContentPage
         }
 
         await SelectSectionAsync(ScheduleSectionIndex);
+    }
+
+    /// <summary>
+    /// Открывает форму создания салона и передаёт ей раздел «Салоны» владельцем.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Владелец нужен, чтобы форма объявила результат в баннере раздела и закрылась:
+    /// «Салон отправлен на проверку.» или «Место приёма создано.» увидит человек на
+    /// возврате. Профиль мастера передаётся рядом — форма без него закрывается сама.
+    /// </para>
+    /// <para>
+    /// <c>ActivateAsync</c> здесь не зовётся: кабинет перечитывает активный раздел на Pop
+    /// (<c>OnAppearing</c> → <c>ApplyRequestedSectionAsync</c> → <c>ActivateActiveAsync</c>),
+    /// и второй вызов был бы вторым запросом за одно возвращение.
+    /// </para>
+    /// </remarks>
+    /// <param name="sender">Раздел «Салоны».</param>
+    /// <param name="e">Аргументы события раздела.</param>
+    private async void OnSalonsCreateRequested(object? sender, EventArgs e)
+    {
+        if (sender is not BarberSalonsView { ViewModel.BarberProfileId: { } profileId } view)
+        {
+            return;
+        }
+
+        SuspendActivity();
+
+        await Shell.Current.GoToAsync(
+            BarberCabinetRoutes.CreateSalon,
+            new Dictionary<string, object>
+            {
+                ["owner"] = view.ViewModel,
+                ["barberProfileId"] = profileId,
+            });
     }
 
     /// <summary>

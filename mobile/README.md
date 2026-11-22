@@ -7,7 +7,7 @@ grid, booking, the customer's bookings, favourites and — on Android — push r
 confirmed visit. An administrator also gets the moderation queues on the phone (see «Admin
 queues» below), and a barber gets the cabinet — bookings, schedule, salons and the public card
 (see «Кабинет мастера» below). The web keeps the professional surface that is not a phone job:
-importing old bookings, creating a salon and managing its barbers, and the
+importing old bookings, managing its barbers, and the
 notification settings; the rest of the admin section stays there too.
 
 ## Layout
@@ -329,7 +329,7 @@ recorded in `AGENT.md` §5.
 |---|---|
 | «Записи» | «Сегодня» (the day feed built from both scopes, with the free windows and the next client), «Ближайшие» and «История». Confirm, complete, no-show, cancel with a reason, reschedule, note and price; «Записать клиента» opens the create form from «Сегодня» and «Ближайшие», not from «История»; a client's phone is a `tel:` link. The active list re-reads itself every 30 seconds while the section is on screen. A failed next page keeps the rows and shows the reason; «Дальше» retries it. |
 | «Расписание» | The weekly template per salon, Monday to Sunday (working day or day off, hours), «Заполнить будни», one `PUT` for the whole week, the `409` conflict panel with the affected visits and «Всё равно сохранить», date exceptions and time offs. |
-| «Салоны» | The profile's attachments with their moderation status, the primary salon («Сделать основным»), a public-catalog search for a new place, and call / map / copy address / open this salon's schedule. |
+| «Салоны» | The profile's attachments with their moderation status, the primary salon («Сделать основным»), a public-catalog search for a new place, «Создать салон» for the barber's own place (kind, catalogue flag, name, city/address with suggestions, country, time zone, coordinates, phone, website), and call / map / copy address / open this salon's schedule. |
 | «Профиль» | The card (avatar, name, grade, rating, experience, languages, payment, bio, late policy), the photo grid — tap a frame to upload, caption, reorder, hide, restore or delete it — services and prices (add, edit, hide, restore), specializations, «Редактировать профиль», «Поделиться профилем» and «Открыть, как видят клиенты» — the last two only for a verified and active profile. The avatar has «Загрузить фото» / «Изменить фото» / «Удалить» (with a native confirmation) and shows «На проверке» or «Отклонено» with the rejection reason until moderation decides; the file is the account photo, not a portfolio frame. |
 
 Reads retry themselves while the screen or section is visible; writes show their reason and are
@@ -348,6 +348,7 @@ and is retried by «Дальше».
 | `barber-notifications` | The notification inbox, keyset pages, «Прочитать все» | `owner` (the cabinet page), `barberProfileId` |
 | `barber-profile-edit` | Edits the public card; grade stays read-only | `owner`, `profile` |
 | `barber-service-editor` | Adds a service from the directory or edits its price and duration; hide and restore stay in the section | `owner`, `barberProfileId`, optional `item` |
+| `barber-salon-create` | Creates an owned place (kind, catalogue flag, name, city/address with suggestions, country, time zone, coordinates, phone, website; listed → review, hidden → active at once) | `owner` (the salons section ViewModel) |
 | `barber-photo` | One portfolio frame: upload (file picker, JPEG ≤ 1600 px and ≤ 5 MB prepared on the phone, caption up to 2000 characters) or edit (caption, «Выше»/«Ниже», «Скрыть»/«Вернуть», «Удалить» behind a confirmation); the 10-photo limit disables adding | `profileId`, `photos` (snapshot), optional `photoId` |
 
 ### API
@@ -388,6 +389,8 @@ Writes:
 - `POST api/users/me/avatar` (multipart `file`, the prepared JPEG) and `DELETE api/users/me/avatar`
   — the account avatar behind the profile section's preview and delete confirmation.
 - `POST api/barber/notifications/{id}/read`, `POST api/barber/notifications/read-all`.
+- `POST api/salons/own` — the barber's own place from «Салоны»; `201` returns its id and a
+  listed place starts in review.
 - `POST api/auth/refresh` — the pair is rotated right after the profile is created, because the
   access token has no `barber_profile_id` claim yet.
 

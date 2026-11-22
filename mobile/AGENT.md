@@ -28,7 +28,7 @@ profiles awaiting verification and requests to become a professional.
 The professional cabinet is on the phone for a barber: one screen with four sections — client
 bookings, the weekly schedule, the places of work and the public card — opened from «Профиль».
 The web keeps the professional surface that is not a phone job: importing old bookings,
-creating a salon and managing its barbers, and the notification and Telegram settings. The rest of the admin section — statistics, the catalogue, salons,
+managing its barbers, and the notification and Telegram settings. The rest of the admin section — statistics, the catalogue, salons,
 users, bookings and the audit log — also stays on the web; §5 records what the phone got and
 why the remainder did not move.
 
@@ -951,8 +951,8 @@ in Core owns both base addresses.
   path to the same action would duplicate it.
 
 - **What the cabinet leaves on the web is the admin surface, not the daily work.** Booking
-  import (`/barber/import`) is a text/ICS parser and a bulk load; creating a salon and managing
-  its barbers is a form and an HR task; notification and Telegram settings are niche, and the
+  import (`/barber/import`) is a text/ICS parser and a bulk load; managing a salon's barbers is
+  an HR task; notification and Telegram settings are niche, and the
   «Профиль» tab already carries the global «Присылать напоминания» switch, so a second settings
   screen would duplicate one switch and own none of the push. Photo upload, captions and order
   are no longer on this list: the photo screen above gives the barber the web's actions on the
@@ -1019,6 +1019,23 @@ in Core owns both base addresses.
   recorded here rather than left silent; `SlotGridMetrics` in Core owns the column arithmetic and
   its tests (12 cases, 1504 total) cover both phone widths, the tablet cap, the no-spacing case and
   the unusable-width fallback.
+
+- **Creating a salon is a Shell page over the cabinet, and the phone keeps the web's owner form.**
+  The button sits first in «Салоны», full width and 48 pt, and appears only after the first
+  successful read: until the list is known, the profile id is not certain. It opens
+  `barber-salon-create` over the cabinet stack rather than a web-style modal, so the back
+  gesture is the cancel and no «Отмена» row is spent; the creation form reads nothing on open,
+  so it arms no retry loop. The write is `POST api/salons/own` with the same body and the same
+  validation as the web's owner form; there is no postal code (the web hides it for owner create
+  too), the kind is a `Picker` plus its hint instead of five radio rows, and the time zone is the
+  curated `SalonTimeZones` list because a native `Picker` has no search. City and address
+  suggestions are inline rows under their fields, with the same debounce and minimum lengths as
+  «Поиск»; `providerId` never leaves the form. Coordinates accept a comma decimal separator —
+  the decimal key of a Russian phone keyboard. Submit reads «Отправить на проверку» for a listed
+  place and «Создать место» for a hidden one. After `201` the page writes «Салон отправлен на
+  проверку.» or «Место приёма создано.» into the section's announcement and pops; the section
+  re-reads on `Pop`, so the page does not call `ActivateAsync` itself. The write never retries
+  itself, and the page closes itself when the route arrives without an owner or a barber profile.
 
 ## 6. What the backend still lacks
 
