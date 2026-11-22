@@ -1,4 +1,5 @@
 using BarberSearch.Domain.Common;
+using BarberSearch.Domain.Common.ValueObjects;
 using CSharpFunctionalExtensions;
 using Shared;
 
@@ -26,7 +27,15 @@ public class Salon : AggregateRoot
     public double Latitude { get; private set; }
     public double Longitude { get; private set; }
 
-    public string? PhoneNumber { get; private set; }
+    /// <summary>
+    /// Телефон салона в каноническом виде <c>+7XXXXXXXXXX</c>; <c>null</c> — номер не задан.
+    /// </summary>
+    /// <remarks>
+    /// Хранится объект-значение <see cref="PhoneNumber"/>: проверку и нормализацию делает он,
+    /// поэтому в базе и в памяти лежит только российский мобильный номер. Очистка — <c>null</c>,
+    /// пустая или пробельная строка; недопустимый номер возвращает <c>400 salon.phoneNumber</c>.
+    /// </remarks>
+    public PhoneNumber? PhoneNumber { get; private set; }
     public string? WebsiteUrl { get; private set; }
 
     /// <summary>
@@ -93,6 +102,7 @@ public class Salon : AggregateRoot
     private const string ADDRESS_ERROR_CODE = "salon.address";
     private const string CITY_ERROR_CODE = "salon.city";
     private const string COUNTRY_ERROR_CODE = "salon.country";
+    private const string PHONE_NUMBER_ERROR_CODE = "salon.phoneNumber";
     private const string TIME_ZONE_ID_ERROR_CODE = "salon.timeZoneId";
     private const string WEBSITE_URL_ERROR_CODE = "salon.websiteUrl";
     private const string REJECTION_REASON_REQUIRED_CODE = "salon.reject.reasonRequired";
@@ -263,6 +273,16 @@ public class Salon : AggregateRoot
             errors.Add(websiteUrlError);
         }
 
+        var phoneNumberError = PhoneNumber.Validate(
+            phoneNumber,
+            PHONE_NUMBER_ERROR_CODE,
+            nameof(phoneNumber),
+            out var parsedPhoneNumber);
+        if (phoneNumberError is not null)
+        {
+            errors.Add(phoneNumberError);
+        }
+
         if (errors.Count != 0)
         {
             return new Failure(errors);
@@ -278,7 +298,7 @@ public class Salon : AggregateRoot
             Latitude = latitude,
             Longitude = longitude,
             PostalCode = postalCode,
-            PhoneNumber = phoneNumber,
+            PhoneNumber = parsedPhoneNumber,
             WebsiteUrl = normalizedWebsiteUrl,
             Kind = kind,
             IsListed = isListed
@@ -419,12 +439,22 @@ public class Salon : AggregateRoot
             errors.Add(websiteUrlError);
         }
 
+        var phoneNumberError = PhoneNumber.Validate(
+            phoneNumber,
+            PHONE_NUMBER_ERROR_CODE,
+            nameof(phoneNumber),
+            out var parsedPhoneNumber);
+        if (phoneNumberError is not null)
+        {
+            errors.Add(phoneNumberError);
+        }
+
         if (errors.Count != 0)
         {
             return new Failure(errors);
         }
 
-        PhoneNumber = phoneNumber;
+        PhoneNumber = parsedPhoneNumber;
         WebsiteUrl = normalizedWebsiteUrl;
 
         MarkUpdated();
@@ -580,7 +610,7 @@ public class Salon : AggregateRoot
             errors.Add(Error.Validation(
                 "salon.longitude",
                 $"""
-                 Longitude must be between {Constants.MIN_LONGITUDE} and {Constants.MAX_LONGITUDE}, 
+                 Longitude must be between {Constants.MIN_LONGITUDE} and {Constants.MAX_LONGITUDE},
                  got {longitude}.
                  """,
                 nameof(longitude)));

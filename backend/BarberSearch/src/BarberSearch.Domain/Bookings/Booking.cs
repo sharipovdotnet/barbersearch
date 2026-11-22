@@ -1,5 +1,5 @@
 using BarberSearch.Domain.Common;
-using BarberSearch.Domain.Users.ValueObjects;
+using BarberSearch.Domain.Common.ValueObjects;
 using CSharpFunctionalExtensions;
 using Shared;
 

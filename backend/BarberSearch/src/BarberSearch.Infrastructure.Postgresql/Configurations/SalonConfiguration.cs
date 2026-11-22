@@ -1,4 +1,5 @@
 using BarberSearch.Domain;
+using BarberSearch.Domain.Common.ValueObjects;
 using BarberSearch.Domain.Salons;
 using BarberSearch.Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -85,7 +86,17 @@ public class SalonConfiguration : IEntityTypeConfiguration<Salon>
 
         builder.Property(x => x.Latitude).HasColumnName("latitude");
         builder.Property(x => x.Longitude).HasColumnName("longitude");
-        builder.Property(x => x.PhoneNumber).HasColumnName("phone_number");
+        // Телефон — объект-значение PhoneNumber, колонка остаётся nullable text: конвертер
+        // хранит PhoneNumber.Value, как у Email. Owned-тип здесь не подходит: EF теряет
+        // снимок owned-значения при замене инстанса доменом, а телефон салона обязан попадать
+        // в журнал аудита. Свободные записи, сделанные до появления проверки, читаются через
+        // PhoneNumber.FromStorage и чтение не роняют.
+        builder.Property(x => x.PhoneNumber)
+            .HasColumnName("phone_number")
+            .HasConversion(
+                phone => phone!.Value,
+                value => PhoneNumber.FromStorage(value))
+            .IsRequired(false);
         builder.Property(x => x.WebsiteUrl)
             .HasColumnName("website_url")
             .HasMaxLength(Constants.MAX_URL_LENGTH);

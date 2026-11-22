@@ -90,6 +90,12 @@ public partial class AppShell : Shell
 			BarberCabinetRoutes.ServiceEditor,
 			new PageRouteFactory<BarberServiceEditorPage>(services));
 
+		// Создание салона открывается кнопкой из раздела «Салоны» и живёт поверх кабинета:
+		// возврат оставляет раздел на месте, а сам раздел перечитывает список на Pop.
+		Routing.RegisterRoute(
+			BarberCabinetRoutes.CreateSalon,
+			new PageRouteFactory<BarberSalonCreatePage>(services));
+
 		// Фото портфолио открывается нажатием на плитку в «Профиле» кабинета и живёт
 		// поверх него: возврат оставляет и кабинет, и выбранный раздел на месте, а
 		// раздел перечитывает карточку на Pop.

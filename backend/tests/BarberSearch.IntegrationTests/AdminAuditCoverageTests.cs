@@ -75,12 +75,12 @@ public sealed class AdminAuditCoverageTests
     {
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
-        var salon = await data.CreateSalonAsync("Contact Salon", phoneNumber: "+4930000000");
+        var salon = await data.CreateSalonAsync("Contact Salon", phoneNumber: "+79991234569");
         await CreateAdminAsync(app);
 
         using (var response = await app.Client.PutAsJsonAsync(
                    $"api/salons/{salon.Id}/contact-info",
-                   new UpdateSalonContactInfoRequest("+4930999999", null)))
+                   new UpdateSalonContactInfoRequest("+79991234568", null)))
         {
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }
@@ -95,8 +95,8 @@ public sealed class AdminAuditCoverageTests
         var changes = payload.RootElement.GetProperty("changes");
         var phone = changes.GetProperty("phoneNumber");
 
-        Assert.Equal("+4930000000", phone.GetProperty("from").GetString());
-        Assert.Equal("+4930999999", phone.GetProperty("to").GetString());
+        Assert.Equal("+79991234569", phone.GetProperty("from").GetString());
+        Assert.Equal("+79991234568", phone.GetProperty("to").GetString());
 
         // Неизменённые поля в diff не попадают: payload — только то, что действительно изменилось.
         Assert.Single(changes.EnumerateObject());
@@ -309,7 +309,7 @@ public sealed class AdminAuditCoverageTests
 
         using (var response = await app.Client.PutAsJsonAsync(
                    $"api/salons/{salonId}/contact-info",
-                   new UpdateSalonContactInfoRequest("+4930222222", null)))
+                   new UpdateSalonContactInfoRequest("+79991234570", null)))
         {
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }

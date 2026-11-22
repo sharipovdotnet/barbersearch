@@ -169,7 +169,7 @@ public class SalonTests
 
         Assert.True(result.IsFailure);
         Assert.Equal("salon.websiteUrl", result.Error.Errors[0].Code);
-        Assert.Equal("+79001234567", salon.PhoneNumber);
+        Assert.Equal("+79001234567", salon.PhoneNumber?.Value);
         Assert.Equal("https://barbershop.example.com", salon.WebsiteUrl);
     }
 
@@ -189,6 +189,77 @@ public class SalonTests
 
         Assert.True(cleared.IsSuccess);
         Assert.Null(salon.WebsiteUrl);
+    }
+
+    [Theory]
+    [InlineData("+7 999 123-45-67", "+79991234567")]
+    [InlineData("8 (999) 123-45-67", "+79991234567")]
+    [InlineData("9991234567", "+79991234567")]
+    public void Create_WithSupportedPhoneSpelling_StoresCanonicalValue(string input, string canonical)
+    {
+        var result = Salon.Create(
+            "Barbershop", "Tverskaya 1", "Moscow", "RU", "Europe/Moscow", 55.7558, 37.6173,
+            phoneNumber: input);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(canonical, result.Value.PhoneNumber?.Value);
+    }
+
+    [Theory]
+    [InlineData("+49 170 1234567")]
+    [InlineData("+7 495 123-45-67")]
+    [InlineData("+7 812 000-00-00")]
+    public void Create_WithNonMobilePhone_Fails(string phoneNumber)
+    {
+        var result = Salon.Create(
+            "Barbershop", "Tverskaya 1", "Moscow", "RU", "Europe/Moscow", 55.7558, 37.6173,
+            phoneNumber: phoneNumber);
+
+        Assert.True(result.IsFailure);
+        var error = Assert.Single(
+            result.Error.Errors,
+            error => error.Code == "salon.phoneNumber");
+        Assert.Equal("phoneNumber", error.InvalidField);
+    }
+
+    [Fact]
+    public void Create_WithBlankPhone_SucceedsWithoutPhone()
+    {
+        var result = Salon.Create(
+            "Barbershop", "Tverskaya 1", "Moscow", "RU", "Europe/Moscow", 55.7558, 37.6173,
+            phoneNumber: "   ");
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Value.PhoneNumber);
+    }
+
+    [Fact]
+    public void UpdateContactInfo_WithInvalidPhone_FailsAndKeepsOldValues()
+    {
+        var salon = Salon.Create(
+            "Barbershop", "Tverskaya 1", "Moscow", "RU", "Europe/Moscow", 55.7558, 37.6173,
+            phoneNumber: "+79991234567",
+            websiteUrl: "https://barbershop.example.com").Value;
+
+        var result = salon.UpdateContactInfo("+7 812 000-00-00", "https://new.example.com");
+
+        Assert.True(result.IsFailure);
+        Assert.Contains(result.Error.Errors, error => error.Code == "salon.phoneNumber");
+        Assert.Equal("+79991234567", salon.PhoneNumber?.Value);
+        Assert.Equal("https://barbershop.example.com", salon.WebsiteUrl);
+    }
+
+    [Fact]
+    public void UpdateContactInfo_WithBlankPhone_ClearsIt()
+    {
+        var salon = Salon.Create(
+            "Barbershop", "Tverskaya 1", "Moscow", "RU", "Europe/Moscow", 55.7558, 37.6173,
+            phoneNumber: "+79991234567").Value;
+
+        var result = salon.UpdateContactInfo("   ", null);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(salon.PhoneNumber);
     }
 
     [Fact]

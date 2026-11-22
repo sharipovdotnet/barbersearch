@@ -464,7 +464,7 @@ public class AuditTrailTests
             55.7558,
             37.6173,
             postalCode: "101000",
-            phoneNumber: "+74950000000").Value;
+            phoneNumber: "+79991234572").Value;
 
         context.Salons.Add(salon);
         audit.Capture(context);
@@ -505,10 +505,10 @@ public class AuditTrailTests
                 "Europe/Moscow",
                 55.7558,
                 37.6173,
-                phoneNumber: "+74950000000").Value,
+                phoneNumber: "+79991234572").Value,
             context.Salons);
 
-        Assert.True(salon.UpdateContactInfo("+74959999999", null).IsSuccess);
+        Assert.True(salon.UpdateContactInfo("+79991234573", null).IsSuccess);
 
         audit.Capture(context);
 
@@ -520,8 +520,8 @@ public class AuditTrailTests
         var changes = payload.RootElement.GetProperty("changes");
         var phone = changes.GetProperty("phoneNumber");
 
-        Assert.Equal("+74950000000", phone.GetProperty("from").GetString());
-        Assert.Equal("+74959999999", phone.GetProperty("to").GetString());
+        Assert.Equal("+79991234572", phone.GetProperty("from").GetString());
+        Assert.Equal("+79991234573", phone.GetProperty("to").GetString());
 
         // Неизменённые поля в diff не попадают: payload — только реальные изменения.
         Assert.Single(changes.EnumerateObject());

@@ -1,0 +1,444 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.BarberSalonCreatePage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:address="clr-namespace:BarberSearch.Contracts.Addresses.SuggestAddresses;assembly=BarberSearch.Contracts"
+    xmlns:city="clr-namespace:BarberSearch.Contracts.Addresses.SuggestCities;assembly=BarberSearch.Contracts"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels.Barber;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:BarberSalonCreateViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="{loc:Translate Key='Создать салон'}">
+
+    <!--
+        Создание собственного места приёма: веб-форма владельца в мобильной подаче.
+        Это страница Shell поверх кабинета, а не модальное окно веба: возврат (системный
+        жест или кнопка «назад») и есть отмена, поэтому отдельной кнопки «Отмена» нет.
+
+        Почтового индекса в форме нет: веб тоже скрывает его владельцу при создании.
+        Тип места — пикер с подсказкой вместо пяти радио-строк: на телефоне пять строк
+        с длинными подписями занимают весь первый экран, а выбранный пункт всё равно
+        читается одной строкой. Часовой пояс — курированный список: у нативного Picker
+        нет поиска, а поясов в базе IANA больше пятисот.
+
+        Подсказки города и адреса — строки прямо под полем, как в «Поиске»: у MAUI нет
+        нативного комбобокса, а выпадающее окно пришлось бы рисовать вручную. Это
+        улучшение ввода, поэтому отказ подсказок ничего не блокирует.
+    -->
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="16">
+
+            <!-- Публичное место проходит проверку, скрытое работает сразу. -->
+            <Label
+                FontSize="12"
+                LineBreakMode="WordWrap"
+                Text="{loc:Translate Key='Публичное место проверит администратор, и оно появится в поиске после одобрения. Скрытое место не проходит проверку и доступно для записи сразу.'}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+            <!-- Тип места: подпись и подсказка меняются вместе с выбором. -->
+            <Border
+                Padding="16"
+                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                StrokeShape="RoundRectangle 10">
+                <VerticalStackLayout Spacing="12">
+                    <Label
+                        FontFamily="GeistMedium"
+                        FontSize="14"
+                        Text="{loc:Translate Key='Что это за место?'}" />
+
+                    <Picker
+                        ItemDisplayBinding="{Binding Label, x:DataType=vm:BarberSalonKindOption}"
+                        ItemsSource="{Binding KindOptions}"
+                        SelectedItem="{Binding SelectedKindOption, Mode=TwoWay}"
+                        Title="{loc:Translate Key='Выберите тип'}" />
+
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding KindHint}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                    <!--
+                        Каталог: у барбершопа и студии флаг включён и не снимается,
+                        у дома и выезда всегда выключен, только кабинет даёт выбор.
+                    -->
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Label
+                            Text="{loc:Translate Key='Показывать в каталоге'}"
+                            VerticalOptions="Center" />
+                        <Switch
+                            Grid.Column="1"
+                            IsEnabled="{Binding CanToggleListing}"
+                            IsToggled="{Binding IsListed, Mode=TwoWay}"
+                            MinimumHeightRequest="44"
+                            VerticalOptions="Center" />
+                    </Grid>
+
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding ListingHint}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                    <!-- Ошибка видимости приходит только кодом домена. -->
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Text="{Binding IsListedError}"
+                        TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                        <Label.Triggers>
+                            <DataTrigger
+                                Binding="{Binding IsListedError}"
+                                TargetType="Label"
+                                Value="{x:Null}">
+                                <Setter Property="IsVisible" Value="False" />
+                            </DataTrigger>
+                        </Label.Triggers>
+                    </Label>
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Название: после создания его не изменить. -->
+            <Border
+                Padding="16"
+                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                StrokeShape="RoundRectangle 10">
+                <VerticalStackLayout Spacing="12">
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="{loc:Translate Key='Название'}" />
+                        <Entry Text="{Binding Name}" />
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{loc:Translate Key='Название нельзя изменить после создания салона.'}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding NameError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                            <Label.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding NameError}"
+                                    TargetType="Label"
+                                    Value="{x:Null}">
+                                    <Setter Property="IsVisible" Value="False" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Адрес: город, улица с домом, страна, пояс и координаты. -->
+            <Border
+                Padding="16"
+                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                StrokeShape="RoundRectangle 10">
+                <VerticalStackLayout Spacing="12">
+
+                    <!-- Город: подсказки — строки под полем, как в «Поиске». -->
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="{loc:Translate Key='Город'}" />
+                        <Entry
+                            x:Name="CityEntry"
+                            Placeholder="{loc:Translate Key='Начните вводить город'}"
+                            Text="{Binding City}" />
+
+                        <VerticalStackLayout
+                            IsVisible="{Binding CitySuggestions.IsVisible}"
+                            Spacing="4">
+                            <VerticalStackLayout
+                                BindableLayout.ItemsSource="{Binding CitySuggestions.Items}"
+                                IsVisible="{Binding CitySuggestions.IsOpen}"
+                                Spacing="4">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="city:CitySuggestionResponse">
+                                        <Border
+                                            Padding="10,8"
+                                            Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                            StrokeShape="RoundRectangle 8">
+                                            <Border.GestureRecognizers>
+                                                <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnCitySuggestionTapped" />
+                                            </Border.GestureRecognizers>
+                                            <Label
+                                                LineBreakMode="WordWrap"
+                                                Text="{Binding Display}" />
+                                        </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding CitySuggestions.IsEmpty}"
+                                Text="{loc:Translate Key='Ничего не найдено.'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        </VerticalStackLayout>
+
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding CityError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                            <Label.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding CityError}"
+                                    TargetType="Label"
+                                    Value="{x:Null}">
+                                    <Setter Property="IsVisible" Value="False" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+                    </VerticalStackLayout>
+
+                    <!-- Улица и дом: поле включается только после города. -->
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="{loc:Translate Key='Адрес'}" />
+                        <Entry
+                            x:Name="AddressEntry"
+                            IsEnabled="{Binding CanEnterAddress}"
+                            Placeholder="{loc:Translate Key='Начните вводить улицу или дом'}"
+                            Text="{Binding Address}" />
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding AddressHint}"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
+                            <Label.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding AddressHint}"
+                                    TargetType="Label"
+                                    Value="">
+                                    <Setter Property="IsVisible" Value="False" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+
+                        <VerticalStackLayout
+                            IsVisible="{Binding AddressSuggestions.IsVisible}"
+                            Spacing="4">
+                            <VerticalStackLayout
+                                BindableLayout.ItemsSource="{Binding AddressSuggestions.Items}"
+                                IsVisible="{Binding AddressSuggestions.IsOpen}"
+                                Spacing="4">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="address:AddressSuggestionResponse">
+                                        <Border
+                                            Padding="10,8"
+                                            Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                            StrokeShape="RoundRectangle 8">
+                                            <Border.GestureRecognizers>
+                                                <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnAddressSuggestionTapped" />
+                                            </Border.GestureRecognizers>
+                                            <Label
+                                                LineBreakMode="WordWrap"
+                                                Text="{Binding Display}" />
+                                        </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+
+                            <Label
+                                FontSize="12"
+                                IsVisible="{Binding AddressSuggestions.IsEmpty}"
+                                Text="{loc:Translate Key='Ничего не найдено.'}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        </VerticalStackLayout>
+
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding AddressError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                            <Label.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding AddressError}"
+                                    TargetType="Label"
+                                    Value="{x:Null}">
+                                    <Setter Property="IsVisible" Value="False" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+                    </VerticalStackLayout>
+
+                    <!-- Страна: подсказка города подставляет её сама. -->
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="{loc:Translate Key='Страна'}" />
+                        <Entry Text="{Binding Country}" />
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding CountryError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                            <Label.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding CountryError}"
+                                    TargetType="Label"
+                                    Value="{x:Null}">
+                                    <Setter Property="IsVisible" Value="False" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+                    </VerticalStackLayout>
+
+                    <!-- Пояс: курированный список, пояс устройства первым. -->
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="{loc:Translate Key='Часовой пояс'}" />
+                        <Picker
+                            ItemsSource="{Binding TimeZones}"
+                            SelectedItem="{Binding TimeZoneId, Mode=TwoWay}" />
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding TimeZoneError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                            <Label.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding TimeZoneError}"
+                                    TargetType="Label"
+                                    Value="{x:Null}">
+                                    <Setter Property="IsVisible" Value="False" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+                    </VerticalStackLayout>
+
+                    <!-- Координаты: запятая как десятичный разделитель допустима. -->
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                        <VerticalStackLayout Spacing="4">
+                            <Label Text="{loc:Translate Key='Широта'}" />
+                            <Entry Keyboard="Numeric" Text="{Binding Latitude}" />
+                            <Label
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding LatitudeError}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                                <Label.Triggers>
+                                    <DataTrigger
+                                        Binding="{Binding LatitudeError}"
+                                        TargetType="Label"
+                                        Value="{x:Null}">
+                                        <Setter Property="IsVisible" Value="False" />
+                                    </DataTrigger>
+                                </Label.Triggers>
+                            </Label>
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout Grid.Column="1" Spacing="4">
+                            <Label Text="{loc:Translate Key='Долгота'}" />
+                            <Entry Keyboard="Numeric" Text="{Binding Longitude}" />
+                            <Label
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding LongitudeError}"
+                                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                                <Label.Triggers>
+                                    <DataTrigger
+                                        Binding="{Binding LongitudeError}"
+                                        TargetType="Label"
+                                        Value="{x:Null}">
+                                        <Setter Property="IsVisible" Value="False" />
+                                    </DataTrigger>
+                                </Label.Triggers>
+                            </Label>
+                        </VerticalStackLayout>
+                    </Grid>
+
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Text="{loc:Translate Key='Скопируйте координаты из карт или выберите подсказку адреса — встроенной карты нет.'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Контакты: необязательные поля, пустые не отправляются. -->
+            <Border
+                Padding="16"
+                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                StrokeShape="RoundRectangle 10">
+                <VerticalStackLayout Spacing="12">
+                    <Label
+                        FontSize="12"
+                        LineBreakMode="WordWrap"
+                        Text="{loc:Translate Key='Телефон и сайт необязательны.'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="{loc:Translate Key='Телефон'}" />
+                        <Entry
+                            Keyboard="Telephone"
+                            Text="{Binding PhoneNumber}" />
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding PhoneNumberError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                            <Label.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding PhoneNumberError}"
+                                    TargetType="Label"
+                                    Value="{x:Null}">
+                                    <Setter Property="IsVisible" Value="False" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="{loc:Translate Key='Сайт'}" />
+                        <Entry
+                            Keyboard="Url"
+                            Placeholder="https://example.com"
+                            Text="{Binding WebsiteUrl}" />
+                        <Label
+                            FontSize="12"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding WebsiteError}"
+                            TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                            <Label.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding WebsiteError}"
+                                    TargetType="Label"
+                                    Value="{x:Null}">
+                                    <Setter Property="IsVisible" Value="False" />
+                                </DataTrigger>
+                            </Label.Triggers>
+                        </Label>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Общая ошибка формы: отказ, который не назвал ни одного поля. -->
+            <Label
+                LineBreakMode="WordWrap"
+                Text="{Binding FormError}"
+                TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}">
+                <Label.Triggers>
+                    <DataTrigger
+                        Binding="{Binding FormError}"
+                        TargetType="Label"
+                        Value="{x:Null}">
+                        <Setter Property="IsVisible" Value="False" />
+                    </DataTrigger>
+                </Label.Triggers>
+            </Label>
+
+            <!-- Отправка — запись: сама не повторяется, подпись меняется от видимости. -->
+            <Button
+                Command="{Binding SubmitCommand}"
+                HeightRequest="48"
+                IsEnabled="{Binding CanSubmit}"
+                Text="{Binding SubmitText}" />
+
+            <ActivityIndicator
+                HorizontalOptions="Center"
+                IsRunning="{Binding IsSaving}"
+                IsVisible="{Binding IsSaving}" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

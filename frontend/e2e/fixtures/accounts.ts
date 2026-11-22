@@ -169,7 +169,7 @@ export const fixtures = {
     timeZoneId: 'Europe/Moscow',
     latitude: 55.75,
     longitude: 37.62,
-    phoneNumber: '+70000000055',
+    phoneNumber: '+79991234555',
     websiteUrl: 'https://e2e-salon.example',
   },
   /**
