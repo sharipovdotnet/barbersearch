@@ -460,7 +460,7 @@ INSERT INTO salons
 VALUES
     ('9e400000-0000-4000-8000-000000000002', 'E2E Studio Nord', 'ул. Северная, 2',
      'Санкт-Петербург', '190000', 'Russia', 'Europe/Moscow', 59.9386, 30.3141,
-     '+78120000000', NULL, false, now(), now()),
+     '+79991234571', NULL, false, now(), now()),
     -- Активный салон, который ни к одному профилю не привязан: мутирующий спек
     -- «Мои салоны» привязывает его к e2e-barber и удаляет связь в `finally`.
     -- На `barbersUsingActiveCatalogueRows` он не влияет: связей нет, usageCount = 0.

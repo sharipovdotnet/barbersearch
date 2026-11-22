@@ -111,11 +111,11 @@ test.describe('админка: каталог, действия', () => {
 
       const dialog = catalogue.dialog
       await expect(dialog).toBeVisible()
-      await dialog.getByLabel('Телефон').fill('+78125550000')
+      await dialog.getByLabel('Телефон').fill('+79991234567')
       await dialog.getByRole('button', { name: 'Сохранить' }).click()
 
       await expect(page.getByRole('status')).toContainText('Изменения сохранены')
-      await expect(catalogue.row(label)).toContainText('+78125550000')
+      await expect(catalogue.row(label)).toContainText('+79991234567')
 
       // Правка салона — два независимых запроса: адрес и контакты.
       expect(requests).toContain(
@@ -129,7 +129,7 @@ test.describe('админка: каталог, действия', () => {
         playwright,
         'PUT',
         `/api/salons/${fixtures.hiddenSalonId}/contact-info`,
-        { phoneNumber: '+78120000000', websiteUrl: null }
+        { phoneNumber: '+79991234571', websiteUrl: null }
       )
     }
   })
