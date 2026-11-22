@@ -32,6 +32,11 @@
     <Color x:Key="Popover">#FFFFFF</Color>
     <Color x:Key="PopoverForeground">#0A0A0A</Color>
     <Color x:Key="Primary">#171717</Color>
+    <!--
+        Подложка выбранной радио-карточки: в вебе это `bg-primary/5`, пять процентов основного
+        цвета. Записано восемью знаками ARGB, чтобы оттенок ложился на любой фон и в обеих темах.
+    -->
+    <Color x:Key="PrimarySoft">#0D171717</Color>
     <Color x:Key="PrimaryForeground">#FAFAFA</Color>
     <Color x:Key="Secondary">#F5F5F5</Color>
     <Color x:Key="SecondaryForeground">#171717</Color>
@@ -69,6 +74,7 @@
     <Color x:Key="PopoverDark">#171717</Color>
     <Color x:Key="PopoverForegroundDark">#FAFAFA</Color>
     <Color x:Key="PrimaryDark">#E5E5E5</Color>
+    <Color x:Key="PrimarySoftDark">#0DE5E5E5</Color>
     <Color x:Key="PrimaryForegroundDark">#171717</Color>
     <Color x:Key="SecondaryDark">#262626</Color>
     <Color x:Key="SecondaryForegroundDark">#FAFAFA</Color>

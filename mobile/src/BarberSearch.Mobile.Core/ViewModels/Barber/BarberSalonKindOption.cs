@@ -1,5 +1,6 @@
 using BarberSearch.Domain.Salons;
 using BarberSearch.Mobile.Core.Localization;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace BarberSearch.Mobile.Core.ViewModels.Barber;
 
@@ -19,7 +20,7 @@ namespace BarberSearch.Mobile.Core.ViewModels.Barber;
 /// вариантов строится один раз вместе с формой.
 /// </para>
 /// </remarks>
-public sealed class BarberSalonKindOption
+public sealed partial class BarberSalonKindOption : ObservableObject
 {
     /// <summary>
     /// Создаёт вариант типа места с локализованными подписью и подсказкой.
@@ -46,6 +47,18 @@ public sealed class BarberSalonKindOption
     /// Подсказка под подписью: одна строка, объясняющая, чем тип отличается.
     /// </summary>
     public string Hint { get; }
+
+    /// <summary>
+    /// Выбран ли этот вариант в радио-группе «Что это за место?».
+    /// </summary>
+    /// <remarks>
+    /// Пять вариантов рисуются <c>BindableLayout</c>, поэтому подсветка выбранной карточки
+    /// привязана к самому варианту, а не к отдельному индексу в форме. Флаг ведёт
+    /// <see cref="BarberSalonCreateViewModel.SelectedKindOption"/>: в группе
+    /// он всегда ровно у одного варианта.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isSelected;
 
     /// <summary>
     /// Типы места в порядке радио-группы: от общего барбершопа к частному выезду.

@@ -558,11 +558,21 @@ in Core owns both base addresses.
   `+79000000000` — and the skeleton appears only while the cursor is in the field; the value that
   reaches the ViewModel is canonical (`+79991234567`), which is what the backend `PhoneNumber`
   rule accepts.
+  «Создать салон» uses the same field instead of its own copy: the `Entry` carries
+  `PhonePrefixBehavior`, the ViewModel adds the code with `PhoneInput.EnsureCountryCode`, and the
+  optional number is checked before submitting by the domain `PhoneNumber`. A started but
+  incomplete number therefore stays in the form — the same «Похоже, в номере опечатка…» line
+  appears under it — while `400 salon.phoneNumber` fills that line from the server answer. The
+  prefix alone is not a phone here either: `OptionalPhone` asks `PhoneInput.HasNationalDigits`
+  and sends `null`. The explanation text now lives once in `PhoneInputText` for the profile, the
+  guest and the salon instead of three copies.
   A field holding only the prefix is not a filled phone: `HasGuestContacts` asks
-  `PhoneInput.HasNationalDigits`, so «Записать» stays disabled. Tests add 35 cases (1570 total):
-  the normalizer table (empty, `+7`, national, local `8`, formatted and pasted numbers, the
-  prefix alone, a letter, an over-long paste), its idempotency, the prefix-only detection and the
-  ViewModel's disabled/enabled `CanSubmit`.
+  `PhoneInput.HasNationalDigits`, so «Записать» stays disabled. Tests add 35 cases: the
+  normalizer table (empty, `+7`, national, local `8`, formatted and pasted numbers, the prefix
+  alone, a letter, an over-long paste), its idempotency, the prefix-only detection and the
+  ViewModel's disabled/enabled `CanSubmit`; five salon cases (the code added while typing, the
+  incomplete number, the valid number, the prefix-only phone and the server code) bring the suite
+  to 1659, and the old 32-character limit case now uses a genuinely over-long value.
 
 - **A failed read retries itself while the screen is visible, and «Повторить» stays as «retry now».**
   On a phone a manual retry asks the person to notice the failure, guess when the network came back
@@ -1027,12 +1037,19 @@ in Core owns both base addresses.
   gesture is the cancel and no «Отмена» row is spent; the creation form reads nothing on open,
   so it arms no retry loop. The write is `POST api/salons/own` with the same body and the same
   validation as the web's owner form; there is no postal code (the web hides it for owner create
-  too), the kind is a `Picker` plus its hint instead of five radio rows, and the time zone is the
-  curated `SalonTimeZones` list because a native `Picker` has no search. City and address
+  too), the kind is the web's five radio cards — each with its own label and one-line hint, the
+  selected card framed and tinted like `has-[:checked]` — and the time zone is the curated
+  `SalonTimeZones` list because a native `Picker` has no search. Each card is a `Border` with the
+  selected frame and the `bg-primary/5` tint; the radio is a 16 pt circle-only `RadioButton` with
+  its own `ControlTemplate`, and the label and hint are its siblings. They are deliberately not
+  `RadioButton.Content`: Android's `ContentPresenter` does not pass the option's `BindingContext`
+  into that content, so the labels came out with empty text. The whole `Border` carries the tap,
+  while the radio keeps the group and the `Checked`/`Unchecked` states. The section's action
+  keeps the web's «Создать салон» wording; submit reads the web's «Отправить на проверку» for a
+  listed place and «Создать место» for a hidden one. City and address
   suggestions are inline rows under their fields, with the same debounce and minimum lengths as
   «Поиск»; `providerId` never leaves the form. Coordinates accept a comma decimal separator —
-  the decimal key of a Russian phone keyboard. Submit reads «Отправить на проверку» for a listed
-  place and «Создать место» for a hidden one. After `201` the page writes «Салон отправлен на
+  the decimal key of a Russian phone keyboard. After `201` the page writes «Салон отправлен на
   проверку.» or «Место приёма создано.» into the section's announcement and pops; the section
   re-reads on `Pop`, so the page does not call `ActivateAsync` itself. The write never retries
   itself, and the page closes itself when the route arrives without an owner or a barber profile.

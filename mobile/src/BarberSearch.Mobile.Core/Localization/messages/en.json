@@ -995,7 +995,6 @@
   "Создать салон": "Create salon",
   "Публичное место проверит администратор, и оно появится в поиске после одобрения. Скрытое место не проходит проверку и доступно для записи сразу.": "An administrator will review a public place, and it will appear in search after approval. A hidden place skips review and is available for booking immediately.",
   "Что это за место?": "What kind of place is this?",
-  "Выберите тип": "Choose a type",
   "Показывать в каталоге": "Show in the catalog",
   "Скрытое место не попадает в каталог и не требует проверки, но остаётся доступным для записи с вашей карточки.": "A hidden place is not included in the catalog and does not require review, but it remains available for booking from your card.",
   "Для этого типа места каталог недоступен.": "The catalog is unavailable for this place type.",
