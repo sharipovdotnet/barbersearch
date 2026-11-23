@@ -194,26 +194,41 @@
                                     StrokeShape="RoundRectangle 10">
                                     <VerticalStackLayout Spacing="8">
 
-                                        <!-- Название и бейджи: вид места, «Основной», модерация. -->
+                                        <!--
+                                            Название — своей строкой на всю ширину, бейджи — под ним.
+                                            В вебе название и бейджи делят одну flex-строку с переносом,
+                                            но на телефоне повторение этого один в один обрезало
+                                            подписи: FlexLayout сжимал детей уже их собственной ширины
+                                            (flex-shrink по умолчанию — 1), Label переносился на
+                                            вторую строку, а высота строки оставалась однострочной, и
+                                            хвост слова не рисовался вовсе — «Барбершоп» читался как
+                                            «Барбершо», «Мой барбершоп» — как «Мой». Две строки убирают
+                                            борьбу за ширину, как в карточке записи, а бейджи не
+                                            сжимаются (Shrink=0) и не переносятся внутри себя
+                                            (NoWrap): при нехватке места ряд переносит бейдж целиком,
+                                            а не режет подпись.
+                                        -->
+                                        <Label
+                                            FontFamily="GeistSemiBold"
+                                            FontSize="16"
+                                            LineBreakMode="WordWrap"
+                                            Text="{Binding Name}" />
+
+                                        <!-- Бейджи: вид места, «Основной», модерация. -->
                                         <FlexLayout
                                             AlignItems="Center"
                                             Direction="Row"
                                             Wrap="Wrap">
-                                            <Label
-                                                Margin="0,0,8,4"
-                                                FontFamily="GeistSemiBold"
-                                                FontSize="16"
-                                                LineBreakMode="WordWrap"
-                                                Text="{Binding Name}" />
-
                                             <Border
                                                 Margin="0,0,8,4"
                                                 Padding="8,2"
                                                 BackgroundColor="Transparent"
+                                                FlexLayout.Shrink="0"
                                                 Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
                                                 StrokeShape="RoundRectangle 8">
                                                 <Label
                                                     FontSize="12"
+                                                    LineBreakMode="NoWrap"
                                                     Text="{Binding KindText}"
                                                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
                                             </Border>
@@ -222,11 +237,13 @@
                                                 Margin="0,0,8,4"
                                                 Padding="8,2"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                                                FlexLayout.Shrink="0"
                                                 IsVisible="{Binding IsPrimary}"
                                                 Stroke="Transparent"
                                                 StrokeShape="RoundRectangle 8">
                                                 <Label
                                                     FontSize="12"
+                                                    LineBreakMode="NoWrap"
                                                     Text="{Binding PrimaryBadgeText}"
                                                     TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
                                             </Border>
@@ -236,6 +253,7 @@
                                                 Margin="0,0,8,4"
                                                 Padding="8,2"
                                                 BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                                FlexLayout.Shrink="0"
                                                 Stroke="Transparent"
                                                 StrokeShape="RoundRectangle 8">
                                                 <Border.Triggers>
@@ -266,6 +284,7 @@
                                                 </Border.Triggers>
                                                 <Label
                                                     FontSize="12"
+                                                    LineBreakMode="NoWrap"
                                                     Text="{Binding StatusText}">
                                                     <Label.Triggers>
                                                         <DataTrigger

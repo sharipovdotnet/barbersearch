@@ -887,6 +887,20 @@ in Core owns both base addresses.
   a failure there is silent — a shortcut is a hint, not data. Creating a salon has its own page
   (below), while managing a salon's barbers stays on the web.
 
+- **The salon card prints the name over its badges, not beside them.** The web wraps the name and
+  the pills in one `flex` line, and the phone repeated that until the labels lost their tails:
+  «Барбершоп» read «Барбершо», «Отклонён» read «Отклонё», «Мой барбершоп» read «Мой». The symptom is
+  the flex row's: `FlexShrink` defaults to 1, so `FlexLayout` is free to squeeze a child below the
+  width it was measured at, the `Label` then re-wraps against the narrower arrange width, and the
+  flex line keeps the one-line height from the measure pass — so the wrapped tail is never drawn
+  (a whole word at a space, a whole glyph when the pill's text is one word). The title now owns a
+  row of its own (full width, `WordWrap`, two lines when the name is long) and the badges sit
+  under it, the same anatomy as the booking card's status row. Each pill also carries
+  `FlexLayout.Shrink="0"` and a `NoWrap` label, so a row that runs out of room moves a whole pill
+  to the next line instead of cutting its text; this is the same deliberate deviation from the
+  web's content-sized wrap as the slot chips and the photo grid, recorded here rather than left
+  silent. Verified on the device in RU and EN on an approved and a rejected salon.
+
 - **The bell and the share sheet are the cabinet's other two mobile additions.** The header bell
   is a 44×44 target with a badge capped at «99+» (`BarberProfileText.BadgeCount`). The count is
   read silently after `/me` succeeds, by a 60-second timer while the cabinet is visible and
