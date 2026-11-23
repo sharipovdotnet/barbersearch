@@ -429,6 +429,44 @@ public sealed class AdminCatalogueReadTests
         Assert.Equal(1, await data.CountHairServiceLinksAsync(barber.HairService.Id));
     }
 
+    [Fact(Timeout = 180_000)]
+    public async Task Specializations_report_derived_category_for_hidden_and_idle_rows()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var data = new TestData(app);
+
+        var hidden = await data.CreateSpecializationAsync("Hidden Coloring", isActive: false);
+        await data.CreateHairServiceAsync(
+            "Hidden Blond",
+            ServiceCategory.Coloring,
+            specializationId: hidden.Id);
+        await data.CreateHairServiceAsync(
+            "Hidden Tint",
+            ServiceCategory.Coloring,
+            specializationId: hidden.Id);
+        await data.CreateHairServiceAsync(
+            "Hidden Cut",
+            ServiceCategory.Haircut,
+            specializationId: hidden.Id);
+        var idle = await data.CreateSpecializationAsync("Idle Direction");
+
+        await SignInAsAdminAsync(app);
+
+        var rows = await ReadRowsAsync(app.Client, SPECIALIZATIONS);
+
+        // Выключенная строка видна администратору и получает категорию по тем же услугам:
+        // большинство Coloring.
+        var hiddenRow = Row(rows, hidden.Id);
+        Assert.False(hiddenRow.GetProperty("isActive").GetBoolean());
+        Assert.Equal("Coloring", hiddenRow.GetProperty("category").GetString());
+
+        // Направление без активных услуг — Other.
+        Assert.Equal("Other", Row(rows, idle.Id).GetProperty("category").GetString());
+        Assert.All(
+            rows,
+            row => Assert.Equal(JsonValueKind.String, row.GetProperty("category").ValueKind));
+    }
+
     private static async Task SignInAsAdminAsync(TestApp app)
     {
         var admin = await app.CreateUserAsync(

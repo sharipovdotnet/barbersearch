@@ -1,3 +1,5 @@
+using BarberSearch.Domain.HairServices;
+
 namespace BarberSearch.Contracts.Specializations.GetSpecializations;
 
 /// <summary>
@@ -10,4 +12,13 @@ namespace BarberSearch.Contracts.Specializations.GetSpecializations;
 /// <param name="Id">Идентификатор специализации.</param>
 /// <param name="Name">Название для подписи в фильтре.</param>
 /// <param name="Description">Описание; <c>null</c>, если его нет.</param>
-public record SpecializationResponse(Guid Id, string Name, string? Description);
+/// <param name="Category">
+/// Категория направления — категория большинства его активных услуг; ничья решается меньшим
+/// числовым значением <see cref="ServiceCategory"/>, отсутствие активных услуг даёт
+/// <see cref="ServiceCategory.Other"/>. Поле не хранится в БД, а выводится при чтении.
+/// </param>
+public record SpecializationResponse(
+    Guid Id,
+    string Name,
+    string? Description,
+    ServiceCategory Category);

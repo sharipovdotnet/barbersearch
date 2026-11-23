@@ -1,6 +1,7 @@
-﻿using BarberSearch.Application.Common;
+using BarberSearch.Application.Common;
 using BarberSearch.Application.Specializations;
 using BarberSearch.Contracts.Specializations.Admin;
+using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.Specializations;
 using CSharpFunctionalExtensions;
 using Shared;
@@ -13,20 +14,32 @@ namespace BarberSearch.Application.UnitTests.Fakes;
 /// </summary>
 /// <remarks>
 /// Реализовано только то, что вызывают проверяемые сценарии: <see cref="ExistsAsync"/>,
-/// <see cref="GetActiveAsync"/> и <see cref="GetAdminListAsync"/>. Админский список фильтрует
-/// и сортирует по тем же правилам, что и реальный репозиторий.
+/// <see cref="GetActiveAsync"/>, <see cref="GetAdminListAsync"/> и
+/// <see cref="CountActiveServicesByCategoryAsync"/>. Админский список фильтрует и сортирует
+/// по тем же правилам, что и реальный репозиторий; счётчики категорий задаются строками
+/// через <see cref="AddCategoryCount"/> — как их вернул бы групповой запрос.
 /// </remarks>
 public sealed class FakeSpecializationRepository : ISpecializationRepository
 {
     private readonly HashSet<Guid> _existingIds = [];
     private readonly List<Specialization> _active = [];
     private readonly List<AdminSpecializationResponse> _adminRows = [];
+    private readonly List<ServiceCategoryCount> _categoryCounts = [];
 
     /// <summary>Сбой чтения справочника: обработчик обязан пробросить его как <c>Result</c>.</summary>
     public Failure? GetActiveFailure { get; set; }
 
     /// <summary>Сбой админского чтения: обработчик обязан пробросить его как <c>Result</c>.</summary>
     public Failure? GetAdminListFailure { get; set; }
+
+    /// <summary>Сбой чтения счётчиков категорий: обработчик обязан пробросить его как <c>Result</c>.</summary>
+    public Failure? CategoryCountsFailure { get; set; }
+
+    /// <summary>
+    /// Сколько раз обработчик запросил счётчики категорий: пустой справочник не должен
+    /// ходить в базу за счётчиками.
+    /// </summary>
+    public int CategoryCountRequests { get; private set; }
 
     /// <summary>Что обработчик передал в репозиторий: проверка разбора параметров.</summary>
     public AdminCatalogueStatus? LastStatus { get; private set; }
@@ -39,6 +52,13 @@ public sealed class FakeSpecializationRepository : ISpecializationRepository
     public void AddActive(Specialization specialization) => _active.Add(specialization);
 
     public void AddAdminRow(AdminSpecializationResponse row) => _adminRows.Add(row);
+
+    /// <summary>
+    /// Добавляет счётчик активных услуг: одна строка на пару «направление, категория»,
+    /// как в ответе группового запроса.
+    /// </summary>
+    public void AddCategoryCount(Guid specializationId, ServiceCategory category, int count)
+        => _categoryCounts.Add(new ServiceCategoryCount(specializationId, category, count));
 
     public Task<Result<bool, Failure>> ExistsAsync(
         Guid id,
@@ -96,6 +116,24 @@ public sealed class FakeSpecializationRepository : ISpecializationRepository
         return Task.FromResult<Result<
             IReadOnlyList<AdminSpecializationResponse>,
             Failure>>(ordered);
+    }
+
+    public Task<Result<IReadOnlyList<ServiceCategoryCount>, Failure>> CountActiveServicesByCategoryAsync(
+        IReadOnlyCollection<Guid> specializationIds,
+        CancellationToken cancellationToken = default)
+    {
+        CategoryCountRequests++;
+
+        if (CategoryCountsFailure is { } failure)
+        {
+            return Task.FromResult<Result<IReadOnlyList<ServiceCategoryCount>, Failure>>(failure);
+        }
+
+        var rows = _categoryCounts
+            .Where(row => specializationIds.Contains(row.SpecializationId))
+            .ToList();
+
+        return Task.FromResult<Result<IReadOnlyList<ServiceCategoryCount>, Failure>>(rows);
     }
 
     public Task<Result<Specialization, Failure>> GetByIdAsync(

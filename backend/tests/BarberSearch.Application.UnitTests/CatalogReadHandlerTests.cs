@@ -17,8 +17,13 @@ public class CatalogReadHandlerTests
     public async Task GetSpecializations_MapsRowsInRepositoryOrder()
     {
         var repository = new FakeSpecializationRepository();
-        repository.AddActive(CreateSpecialization("Alpha", "First"));
-        repository.AddActive(CreateSpecialization("Zeta", null));
+        var alpha = CreateSpecialization("Alpha", "First");
+        var zeta = CreateSpecialization("Zeta", null);
+        repository.AddActive(alpha);
+        repository.AddActive(zeta);
+        repository.AddCategoryCount(alpha.Id, ServiceCategory.Haircut, 2);
+        repository.AddCategoryCount(alpha.Id, ServiceCategory.Beard, 1);
+        repository.AddCategoryCount(zeta.Id, ServiceCategory.Coloring, 3);
         var handler = new GetSpecializationsHandler(repository);
 
         var result = await handler.Handle(
@@ -32,12 +37,64 @@ public class CatalogReadHandlerTests
             {
                 Assert.Equal("Alpha", row.Name);
                 Assert.Equal("First", row.Description);
+                Assert.Equal(ServiceCategory.Haircut, row.Category);
             },
             row =>
             {
                 Assert.Equal("Zeta", row.Name);
                 Assert.Null(row.Description);
+                Assert.Equal(ServiceCategory.Coloring, row.Category);
             });
+    }
+
+    [Fact]
+    public async Task GetSpecializations_FallsBackToOtherWhenNoActiveServices()
+    {
+        var repository = new FakeSpecializationRepository();
+        repository.AddActive(CreateSpecialization("Alpha", null));
+        var handler = new GetSpecializationsHandler(repository);
+
+        var result = await handler.Handle(
+            new GetSpecializationsQuery(),
+            CancellationToken.None);
+
+        // Выключенные услуги в счётчики не попадают, поэтому у направления без активных
+        // услуг счётчиков нет вовсе — резолвер отдаёт Other.
+        var row = Assert.Single(result.Value);
+        Assert.Equal(ServiceCategory.Other, row.Category);
+    }
+
+    [Fact]
+    public async Task GetSpecializations_EmptyCatalogueSkipsCategoryCounts()
+    {
+        var repository = new FakeSpecializationRepository();
+        var handler = new GetSpecializationsHandler(repository);
+
+        var result = await handler.Handle(
+            new GetSpecializationsQuery(),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Value);
+        Assert.Equal(0, repository.CategoryCountRequests);
+    }
+
+    [Fact]
+    public async Task GetSpecializations_PropagatesCategoryCountFailure()
+    {
+        var repository = new FakeSpecializationRepository
+        {
+            CategoryCountsFailure = new Failure(Error.Validation("catalogue.counts", "Boom."))
+        };
+        repository.AddActive(CreateSpecialization("Alpha", null));
+        var handler = new GetSpecializationsHandler(repository);
+
+        var result = await handler.Handle(
+            new GetSpecializationsQuery(),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("catalogue.counts", result.Error.Errors[0].Code);
     }
 
     [Fact]
