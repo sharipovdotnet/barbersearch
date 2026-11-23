@@ -554,6 +554,11 @@
                             бейдж состояния проверки. Ширину плитки считает код раздела от
                             ширины хоста (см. BarberProfileView.xaml.cs), поэтому две плитки
                             занимают строку целиком, а подпись и статус не обрезаются.
+                            Отступ между строками — 12 pt нижнего Padding обёртки-Grid, а не
+                            Margin плитки: FlexLayout считает Margin элемента дважды (в
+                            DesiredSize и ещё раз в строке) и превращал 12 pt в 24 pt. Padding
+                            входит в высоту содержимого один раз, поэтому зазор совпадает с
+                            горизонтальным gap-3 веба.
                         -->
                         <FlexLayout
                             x:Name="PhotoTilesHost"
@@ -563,71 +568,72 @@
                             Wrap="Wrap">
                             <BindableLayout.ItemTemplate>
                                 <DataTemplate x:DataType="barber:BarberProfilePhotoTile">
-                                    <Border
-                                        Margin="0,0,0,12"
-                                        Padding="8"
-                                        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
-                                        StrokeShape="RoundRectangle 10"
-                                        WidthRequest="{Binding TileWidth}">
-                                        <Border.GestureRecognizers>
-                                            <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnPhotoTapped" />
-                                        </Border.GestureRecognizers>
+                                    <Grid Padding="0,0,0,12">
+                                        <Border
+                                            Padding="8"
+                                            Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                            StrokeShape="RoundRectangle 10"
+                                            WidthRequest="{Binding TileWidth}">
+                                            <Border.GestureRecognizers>
+                                                <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnPhotoTapped" />
+                                            </Border.GestureRecognizers>
 
-                                        <VerticalStackLayout Spacing="8">
-                                            <Border
-                                                BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
-                                                HeightRequest="{Binding ImageSize}"
-                                                Padding="0"
-                                                StrokeThickness="0"
-                                                StrokeShape="RoundRectangle 8">
-                                                <Image
-                                                    Aspect="AspectFill"
+                                            <VerticalStackLayout Spacing="8">
+                                                <Border
+                                                    BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
                                                     HeightRequest="{Binding ImageSize}"
-                                                    SemanticProperties.Description="{Binding Caption}"
-                                                    Source="{Binding Image}" />
-                                            </Border>
+                                                    Padding="0"
+                                                    StrokeThickness="0"
+                                                    StrokeShape="RoundRectangle 8">
+                                                    <Image
+                                                        Aspect="AspectFill"
+                                                        HeightRequest="{Binding ImageSize}"
+                                                        SemanticProperties.Description="{Binding Caption}"
+                                                        Source="{Binding Image}" />
+                                                </Border>
 
-                                            <Label
-                                                FontSize="14"
-                                                LineBreakMode="WordWrap"
-                                                MaxLines="2"
-                                                Text="{Binding Caption}" />
-
-                                            <!-- Состояние проверки: цвет повторяет бейджи записей. -->
-                                            <Border
-                                                Padding="8,2"
-                                                BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
-                                                HorizontalOptions="Start"
-                                                StrokeThickness="0"
-                                                StrokeShape="RoundRectangle 8">
                                                 <Label
-                                                    FontSize="12"
+                                                    FontSize="14"
                                                     LineBreakMode="WordWrap"
                                                     MaxLines="2"
-                                                    Text="{Binding StatusText}"
-                                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
-                                                    <Label.Triggers>
-                                                        <DataTrigger
-                                                            Binding="{Binding StatusKind}"
-                                                            TargetType="Label"
-                                                            Value="pending">
-                                                            <Setter
-                                                                Property="TextColor"
-                                                                Value="{AppThemeBinding Light={StaticResource Warning}, Dark={StaticResource WarningDark}}" />
-                                                        </DataTrigger>
-                                                        <DataTrigger
-                                                            Binding="{Binding StatusKind}"
-                                                            TargetType="Label"
-                                                            Value="rejected">
-                                                            <Setter
-                                                                Property="TextColor"
-                                                                Value="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
-                                                        </DataTrigger>
-                                                    </Label.Triggers>
-                                                </Label>
-                                            </Border>
-                                        </VerticalStackLayout>
-                                    </Border>
+                                                    Text="{Binding Caption}" />
+
+                                                <!-- Состояние проверки: цвет повторяет бейджи записей. -->
+                                                <Border
+                                                    Padding="8,2"
+                                                    BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                                    HorizontalOptions="Start"
+                                                    StrokeThickness="0"
+                                                    StrokeShape="RoundRectangle 8">
+                                                    <Label
+                                                        FontSize="12"
+                                                        LineBreakMode="WordWrap"
+                                                        MaxLines="2"
+                                                        Text="{Binding StatusText}"
+                                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}">
+                                                        <Label.Triggers>
+                                                            <DataTrigger
+                                                                Binding="{Binding StatusKind}"
+                                                                TargetType="Label"
+                                                                Value="pending">
+                                                                <Setter
+                                                                    Property="TextColor"
+                                                                    Value="{AppThemeBinding Light={StaticResource Warning}, Dark={StaticResource WarningDark}}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger
+                                                                Binding="{Binding StatusKind}"
+                                                                TargetType="Label"
+                                                                Value="rejected">
+                                                                <Setter
+                                                                    Property="TextColor"
+                                                                    Value="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
+                                                            </DataTrigger>
+                                                        </Label.Triggers>
+                                                    </Label>
+                                                </Border>
+                                            </VerticalStackLayout>
+                                        </Border>
+                                    </Grid>
                                 </DataTemplate>
                             </BindableLayout.ItemTemplate>
                         </FlexLayout>

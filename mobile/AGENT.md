@@ -963,6 +963,11 @@ in Core owns both base addresses.
   an empty one) and capped at two lines with a tail ellipsis: the domain allows 2000 characters,
   and the web prints them all, which at a 150 pt frame would give one card per screen.
 
+- **The cabinet photos grid's row gap is the wrapper's 12 pt bottom padding, not the tile's
+  margin.** `FlexLayout` counts an item's `Margin` twice — in its `DesiredSize` and again in the flex
+  line — so the old bottom `Margin="0,0,0,12"` showed as 24 pt; a `Grid Padding="0,0,0,12"` wrapper
+  counts it once and keeps the web's `gap-3` (12 pt) both ways.
+
 - **Five places where the cabinet deliberately does not repeat the web.** Cancel and price are
   native `DisplayPrompt`s instead of the web's dialogs: each asks for one value, the customer tab
   already confirms its cancel with a platform dialog, and a modal of our own would add a second
