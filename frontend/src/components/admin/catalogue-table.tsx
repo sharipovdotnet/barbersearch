@@ -96,6 +96,11 @@ export function SpecializationTable({
       columns={[
         { id: 'name', label: t('Название'), render: (row) => row.name },
         {
+          id: 'category',
+          label: t('Категория'),
+          render: (row) => t(SERVICE_CATEGORY_LABELS[row.category]),
+        },
+        {
           id: 'description',
           label: t('Описание'),
           render: (row) => (

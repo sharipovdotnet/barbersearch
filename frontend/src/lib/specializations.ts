@@ -1,4 +1,5 @@
 import { apiRequest } from '@/lib/api'
+import type { ServiceCategory } from '@/lib/barber-profile-labels'
 import { isSpecializationList } from '@/lib/response-guards'
 
 /**
@@ -12,6 +13,7 @@ export type SpecializationOption = {
   id: string
   name: string
   description: string | null
+  category: ServiceCategory
 }
 
 /** Активные специализации в порядке сервера (по имени). */

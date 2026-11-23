@@ -14,6 +14,7 @@ import { BarberProfilePage } from '@/pages/barber-profile-page'
 import {
   catalogueHairService,
   catalogueSpecialization,
+  catalogueSpecializations,
   noContent,
   problemDetails,
   testBarberProfile,
@@ -463,6 +464,108 @@ describe('BarberProfilePage: мутации', () => {
     expect(new URL(removeUrl).pathname).toBe(
       `${PROFILE_URL}/specializations/${testBarberProfile.specializations[0].specializationId}`
     )
+  })
+})
+
+describe('BarberProfilePage: справочник специализаций', () => {
+  /** Подписи `optgroup` каталога в порядке документа. */
+  function groupLabels(select: HTMLElement): (string | null)[] {
+    return Array.from(select.querySelectorAll('optgroup')).map((group) =>
+      group.getAttribute('label')
+    )
+  }
+
+  /** Строки каталога без заглушки: у неё пустой `value`. */
+  function optionNames(select: HTMLElement): string[] {
+    return Array.from(select.querySelectorAll('option'))
+      .filter((option) => option.value !== '')
+      .map((option) => option.textContent ?? '')
+  }
+
+  it('группирует справочник по шести категориям, заглушка остаётся первой', async () => {
+    mockOwnProfile()
+
+    renderPage()
+    await waitForProfile()
+
+    const select = screen.getByLabelText('Специализация')
+
+    expect(select).toHaveDisplayValue('Выберите специализацию')
+
+    fireEvent.focus(select)
+
+    await screen.findByRole('option', { name: 'Барберинг' })
+
+    expect(groupLabels(select)).toStrictEqual([
+      'Стрижка',
+      'Борода',
+      'Окрашивание',
+      'Укладка',
+      'Уход',
+      'Другое',
+    ])
+
+    const [placeholder] = within(select).getAllByRole('option')
+
+    expect(placeholder).toHaveAttribute('value', '')
+    expect(placeholder).toBeDisabled()
+    expect(placeholder).toHaveTextContent('Выберите специализацию')
+    expect(optionNames(select)).toStrictEqual([
+      'Барберинг',
+      'Оформление бороды',
+      'Окрашивание',
+      'Укладка',
+      'Уход за волосами',
+      'Бритьё головы',
+    ])
+  })
+
+  it('уже добавленная специализация скрыта, опустевшая группа не рендерится', async () => {
+    const added = catalogueSpecializations[0]
+
+    mockOwnProfile({
+      ...cloneProfile(testBarberProfile),
+      specializations: [
+        {
+          id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+          specializationId: added.id,
+          name: added.name,
+          description: null,
+        },
+      ],
+    })
+
+    renderPage()
+    await waitForProfile()
+
+    expect(
+      screen.getByRole('button', { name: 'Убрать специализацию Барберинг' })
+    ).toBeInTheDocument()
+
+    const select = screen.getByLabelText('Специализация')
+
+    fireEvent.focus(select)
+
+    await screen.findByRole('option', { name: 'Оформление бороды' })
+
+    expect(
+      within(select).queryByRole('option', { name: 'Барберинг' })
+    ).not.toBeInTheDocument()
+    // «Стрижка» осталась без доступных строк — группы нет, остальные на месте.
+    expect(groupLabels(select)).toStrictEqual([
+      'Борода',
+      'Окрашивание',
+      'Укладка',
+      'Уход',
+      'Другое',
+    ])
+    expect(optionNames(select)).toStrictEqual([
+      'Оформление бороды',
+      'Окрашивание',
+      'Укладка',
+      'Уход за волосами',
+      'Бритьё головы',
+    ])
   })
 })
 
