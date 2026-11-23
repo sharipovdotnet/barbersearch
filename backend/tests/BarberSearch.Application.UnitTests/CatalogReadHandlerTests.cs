@@ -60,9 +60,13 @@ public class CatalogReadHandlerTests
     [Fact]
     public async Task GetHairServices_MapsRowsInRepositoryOrder()
     {
+        var fadeDirection = Guid.CreateVersion7();
+        var beardDirection = Guid.CreateVersion7();
         var repository = new FakeHairServiceRepository();
-        repository.AddActive(CreateHairService("Fade", ServiceCategory.Haircut, 60, "A fade"));
-        repository.AddActive(CreateHairService("Beard Trim", ServiceCategory.Beard, 30, null));
+        repository.AddActive(
+            CreateHairService("Fade", ServiceCategory.Haircut, 60, "A fade", fadeDirection));
+        repository.AddActive(
+            CreateHairService("Beard Trim", ServiceCategory.Beard, 30, null, beardDirection));
         var handler = new GetHairServicesHandler(repository);
 
         var result = await handler.Handle(
@@ -76,6 +80,7 @@ public class CatalogReadHandlerTests
             {
                 Assert.Equal("Fade", row.Name);
                 Assert.Equal(ServiceCategory.Haircut, row.Category);
+                Assert.Equal(fadeDirection, row.SpecializationId);
                 Assert.Equal(60, row.DefaultDurationMinutes);
                 Assert.Equal("A fade", row.Description);
             },
@@ -83,9 +88,48 @@ public class CatalogReadHandlerTests
             {
                 Assert.Equal("Beard Trim", row.Name);
                 Assert.Equal(ServiceCategory.Beard, row.Category);
+                Assert.Equal(beardDirection, row.SpecializationId);
                 Assert.Equal(30, row.DefaultDurationMinutes);
                 Assert.Null(row.Description);
             });
+    }
+
+    [Fact]
+    public async Task GetHairServices_ForwardsSpecializationFilter()
+    {
+        var fadeDirection = Guid.CreateVersion7();
+        var beardDirection = Guid.CreateVersion7();
+        var repository = new FakeHairServiceRepository();
+        repository.AddActive(
+            CreateHairService("Fade", ServiceCategory.Haircut, 60, null, fadeDirection));
+        repository.AddActive(
+            CreateHairService("Beard Trim", ServiceCategory.Beard, 30, null, beardDirection));
+        var handler = new GetHairServicesHandler(repository);
+
+        var result = await handler.Handle(
+            new GetHairServicesQuery(beardDirection),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var row = Assert.Single(result.Value);
+        Assert.Equal("Beard Trim", row.Name);
+        Assert.Equal(beardDirection, repository.LastSpecializationId);
+    }
+
+    [Fact]
+    public async Task GetHairServices_TreatsEmptySpecializationAsNoFilter()
+    {
+        var repository = new FakeHairServiceRepository();
+        repository.AddActive(CreateHairService("Fade", ServiceCategory.Haircut, 60, null));
+        var handler = new GetHairServicesHandler(repository);
+
+        var result = await handler.Handle(
+            new GetHairServicesQuery(Guid.Empty),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(result.Value);
+        Assert.Null(repository.LastSpecializationId);
     }
 
     [Fact]
@@ -117,9 +161,15 @@ public class CatalogReadHandlerTests
         string name,
         ServiceCategory category,
         int defaultDurationMinutes,
-        string? description)
+        string? description,
+        Guid? specializationId = null)
     {
-        var created = HairService.Create(name, category, defaultDurationMinutes, description);
+        var created = HairService.Create(
+            name,
+            category,
+            specializationId ?? Guid.CreateVersion7(),
+            defaultDurationMinutes,
+            description);
         Assert.True(created.IsSuccess);
 
         return created.Value;

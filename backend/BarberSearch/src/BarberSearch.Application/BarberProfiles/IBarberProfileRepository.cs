@@ -440,6 +440,19 @@ public interface IBarberProfileRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Указал ли барбер специализацию. Узкий <c>EXISTS</c> по <c>barber_specializations</c>:
+    /// проверка нужна при добавлении услуги в прайс — услуга каталога принадлежит ровно
+    /// одному направлению, и барбер может предлагать только услуги своих направлений.
+    /// </summary>
+    /// <param name="barberProfileId">Идентификатор профиля барбера.</param>
+    /// <param name="specializationId">Идентификатор специализации.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    Task<Result<bool, Failure>> HasSpecializationAsync(
+        Guid barberProfileId,
+        Guid specializationId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Страница админского списка барберов: поиск по имени и email, фильтр по статусу.
     /// </summary>
     /// <remarks>

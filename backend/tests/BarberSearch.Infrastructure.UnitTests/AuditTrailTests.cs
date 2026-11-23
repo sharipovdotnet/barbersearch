@@ -568,12 +568,13 @@ public class AuditTrailTests
     {
         using var context = CreateContext();
         var audit = CreateAudit();
+        var specializationId = Guid.CreateVersion7();
         var hairService = TrackUnchanged(
             context,
-            HairService.Create("Classic Cut", ServiceCategory.Haircut, 30, "Short").Value,
+            HairService.Create("Classic Cut", ServiceCategory.Haircut, specializationId, 30, "Short").Value,
             context.HairServices);
 
-        Assert.True(hairService.Update("Premium Cut", "Short", 45).IsSuccess);
+        Assert.True(hairService.Update("Premium Cut", "Short", 45, specializationId).IsSuccess);
 
         audit.Capture(context);
 

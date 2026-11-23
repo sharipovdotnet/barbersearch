@@ -3,6 +3,7 @@ using BarberSearch.Application.BarberProfiles.AddBarberProfileService;
 using BarberSearch.Application.BarberProfiles.AddBarberProfileSpecialization;
 using BarberSearch.Application.UnitTests.Fakes;
 using BarberSearch.Domain.BarberProfiles;
+using BarberSearch.Domain.HairServices;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shared;
 using Xunit;
@@ -110,11 +111,19 @@ public class ReferenceIntegrityTests
     {
         var ownerId = Guid.CreateVersion7();
         var profile = CreateProfile(ownerId);
+        var specializationId = Guid.CreateVersion7();
+        Assert.True(profile.AddSpecialization(specializationId).IsSuccess);
+
+        var hairService = HairService.Create(
+            "Cut",
+            ServiceCategory.Haircut,
+            specializationId,
+            30).Value;
+
         var profiles = new FakeBarberProfileRepository();
         profiles.Add(profile);
-        var hairServiceId = Guid.CreateVersion7();
         var hairServices = new FakeHairServiceRepository();
-        hairServices.AddExisting(hairServiceId);
+        hairServices.AddActive(hairService);
         var handler = new AddBarberProfileServiceHandler(
             profiles,
             hairServices,
@@ -123,12 +132,46 @@ public class ReferenceIntegrityTests
             new FakeCurrentUser(ownerId));
 
         var result = await handler.Handle(
-            new AddBarberProfileServiceCommand(profile.Id, hairServiceId, 1500m, 30),
+            new AddBarberProfileServiceCommand(profile.Id, hairService.Id, 1500m, 30),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var service = Assert.Single(profile.Services);
-        Assert.Equal(hairServiceId, service.HairServiceId);
+        Assert.Equal(hairService.Id, service.HairServiceId);
+    }
+
+    [Fact]
+    public async Task AddService_WhenBarberLacksTheServiceSpecialization_ReturnsConflict()
+    {
+        var ownerId = Guid.CreateVersion7();
+        var profile = CreateProfile(ownerId);
+        var hairService = HairService.Create(
+            "Colour",
+            ServiceCategory.Coloring,
+            Guid.CreateVersion7(),
+            90).Value;
+
+        var profiles = new FakeBarberProfileRepository();
+        profiles.Add(profile);
+        var hairServices = new FakeHairServiceRepository();
+        hairServices.AddActive(hairService);
+        var handler = new AddBarberProfileServiceHandler(
+            profiles,
+            hairServices,
+            new FakeUnitOfWork(),
+            NullLogger<AddBarberProfileServiceHandler>.Instance,
+            new FakeCurrentUser(ownerId));
+
+        var result = await handler.Handle(
+            new AddBarberProfileServiceCommand(profile.Id, hairService.Id, 1500m, 90),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.CONFLICT, result.Error.Errors[0].Type);
+        Assert.Equal(
+            "barberProfile.addService.specializationMismatch",
+            result.Error.Errors[0].Code);
+        Assert.Empty(profile.Services);
     }
 
     [Fact]

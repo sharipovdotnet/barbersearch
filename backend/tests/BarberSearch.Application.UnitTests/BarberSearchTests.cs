@@ -18,7 +18,7 @@ public class BarberSearchTests
     public async Task Search_WithoutMatches_ReturnsEmptyPageAndNoCursor()
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var result = await handler.Handle(
             new SearchBarbersQuery(null, null, null, null, null, null, null),
@@ -34,7 +34,7 @@ public class BarberSearchTests
     public async Task Search_ForwardsEveryFilterAndTrimsCity()
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
         var specializationId = Guid.CreateVersion7();
         var hairServiceId = Guid.CreateVersion7();
         var date = new DateOnly(2026, 12, 1);
@@ -57,7 +57,7 @@ public class BarberSearchTests
     public async Task Search_EmptyFilters_AreTreatedAsAbsent()
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var result = await handler.Handle(
             new SearchBarbersQuery("   ", Guid.Empty, Guid.Empty, null, null, "  ", null),
@@ -77,7 +77,7 @@ public class BarberSearchTests
     {
         var repository = new FakeBarberProfileRepository();
         AddOrderedItems(repository, 3);
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var result = await handler.Handle(
             new SearchBarbersQuery(null, null, null, null, null, null, 2),
@@ -98,7 +98,7 @@ public class BarberSearchTests
     {
         var repository = new FakeBarberProfileRepository();
         var items = AddOrderedItems(repository, 5);
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var collected = new List<BarberSearchItemResponse>();
         string? cursor = null;
@@ -126,7 +126,7 @@ public class BarberSearchTests
         var repository = new FakeBarberProfileRepository();
         AddItem(repository, 3, 4.00m);
         AddItem(repository, 4, 4.00m);
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var first = await handler.Handle(
             new SearchBarbersQuery(null, null, null, null, null, null, 1),
@@ -147,7 +147,7 @@ public class BarberSearchTests
         AddItem(repository, 1, null);
         AddItem(repository, 2, 5.00m);
         AddItem(repository, 3, null);
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var first = await handler.Handle(
             new SearchBarbersQuery(null, null, null, null, null, null, 2),
@@ -169,7 +169,7 @@ public class BarberSearchTests
     public async Task Search_WithBrokenCursor_ReturnsValidationNotServerError()
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var result = await handler.Handle(
             new SearchBarbersQuery(null, null, null, null, null, "broken", null),
@@ -184,7 +184,7 @@ public class BarberSearchTests
     public async Task Search_WithPageSizeOutsideBounds_ReturnsValidation()
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var tooSmall = await handler.Handle(
             new SearchBarbersQuery(null, null, null, null, null, null, 0),
@@ -207,7 +207,7 @@ public class BarberSearchTests
     public async Task Search_WithLanguage_ParsesEnumIgnoringCaseAndTrims(string language)
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var result = await handler.Handle(
             new SearchBarbersQuery(null, null, null, null, language, null, null),
@@ -224,7 +224,7 @@ public class BarberSearchTests
     public async Task Search_ForwardsAdditionalServiceAndTrimsIt()
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var result = await handler.Handle(
             new SearchBarbersQuery(
@@ -249,7 +249,7 @@ public class BarberSearchTests
     public async Task Search_WithBlankAdditionalService_DoesNotFilter(string? additionalService)
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var result = await handler.Handle(
             new SearchBarbersQuery(
@@ -274,7 +274,7 @@ public class BarberSearchTests
     public async Task Search_WithBlankLanguage_DoesNotFilter(string? language)
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var result = await handler.Handle(
             new SearchBarbersQuery(null, null, null, null, language, null, null),
@@ -292,7 +292,7 @@ public class BarberSearchTests
     public async Task Search_WithUnknownLanguage_ReturnsValidationNotServerError(string language)
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var result = await handler.Handle(
             new SearchBarbersQuery(null, null, null, null, language, null, null),
@@ -310,7 +310,7 @@ public class BarberSearchTests
     public async Task Search_WithoutCoordinates_PassesNullLocation()
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var result = await handler.Handle(
             new SearchBarbersQuery(null, null, null, null, null, null, null),
@@ -325,7 +325,7 @@ public class BarberSearchTests
     public async Task Search_WithCoordinates_PassesLocationToRepository()
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var result = await handler.Handle(
             new SearchBarbersQuery(
@@ -351,7 +351,7 @@ public class BarberSearchTests
     public async Task Search_WithOnlyLatitude_ReturnsLocationValidation()
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var result = await handler.Handle(
             new SearchBarbersQuery(
@@ -379,7 +379,7 @@ public class BarberSearchTests
     public async Task Search_WithOnlyLongitude_ReturnsLocationValidation()
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var result = await handler.Handle(
             new SearchBarbersQuery(
@@ -417,7 +417,7 @@ public class BarberSearchTests
         string invalidField)
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var result = await handler.Handle(
             new SearchBarbersQuery(
@@ -448,7 +448,7 @@ public class BarberSearchTests
         var repository = new FakeBarberProfileRepository();
         var nearest = AddItem(repository, 1, 4.00m, distanceKm: 1.5);
         AddItem(repository, 2, 5.00m, distanceKm: 9.5);
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var result = await handler.Handle(
             new SearchBarbersQuery(
@@ -482,7 +482,7 @@ public class BarberSearchTests
         AddItem(repository, 1, 5.00m, distanceKm: 0.4);
         AddItem(repository, 2, 4.00m, distanceKm: 2.2);
         AddItem(repository, 3, 3.00m, distanceKm: 7.9);
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var collected = new List<BarberSearchItemResponse>();
         string? cursor = null;
@@ -523,7 +523,7 @@ public class BarberSearchTests
         AddItem(repository, 1, 5.00m, distanceKm: 1.0);
         AddItem(repository, 2, 5.00m, distanceKm: null);
         AddItem(repository, 3, 5.00m, distanceKm: null);
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         var first = await handler.Handle(
             new SearchBarbersQuery(
@@ -589,7 +589,7 @@ public class BarberSearchTests
     public async Task Search_WithGeoLocationAndRatingCursor_ReturnsCursorValidation()
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         // Курсор старого формата: в нём нет расстояния, значит, он из рейтинговой выдачи.
         var oldCursor = EncodeCursorPayload($"1|4.5|{Guid.CreateVersion7():D}");
@@ -619,7 +619,7 @@ public class BarberSearchTests
     public async Task Search_WithoutLocationAndDistanceCursor_ReturnsCursorValidation()
     {
         var repository = new FakeBarberProfileRepository();
-        var handler = new SearchBarbersHandler(repository);
+        var handler = new SearchBarbersHandler(repository, new FakeHairServiceRepository());
 
         // Курсор с расстоянием принадлежит гео-порядку: продолжать по нему рейтинговую
         // выдачу нельзя, иначе страницы поедут.
