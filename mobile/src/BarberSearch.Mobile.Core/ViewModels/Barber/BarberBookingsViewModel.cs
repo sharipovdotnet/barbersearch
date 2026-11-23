@@ -248,6 +248,11 @@ public sealed partial class BarberBookingsViewModel : ObservableObject, IBarberC
     public string? NextClientText => _day.NextClient;
 
     /// <summary>
+    /// Есть ли строка о ближайшем клиенте: пустая строка не должна занимать место.
+    /// </summary>
+    public bool HasNextClient => !string.IsNullOrEmpty(NextClientText);
+
+    /// <summary>
     /// В дне больше двадцати записей: показаны только первые.
     /// </summary>
     public bool ShowDayTruncated => _day.IsTruncated;
@@ -1508,6 +1513,7 @@ public sealed partial class BarberBookingsViewModel : ObservableObject, IBarberC
         OnPropertyChanged(nameof(DaySubtitleText));
         OnPropertyChanged(nameof(TodaySummaryText));
         OnPropertyChanged(nameof(NextClientText));
+        OnPropertyChanged(nameof(HasNextClient));
         OnPropertyChanged(nameof(ShowDayTruncated));
         OnPropertyChanged(nameof(ShowFirstLoading));
         OnPropertyChanged(nameof(ErrorMessage));

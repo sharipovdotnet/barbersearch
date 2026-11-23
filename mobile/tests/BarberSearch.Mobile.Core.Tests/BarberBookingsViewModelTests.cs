@@ -480,6 +480,7 @@ public sealed class BarberBookingsViewModelTests
                 BarberCabinetFixtures.Now,
                 next.TimeZone),
             harness.ViewModel.NextClientText);
+        Assert.True(harness.ViewModel.HasNextClient);
     }
 
     private static BarberBookingResponse Booking(

@@ -14,8 +14,11 @@
 
         Состояния (первая загрузка, ошибка, пусто, список) лежат в одной ячейке сетки
         и показываются взаимоисключающе: так ни одно из них не толкает остальные.
+
+        Шапка дня и «Записать клиента» стоят над лентой, а не в её заголовке: сводка
+        «Сегодня» и главное действие остаются на месте, пока список прокручивается.
     -->
-    <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="8">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="8">
 
         <!-- Баннер о результате действия: подтверждение, завершение, отмена, заметка. -->
         <Border
@@ -74,7 +77,54 @@
             Text="{Binding PartialErrorText}"
             TextColor="{AppThemeBinding Light={StaticResource Destructive}, Dark={StaticResource DestructiveDark}}" />
 
-        <Grid Grid.Row="3">
+        <!--
+            Закреплённая шапка дня и «Записать клиента»: они не в заголовке ленты,
+            поэтому не уезжают вверх при прокрутке. Шапка дня есть только у
+            «Сегодня», действие — у «Сегодня» и «Ближайших»; в «Истории» обе
+            строки схлопываются. Пустое состояние и ошибка показывают себя сами,
+            и у пустого есть своя кнопка записи, поэтому шапка живёт только
+            вместе со строками.
+        -->
+        <VerticalStackLayout
+            Grid.Row="3"
+            IsVisible="{Binding ShowList}"
+            Spacing="2">
+            <VerticalStackLayout IsVisible="{Binding ShowDayHeader}" Spacing="2">
+                <Label
+                    FontFamily="GeistSemiBold"
+                    FontSize="16"
+                    Text="{Binding DayHeadingText}" />
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding DaySubtitleText}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Label
+                    FontSize="12"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding TodaySummaryText}"
+                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                <Label
+                    FontSize="14"
+                    IsVisible="{Binding HasNextClient}"
+                    LineBreakMode="WordWrap"
+                    Text="{Binding NextClientText}" />
+            </VerticalStackLayout>
+            <Label
+                FontSize="12"
+                IsVisible="{Binding ShowDayTruncated}"
+                LineBreakMode="WordWrap"
+                Text="{Binding TodayTruncatedText}"
+                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+
+            <!-- Записать клиента: над первой карточкой; свежесть списка — в футере. -->
+            <Button
+                Command="{Binding CreateBookingCommand}"
+                IsVisible="{Binding ShowCreateBooking}"
+                Text="{loc:Translate Key='Записать клиента'}" />
+        </VerticalStackLayout>
+
+        <Grid Grid.Row="4">
 
             <!-- Первое чтение обоих списков. -->
             <VerticalStackLayout
@@ -114,60 +164,12 @@
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
             </VerticalStackLayout>
 
-            <!-- Список: свайп вниз обновляет, шапка — лента дня, футер — страницы. -->
+            <!-- Список: свайп вниз обновляет, футер — страницы. -->
             <RefreshView
                 Command="{Binding RefreshCommand}"
                 IsRefreshing="{Binding IsRefreshing}"
                 IsVisible="{Binding ShowList}">
                 <CollectionView ItemsSource="{Binding Items}" SelectionMode="None">
-
-                    <CollectionView.Header>
-                        <VerticalStackLayout Padding="0,0,0,8" Spacing="2">
-                            <VerticalStackLayout IsVisible="{Binding ShowDayHeader}" Spacing="2">
-                                <Label
-                                    FontFamily="GeistSemiBold"
-                                    FontSize="16"
-                                    Text="{Binding DayHeadingText}" />
-                                <Label
-                                    FontSize="12"
-                                    LineBreakMode="WordWrap"
-                                    Text="{Binding DaySubtitleText}"
-                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                                <Label
-                                    FontSize="12"
-                                    LineBreakMode="WordWrap"
-                                    Text="{Binding TodaySummaryText}"
-                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                                <Label FontSize="14" LineBreakMode="WordWrap" Text="{Binding NextClientText}">
-                                    <Label.Triggers>
-                                        <DataTrigger
-                                            Binding="{Binding NextClientText}"
-                                            TargetType="Label"
-                                            Value="{x:Null}">
-                                            <Setter Property="IsVisible" Value="False" />
-                                        </DataTrigger>
-                                    </Label.Triggers>
-                                </Label>
-                            </VerticalStackLayout>
-                            <Label
-                                FontSize="12"
-                                IsVisible="{Binding ShowDayTruncated}"
-                                LineBreakMode="WordWrap"
-                                Text="{Binding TodayTruncatedText}"
-                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-
-                            <!--
-                                Записать клиента: в дне — сразу под сводкой, в «Ближайших» —
-                                перед первой карточкой. Обе вкладки начинают список действием,
-                                а свежесть списка осталась внизу, в футере.
-                            -->
-                            <Button
-                                Margin="0,8,0,0"
-                                Command="{Binding CreateBookingCommand}"
-                                IsVisible="{Binding ShowCreateBooking}"
-                                Text="{loc:Translate Key='Записать клиента'}" />
-                        </VerticalStackLayout>
-                    </CollectionView.Header>
 
                     <CollectionView.ItemTemplate>
                         <DataTemplate x:DataType="vm:BarberBookingItem">
