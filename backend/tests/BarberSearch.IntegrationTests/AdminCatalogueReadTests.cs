@@ -124,12 +124,19 @@ public sealed class AdminCatalogueReadTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
 
-        var activeService = await data.CreateHairServiceAsync("Active Service");
-        var hiddenService = await data.CreateHairServiceAsync("Hidden Service", isActive: false);
+        // Направления создаются до услуг: услуга обязана принадлежать направлению,
+        // а точный список специализаций не должен получать служебную строку.
         var activeSpecialization = await data.CreateSpecializationAsync("Active Specialization");
         var hiddenSpecialization = await data.CreateSpecializationAsync(
             "Hidden Specialization",
             isActive: false);
+        var activeService = await data.CreateHairServiceAsync(
+            "Active Service",
+            specializationId: activeSpecialization.Id);
+        var hiddenService = await data.CreateHairServiceAsync(
+            "Hidden Service",
+            isActive: false,
+            specializationId: activeSpecialization.Id);
         var activeSalon = await data.CreateSalonAsync("Active Salon");
         var hiddenSalon = await data.CreateSalonAsync("Hidden Salon", isActive: false);
 
@@ -282,14 +289,21 @@ public sealed class AdminCatalogueReadTests
         var data = new TestData(app);
 
         // Порядок вставки перемешан: проверяем именно сортировку ответа.
-        var beardZeta = await data.CreateHairServiceAsync("Zeta Beard", ServiceCategory.Beard);
-        var haircutAlpha = await data.CreateHairServiceAsync(
-            "Alpha Haircut",
-            ServiceCategory.Haircut);
-        var beardAlpha = await data.CreateHairServiceAsync("Alpha Beard", ServiceCategory.Beard);
-
         var zetaSpecialization = await data.CreateSpecializationAsync("Zeta Specialization");
         var alphaSpecialization = await data.CreateSpecializationAsync("Alpha Specialization");
+
+        var beardZeta = await data.CreateHairServiceAsync(
+            "Zeta Beard",
+            ServiceCategory.Beard,
+            specializationId: zetaSpecialization.Id);
+        var haircutAlpha = await data.CreateHairServiceAsync(
+            "Alpha Haircut",
+            ServiceCategory.Haircut,
+            specializationId: alphaSpecialization.Id);
+        var beardAlpha = await data.CreateHairServiceAsync(
+            "Alpha Beard",
+            ServiceCategory.Beard,
+            specializationId: alphaSpecialization.Id);
 
         var berlinZeta = await data.CreateSalonAsync("Zeta Salon", city: "Berlin");
         var amsterdamAlpha = await data.CreateSalonAsync("Alpha Salon", city: "Amsterdam");

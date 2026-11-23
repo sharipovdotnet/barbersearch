@@ -447,6 +447,21 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
         return worksAtSalon;
     }
 
+    public async Task<Result<bool, Failure>> HasSpecializationAsync(
+        Guid barberProfileId,
+        Guid specializationId,
+        CancellationToken cancellationToken = default)
+    {
+        var hasSpecialization = await Context.BarberSpecializations
+            .AsNoTracking()
+            .AnyAsync(
+                link => link.BarberProfileId == barberProfileId
+                    && link.SpecializationId == specializationId,
+                cancellationToken);
+
+        return hasSpecialization;
+    }
+
     public async Task<Result<IReadOnlyList<BarberSearchItemResponse>, Failure>> SearchAsync(
         BarberSearchFilter filter,
         CancellationToken cancellationToken = default)

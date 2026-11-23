@@ -1,6 +1,7 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Common;
 using BarberSearch.Application.HairServices;
+using BarberSearch.Contracts.Common;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 using Shared;
@@ -33,8 +34,14 @@ public class AddBarberProfileServiceHandler : ICommandHandler<AddBarberProfileSe
     }
 
     /// <summary>
-    /// Загружает профиль с услугами, добавляет услугу и сохраняет агрегат.
+    /// Загружает профиль с услугами, проверяет направление услуги и сохраняет агрегат.
     /// </summary>
+    /// <remarks>
+    /// Услуга каталога принадлежит ровно одному направлению, и барбер может предлагать
+    /// только услуги своих специализаций. Поэтому перед добавлением проверяются обе ссылки:
+    /// услуга существует, и у профиля есть её специализация. Обе проверки идут в одной
+    /// транзакции со вставкой; внешние ключи — последняя линия.
+    /// </remarks>
     public async Task<UnitResult<Failure>> Handle(
         AddBarberProfileServiceCommand command,
         CancellationToken cancellationToken)
@@ -55,22 +62,35 @@ public class AddBarberProfileServiceHandler : ICommandHandler<AddBarberProfileSe
             return allowed.Error;
         }
 
-        // Ссылка на справочник услуг проверяется до вставки, в той же транзакции.
-        // Внешний ключ fk_barber_services_hair_services_hair_service_id — последняя линия.
         var result = await _unitOfWork.ExecuteAsync(async ct =>
         {
-            var serviceExists = await _hairServices.ExistsAsync(command.HairServiceId, ct);
-            if (serviceExists.IsFailure)
-            {
-                return serviceExists.Error;
-            }
-
-            if (!serviceExists.Value)
+            var hairServiceResult = await _hairServices.GetByIdAsync(command.HairServiceId, ct);
+            if (hairServiceResult.IsFailure)
             {
                 return new Failure(Error.NotFound(
                     "barberProfile.addService.hairServiceNotFound",
                     $"Hair service '{command.HairServiceId}' was not found.",
                     command.HairServiceId));
+            }
+
+            var hasSpecialization = await _repository.HasSpecializationAsync(
+                profile.Id,
+                hairServiceResult.Value.SpecializationId,
+                ct);
+            if (hasSpecialization.IsFailure)
+            {
+                return hasSpecialization.Error;
+            }
+
+            if (!hasSpecialization.Value)
+            {
+                return new Failure(Error.Conflict(
+                    ApiErrorCodes.BarberProfile.AddServiceSpecializationMismatch,
+                    $"""
+                     Hair service '{command.HairServiceId}' belongs to specialization
+                     '{hairServiceResult.Value.SpecializationId}', which this barber profile
+                     does not list. Add the specialization first.
+                     """));
             }
 
             var added = profile.AddService(

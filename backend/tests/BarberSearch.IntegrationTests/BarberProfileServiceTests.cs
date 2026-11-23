@@ -9,6 +9,7 @@ using BarberSearch.Contracts.Bookings.Admin;
 using BarberSearch.Contracts.Bookings.Barber;
 using BarberSearch.Contracts.Bookings.CreateBarberBooking;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.Users;
 using BarberSearch.Infrastructure.Postgresql;
 using CSharpFunctionalExtensions;
@@ -219,6 +220,36 @@ public sealed class BarberProfileServiceTests
         Assert.Contains(
             "barberProfile.addService.duplicate",
             await duplicate.Content.ReadAsStringAsync());
+    }
+
+    [Fact(Timeout = 180_000)]
+    public async Task Adding_a_service_from_another_direction_is_conflict()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        var data = new TestData(app);
+        var barber = await data.CreateBookableBarberAsync("Mismatch Service Barber");
+        await app.AuthenticateAsync(barber.User.Email.Value);
+
+        // Услуга принадлежит другому направлению, которого у барбера нет: витрина
+        // «направление → услуга» не должна показывать такую пару.
+        var otherDirection = await data.CreateSpecializationAsync("Other Direction");
+        var otherService = await data.CreateHairServiceAsync(
+            "Other Service",
+            ServiceCategory.Coloring,
+            defaultDurationMinutes: 90,
+            specializationId: otherDirection.Id);
+
+        using var mismatch = await app.Client.PostAsJsonAsync(
+            $"api/barber-profiles/{barber.Profile.Id}/services",
+            new AddBarberProfileServiceRequest(
+                otherService.Id,
+                Price: 3000m,
+                DurationMinutes: 90));
+
+        Assert.Equal(HttpStatusCode.Conflict, mismatch.StatusCode);
+        Assert.Contains(
+            "barberProfile.addService.specializationMismatch",
+            await mismatch.Content.ReadAsStringAsync());
     }
 
     private static async Task AssertServiceRowAsync(

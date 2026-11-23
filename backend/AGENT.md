@@ -4,11 +4,9 @@
 > Code state: **15 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **697 domain + 1196 application + 460 infrastructure** unit tests, all green locally
-> (2026-11-21); the integration project compiles, and the push-focused subset (30 tests) is green
-> on a local PostgreSQL 16 via `BARBERSEARCH_TEST_POSTGRES`; the four new `PushStaffCustomerTests`
-> are green 4/4 (run with the xunit console runner — the VSTest testhost cannot open its parent
-> process handle in this sandbox); the full integration suite was not run in this session.
+> Tests: **713 domain + 1202 application + 460 infrastructure** unit tests, all green locally
+> (2026-11-23); the integration project compiles and the full suite runs on a local PostgreSQL 16
+> via `BARBERSEARCH_TEST_POSTGRES` (the push-focused subset was green before this slice).
 
 ---
 
@@ -52,7 +50,7 @@ the repo; Application, Infrastructure and Web exist — current state in §8.
 | Domain tests | `tests\BarberSearch.Domain.UnitTests` (in the `.sln`; 625 xunit tests) |
 | Application tests | `tests\BarberSearch.Application.UnitTests` (in the `.sln`; 1044 xunit tests, fakes instead of a database) |
 | Infrastructure tests | `tests\BarberSearch.Infrastructure.UnitTests` (in the `.sln`; 414 xunit tests, no database) |
-| Integration tests | `tests\BarberSearch.IntegrationTests` (in the `.sln`; 341 xunit tests, real PostgreSQL via Testcontainers `postgres:18` or `BARBERSEARCH_TEST_POSTGRES`) |
+| Integration tests | `tests\BarberSearch.IntegrationTests` (in the `.sln`; 369 xunit tests, real PostgreSQL via Testcontainers `postgres:18` or `BARBERSEARCH_TEST_POSTGRES`) |
 | Domain glossary | `GLOSSARY.md` at the **git root** (`D:\Projects\barbersearch\GLOSSARY.md`) |
 
 > ⚠️ `AGENT.md` lives in the workspace, but `.git` is in the parent folder. Run git commands
@@ -141,7 +139,7 @@ backend/                                  ← workspace root
         │
         ├── BarberSearch.Infrastructure.Postgresql/   ← Npgsql provider, DbContext, configs, repositories
         │   ├── Configurations/           ← 27 × IEntityTypeConfiguration<T>
-        │   ├── Migrations/               ← 37 migrations + ApplicationDbContextModelSnapshot
+        │   ├── Migrations/               ← 38 migrations + ApplicationDbContextModelSnapshot
         │   ├── Repositories/             ← RepositoryBase<T> + 22 repository implementations
         │   ├── ApplicationDbContext.cs   ← 27 DbSet + ApplyConfigurationsFromAssembly + extensions
         │   ├── DependencyInjection.cs    ← AddPostgresInfrastructure / AddRepositories
@@ -663,8 +661,8 @@ BarberProfile (AR)   ← owns everything below
  └─ * BarberSpecialization ─► SpecializationId
 
 Salon (AR)                   — standalone, no child collection
-HairService (AR)             — standalone, no child collection
-Specialization (AR)          — standalone, no child collection
+HairService (AR)             — belongs to one SpecializationId (catalog direction)
+Specialization (AR)          — standalone, no child collection; services point here
 EmailVerificationToken (AR)  — standalone one-time email confirmation token
 PasswordResetToken (AR)      — standalone one-time password-reset token (§17.12)
 EmailOutboxMessage (Entity)  — строка transactional outbox писем (§19); не агрегат:
@@ -689,6 +687,13 @@ its own aggregate root (`PortfolioPhoto.BarberProfile`, `TimeOff.BarberProfile`,
 `ScheduleOverride.BarberSalon`, `BarberService.BarberProfile`, `BarberSpecialization.BarberProfile`). Every other relation is a
 bare `Guid` — `SalonId`, `HairServiceId`, `SpecializationId`, `UserId`, `BarberProfileId`,
 `BarberServiceId`, `BookingId`. Nothing outside an aggregate can mutate its children.
+
+`HairService.SpecializationId` is the one **catalog** relation: a service belongs to exactly one
+specialization (a direction, not a skill tag). The client picks a direction and then a service of
+that direction, so the pair is also checked on the barber side — a barber may add a service only
+if the profile lists its specialization. The relation is a bare id on both sides (no navigation);
+the FK `fk_hair_services_specializations_specialization_id` is `RESTRICT`, and a specialization
+cannot be deactivated-and-deleted while services still point at it.
 
 **Children cannot be constructed from outside.** Every child entity has a `private`
 parameterless constructor for EF and a `private` constructor that only an `internal static
@@ -735,7 +740,7 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `EmailVerificationToken` | `Create`: non-empty user id, 64-char lower-hex hash, non-default `issuedAt`/`now`, `issuedAt <= now`, `expiresAt > issuedAt`; `IsActive` is strict (`now < ExpiresAt`) and false after consume/revoke; `Consume` is idempotent for a used token, rejects a revoked one (`emailVerificationToken.consume.invalid`) and an expired one (`emailVerificationToken.consume.expired`); `Revoke` is idempotent and revokes an expired-but-live row |
 | `PasswordResetToken` | `Create`: non-empty user id, 64-char lower-hex hash, non-default `issuedAt`/`now`, `issuedAt <= now`, `expiresAt > issuedAt`; `IsActive` is strict (`now < ExpiresAt`) and false after consume/revoke; `Consume` is idempotent for a used token, rejects a revoked one (`passwordResetToken.consume.invalid`) and an expired one (`passwordResetToken.consume.expired`); `Revoke` is idempotent and revokes an expired-but-live row |
 | `Salon` | non-empty name/address/city/country; `TimeZoneId` resolves via `TimeZoneInfo` (Windows IDs are normalized to IANA, `salon.timeZoneId.unknown` otherwise); latitude `[-90, 90]`, longitude `[-180, 180]`; `WebsiteUrl` — absolute `http`/`https` URI, no `userinfo`, trimmed, ≤ 2048 (optional); `PhoneNumber` — optional Russian mobile number via the shared `PhoneNumber` value object, stored canonically as `+7XXXXXXXXXX` (`salon.phoneNumber` on an invalid value; `null`/blank clears it); `OwnerUserId` is set only by `SubmitByOwner` and never changes (no setter); `ModerationStatus` moves only `Pending → Active | Rejected` (`salon.review.invalidStatus` on a repeated decision); `RejectionReason` is trimmed and 1..500 chars only in `Rejected` (`salon.reject.reasonRequired`, `salon.reject.reasonTooLong`); `Activate` requires `ModerationStatus == Active` (`salon.activation.notApproved`); `Kind` is a defined `PlaceKind` value (`salon.kind.unknown` otherwise); `IsListed` is set only by the two factories, is always `true` for `Salon`/`RentalStudio` and may be `false` only for `SoloStudio`/`Home`/`Mobile` (`salon.isListed.kind` otherwise); `SubmitByOwner(isListed: false)` creates an `Active`/`IsActive` place with no `ReviewedAt`/`ReviewedByUserId` — an unlisted place is not moderated |
-| `HairService` | non-empty name, known category, duration `1..1440` |
+| `HairService` | non-empty name, known category, duration `1..1440`, non-empty `SpecializationId` |
 | `Specialization` | non-empty name |
 | `Review` | `Rating` `1..5`, text ≤ 2000 chars, `BookingId` always set |
 | `WorkingSchedule` | `EndTime > StartTime` on a working day; unique `DayOfWeek` per salon; a day off has `TimeOnly.MinValue` |
@@ -1664,6 +1669,21 @@ Suggested order:
     Публичный кадр отдаётся с `Cache-Control: public, max-age=0, must-revalidate` и сильным
     `ETag`: после блокировки, отклонения или замены перезагрузка перепроверяет файл и получает
     `304` либо `404`, суточного окна устаревания больше нет.
+
+13. **Service belongs to a specialization (1:N)** — **decided and implemented 2026-11-23.**
+    `HairService.SpecializationId` обязателен: услуга каталога принадлежит ровно одному
+    направлению (`specializations`). Витрина строит двухшаговый выбор «направление → услуга»
+    (`GET api/hair-services?specializationId=`, поле `specializationId` в ответе), а админ
+    задаёт направление при создании и может сменить его, пока услугу не предлагает барбер
+    без новой специализации (`409 hairService.update.specializationInUse`). Барбер добавляет
+    услугу только из своих направлений (`409 barberProfile.addService.specializationMismatch`);
+    поиск с несогласованной парой `specializationId`+`hairServiceId` отвечает
+    `400 barberSearch.filter.mismatch`. Специализация здесь — направление/профессия
+    (барбер, парикмахер, колорист), а не скилл-тег вроде «fade-мастер»: иначе 1:N заставлял бы
+    дублировать одну услугу под каждым тегом. Существующие услуги миграция
+    `AddHairServiceSpecialization` привязывает к служебному направлению «Общие услуги» —
+    администратор перепривязывает их вручную. M:N (услуга в нескольких направлениях) —
+    отдельный срез, если направлений-профессий окажется мало.
 
 ---
 
@@ -2941,8 +2961,9 @@ Read endpoints (added 2026-10-19):
   no read at all, so an administrator could not find a row to edit or switch back on. `status` is
   `all` (default), `active` or `hidden` — `all` by default is the point of the screen, not a
   convenience; `search` is `ILIKE` over the name (salons — name and city) with `%`, `_` and `\`
-  escaped, trimmed, and capped at 100 characters. `AdminHairServiceResponse`,
-  `AdminSpecializationResponse` and `AdminSalonResponse` carry every edit field plus `isActive` and
+  escaped, trimmed, and capped at 100 characters. `AdminHairServiceResponse` (with
+  `specializationId` since 2026-11-23), `AdminSpecializationResponse` and `AdminSalonResponse`
+  carry every edit field plus `isActive` and
   `usageCount` — the number of **active and verified** barber profiles using the row
   (`DISTINCT barber_profile_id` over `barber_services`/`barber_specializations`/`barber_salons`,
   and for a service only links with `barber_services.is_active`). Orders are `category, name, id`,
@@ -3133,7 +3154,10 @@ Read endpoints (added 2026-10-19):
   `language` (one value, enum name without case (`Ru`, `ru`); numeric forms are rejected.
   `profile.Languages.Contains(language)` translates to `languages @> ARRAY[…]` on `integer[]`,
   served by the GIN index `ix_barber_profiles_languages`. An unknown value is
-  `400 barberSearch.language.invalid`; `null`/blank means no filter). Order is
+  `400 barberSearch.language.invalid`; `null`/blank means no filter). Since 2026-11-23 a pair
+  `specializationId` + `hairServiceId` must agree: the service belongs to the direction, so a
+  mismatch is `400 barberSearch.filter.mismatch` (the handler looks the catalogue row up before
+  the search; an unknown service id keeps the old empty-page behaviour). Order is
   `rating DESC NULLS LAST, id`, served by the expression index
   `ix_barber_profiles_search_keyset` (`(((rating IS NULL)), rating DESC, id) WHERE is_active AND
   is_verified`, migration `AddSearchKeysetIndex`). Since R-38 it is the only search index on
@@ -3189,14 +3213,16 @@ Read endpoints (added 2026-10-19):
   different barbers, the order is by value and `Take(100)` caps the hint list. The predicate is
   the search visibility (`is_active AND is_verified`), so a suggestion is always present in some
   result. It is a hint for a free-text field, not a dictionary: the filter accepts any substring.
-- **Public catalogues (2026-10-31, issue-29).** `GET api/specializations` and
-  `GET api/hair-services` are anonymous, `reads`-limited lists of active rows — a bare JSON array
-  without pagination (`200 []` for an empty catalogue), ordered by name and by category+name
-  respectively. Contracts: `SpecializationResponse(Id, Name, Description)` and
-  `HairServiceResponse(Id, Name, Category, DefaultDurationMinutes, Description)`; the handlers
-  read through `GetActiveAsync` and map, no repository filtering in the controller. The admin
-  write actions keep the class-level `[Authorize(AdminOnly)]`; `[AllowAnonymous]` on the action
-  overrides it. There is still no read by id.
+- **Public catalogues (2026-10-31, issue-29; specialization link — 2026-11-23).**
+  `GET api/specializations` and `GET api/hair-services` are anonymous, `reads`-limited lists of
+  active rows — a bare JSON array without pagination (`200 []` for an empty catalogue), ordered by
+  name and by category+name respectively. Contracts: `SpecializationResponse(Id, Name, Description)`
+  and `HairServiceResponse(Id, Name, Category, SpecializationId, DefaultDurationMinutes, Description)`;
+  the handlers read through `GetActiveAsync` and map, no repository filtering in the controller.
+  `GET api/hair-services?specializationId=` narrows the list to one direction (the two-step
+  «direction → service» picker); an unknown id simply returns `[]`, `Guid.Empty` means no filter.
+  The admin write actions keep the class-level `[Authorize(AdminOnly)]`; `[AllowAnonymous]` on the
+  action overrides it. There is still no read by id.
 - **Salon directory and «My salons» (2026-11-06, issue-47).** `GET api/salons?city=&search=` is the
   anonymous `reads`-limited selection catalogue for the barber cabinet: a bare
   `SalonDirectoryItemResponse[]` (`id`, `name`, `city`, `address`, `timeZoneId`, `kind`) without

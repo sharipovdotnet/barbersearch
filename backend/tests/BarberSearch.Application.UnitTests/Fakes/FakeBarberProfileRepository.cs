@@ -409,6 +409,14 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
             _profiles.TryGetValue(barberProfileId, out var profile)
             && profile.Salons.Any(link => link.SalonId == salonId));
 
+    public Task<Result<bool, Failure>> HasSpecializationAsync(
+        Guid barberProfileId,
+        Guid specializationId,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult<Result<bool, Failure>>(
+            _profiles.TryGetValue(barberProfileId, out var profile)
+            && profile.BarberSpecializations.Any(link => link.SpecializationId == specializationId));
+
     /// <summary>
     /// Профили, которые поиск по дате исключает из-за отпуска на весь локальный день.
     /// Ответ репозитория, а не его логика: сам расчёт проверяется интеграционным тестом.

@@ -128,6 +128,8 @@ _Avoid_: Vacation, holiday, day off
 
 **Hair Service**:
 A service offered by the platform (haircut, beard trim, colouring …), with a default duration.
+Every Hair Service belongs to exactly one Specialization (its direction); the customer picks a
+direction first and then a service of that direction.
 _Avoid_: Service, procedure
 
 **Barber Service**:
@@ -135,7 +137,10 @@ The price and duration at which one Barber offers one Hair Service.
 _Avoid_: Price list entry, offering
 
 **Specialization**:
-A skill label from the platform's directory (fade master, beard master …).
+A direction of work from the platform's directory (barber, hairdresser, colourist) — not a skill
+tag: «fade master» or «beard master» is a service or a profile detail, not a Specialization.
+A Hair Service belongs to one Specialization, and a Barber may offer only services of the
+Specializations the profile lists.
 _Avoid_: Skill, tag, category
 
 **Barber Specialization**:

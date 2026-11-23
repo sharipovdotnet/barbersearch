@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.Common;
+using BarberSearch.Application.HairServices;
 using BarberSearch.Contracts.BarberProfiles.SearchBarbers;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.BarberProfiles.Enums;
@@ -18,17 +19,27 @@ namespace BarberSearch.Application.BarberProfiles.SearchBarbers;
 /// с проекцией в <see cref="BarberSearchItemResponse"/>, без Include коллекций: без координат
 /// это <c>rating DESC NULLS LAST, id</c>, с координатами — расстояние до ближайшего активного
 /// салона и <c>id</c> (рейтинг в гео-режиме не участвует).
+/// <para>
+/// Пара <c>specializationId</c> + <c>hairServiceId</c> проверяется на согласованность:
+/// услуга принадлежит ровно одному направлению, и запрос с чужим направлением отвечает
+/// <c>400</c>, а не пустой страницей.
+/// </para>
 /// </remarks>
 public sealed class SearchBarbersHandler
     : IQueryHandler<PagedResponse<BarberSearchItemResponse>, SearchBarbersQuery>
 {
     private readonly IBarberProfileRepository _repository;
+    private readonly IHairServiceRepository _hairServices;
 
-    public SearchBarbersHandler(IBarberProfileRepository repository)
+    public SearchBarbersHandler(
+        IBarberProfileRepository repository,
+        IHairServiceRepository hairServices)
     {
         ArgumentNullException.ThrowIfNull(repository);
+        ArgumentNullException.ThrowIfNull(hairServices);
 
         _repository = repository;
+        _hairServices = hairServices;
     }
 
     /// <summary>
@@ -89,10 +100,36 @@ public sealed class SearchBarbersHandler
             language = parsedLanguage;
         }
 
+        var specializationId = query.SpecializationId == Guid.Empty ? null : query.SpecializationId;
+        var hairServiceId = query.HairServiceId == Guid.Empty ? null : query.HairServiceId;
+
+        // Услуга принадлежит ровно одному направлению. Несогласованная пара — ошибка клиента:
+        // иначе он получил бы пустую страницу и не понял, что фильтры противоречат друг другу.
+        if (specializationId is { } targetSpecializationId
+            && hairServiceId is { } targetHairServiceId)
+        {
+            var hairService = await _hairServices.GetByIdAsync(
+                targetHairServiceId,
+                cancellationToken);
+
+            // Неизвестная услуга остаётся «пустой выдачей», как и раньше: 404 на фильтр
+            // поиска был бы несовместимым изменением поведения.
+            if (hairService.IsSuccess
+                && hairService.Value.SpecializationId != targetSpecializationId)
+            {
+                return new Failure(Error.Validation(
+                    ApiErrorCodes.Common.BarberSearchFilterMismatch,
+                    $"""
+                     Hair service '{targetHairServiceId}' does not belong to specialization
+                     '{targetSpecializationId}'.
+                     """));
+            }
+        }
+
         var filter = new BarberSearchFilter(
             City: string.IsNullOrWhiteSpace(query.City) ? null : query.City.Trim(),
-            SpecializationId: query.SpecializationId == Guid.Empty ? null : query.SpecializationId,
-            HairServiceId: query.HairServiceId == Guid.Empty ? null : query.HairServiceId,
+            SpecializationId: specializationId,
+            HairServiceId: hairServiceId,
             Date: query.Date,
             Language: language,
             AdditionalService: string.IsNullOrWhiteSpace(query.AdditionalService)

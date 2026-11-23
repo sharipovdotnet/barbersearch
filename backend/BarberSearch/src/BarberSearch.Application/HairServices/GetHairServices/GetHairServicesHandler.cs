@@ -25,7 +25,8 @@ public sealed class GetHairServicesHandler
     }
 
     /// <summary>
-    /// Возвращает активные услуги; сбой репозитория пробрасывается как есть.
+    /// Возвращает активные услуги — все или только выбранного направления;
+    /// сбой репозитория пробрасывается как есть.
     /// </summary>
     public async Task<Result<IReadOnlyList<HairServiceResponse>, Failure>> Handle(
         GetHairServicesQuery query,
@@ -33,7 +34,11 @@ public sealed class GetHairServicesHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var result = await _repository.GetActiveAsync(cancellationToken);
+        var specializationId = query.SpecializationId == Guid.Empty
+            ? null
+            : query.SpecializationId;
+
+        var result = await _repository.GetActiveAsync(specializationId, cancellationToken);
         if (result.IsFailure)
         {
             return result.Error;
@@ -44,6 +49,7 @@ public sealed class GetHairServicesHandler
                 hairService.Id,
                 hairService.Name,
                 hairService.Category,
+                hairService.SpecializationId,
                 hairService.DefaultDurationMinutes,
                 hairService.Description))
             .ToList();

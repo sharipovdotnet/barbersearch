@@ -215,8 +215,10 @@ public sealed class AuditTrail
                     nameof(Salon.ModerationStatus)
                 ]),
 
-            // Услуга каталога: Update меняет имя, описание и длительность, а категория
-            // задаётся только при создании — она нужна в values, а не в changes.
+            // Услуга каталога: Update меняет имя, описание, длительность и направление,
+            // а категория задаётся только при создании — она нужна в values, а не в changes.
+            // SpecializationId добавлен вместе с привязкой услуги к направлению: перевод
+            // услуги в другую специализацию виден в журнале как updated.
             // Переименование audit'ится как updated с name from/to.
             [typeof(HairService)] = new(
                 "hair_service",
@@ -224,6 +226,7 @@ public sealed class AuditTrail
                     nameof(HairService.Name),
                     nameof(HairService.Description),
                     nameof(HairService.Category),
+                    nameof(HairService.SpecializationId),
                     nameof(HairService.DefaultDurationMinutes),
                     nameof(HairService.IsActive)
                 ]),
