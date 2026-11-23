@@ -9,8 +9,10 @@ import {
   describeBarberProfileError,
   removeBarberSpecialization,
 } from '@/lib/barber-profile'
+import { SERVICE_CATEGORY_LABELS } from '@/lib/barber-profile-labels'
 import type { BarberProfileSpecialization } from '@/lib/catalog'
 import { describeApiFailure } from '@/lib/errors'
+import { groupSpecializations } from '@/lib/specialization-groups'
 import {
   fetchSpecializations,
   type SpecializationOption,
@@ -139,6 +141,8 @@ export function BarberProfileSpecializations({
         (specialization) => specialization.specializationId === option.id
       )
   )
+  // Группы те же, что в витрине: порядок категорий и пустые группы решает helper.
+  const grouped = groupSpecializations(available)
 
   return (
     <section aria-labelledby="barber-profile-specializations-heading">
@@ -209,10 +213,17 @@ export function BarberProfileSpecializations({
                     ? t('Загружаем справочник…')
                     : t('Выберите специализацию')}
                 </option>
-                {available.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.name}
-                  </option>
+                {grouped.map((group) => (
+                  <optgroup
+                    key={group.category}
+                    label={t(SERVICE_CATEGORY_LABELS[group.category])}
+                  >
+                    {group.options.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>

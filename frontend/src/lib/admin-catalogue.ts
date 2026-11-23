@@ -136,6 +136,7 @@ export type AdminSpecialization = {
   id: string
   name: string
   description: string | null
+  category: ServiceCategory
   isActive: boolean
   usageCount: number
 }

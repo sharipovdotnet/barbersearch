@@ -10,6 +10,7 @@ import {
   isAdminBooking,
   isAdminPortfolioPhoto,
   isAdminSalonRow,
+  isAdminSpecializationRow,
   isAdminSummary,
   isAdminUser,
   isAdminUserRow,
@@ -31,6 +32,7 @@ import {
   isPortfolioPhoto,
   isSalonDirectoryItem,
   isScheduleConflicts,
+  isSpecializationOption,
   isTelegramLink,
   isUnreadNotificationsPayload,
 } from '@/lib/response-guards'
@@ -469,6 +471,66 @@ describe('isHairServiceOption, длительность по умолчанию'
     expect(isHairServiceOption({ ...SERVICE, defaultDurationMinutes: '45' })).toBe(
       false
     )
+  })
+})
+
+/**
+ * Категория специализации — новое обязательное поле публичного и админского
+ * справочников. Неизвестное значение или число — ошибка ответа, а не прочерк:
+ * по категории строятся группы, и молчаливый fallback скрыл бы расхождение.
+ */
+describe('категория в guard-ах специализаций', () => {
+  const SPECIALIZATION = {
+    id: '22222222-2222-4222-8222-222222222222',
+    name: 'Барберинг',
+    description: null,
+    category: 'Haircut',
+  }
+
+  const ADMIN_SPECIALIZATION = {
+    id: '33333333-3333-4333-8333-333333333333',
+    name: 'Окрашивание',
+    description: 'Колористика',
+    category: 'Coloring',
+    isActive: true,
+    usageCount: 2,
+  }
+
+  it('принимает известную категорию в публичной и админской строках', () => {
+    expect(isSpecializationOption(SPECIALIZATION)).toBe(true)
+    expect(isAdminSpecializationRow(ADMIN_SPECIALIZATION)).toBe(true)
+  })
+
+  it('отвергает неизвестную строковую категорию', () => {
+    expect(
+      isSpecializationOption({ ...SPECIALIZATION, category: 'Massage' })
+    ).toBe(false)
+    expect(
+      isAdminSpecializationRow({
+        ...ADMIN_SPECIALIZATION,
+        category: 'Massage',
+      })
+    ).toBe(false)
+  })
+
+  it('отвергает числовую категорию', () => {
+    expect(isSpecializationOption({ ...SPECIALIZATION, category: 1 })).toBe(
+      false
+    )
+    expect(
+      isAdminSpecializationRow({ ...ADMIN_SPECIALIZATION, category: 3 })
+    ).toBe(false)
+  })
+
+  it('отвергает строку без категории', () => {
+    const { category, ...withoutCategory } = SPECIALIZATION
+    const { category: adminCategory, ...adminWithoutCategory } =
+      ADMIN_SPECIALIZATION
+
+    expect(category).toBe('Haircut')
+    expect(adminCategory).toBe('Coloring')
+    expect(isSpecializationOption(withoutCategory)).toBe(false)
+    expect(isAdminSpecializationRow(adminWithoutCategory)).toBe(false)
   })
 })
 

@@ -254,7 +254,7 @@ const isBookingStatus = isOneOf(BOOKING_STATUSES)
 const isBarberGrade = isOneOf(BARBER_GRADES)
 const isLanguage = isOneOf(LANGUAGES)
 const isPaymentMethod = isOneOf(PAYMENT_METHODS)
-const isServiceCategory = isOneOf(SERVICE_CATEGORIES)
+export const isServiceCategory = isOneOf(SERVICE_CATEGORIES)
 const isDayOfWeek = isOneOf(DAYS_OF_WEEK)
 const isUserRole = isOneOf(USER_ROLES)
 const isBarberRequestStatus = isOneOf(BARBER_REQUEST_STATUSES)
@@ -500,7 +500,12 @@ export const isBarberSearchPage = isPageOf(isBarberSearchItem)
  */
 export const isAdditionalServiceList = isArrayOf(isNonEmptyString)
 
-/** Строка публичного справочника специализаций; описание может отсутствовать. */
+/**
+ * Строка публичного справочника специализаций.
+ *
+ * `category` обязательна и должна быть известным значением: по ней селект строит
+ * группы, а неизвестная категория — битый ответ, а не повод для прочерка.
+ */
 export function isSpecializationOption(
   value: unknown
 ): value is SpecializationOption {
@@ -508,7 +513,8 @@ export function isSpecializationOption(
     isRecord(value) &&
     isNonEmptyString(value.id) &&
     isString(value.name) &&
-    isNullableString(value.description)
+    isNullableString(value.description) &&
+    isServiceCategory(value.category)
   )
 }
 
@@ -1108,7 +1114,7 @@ export function isAdminHairServiceRow(value: unknown): value is AdminHairService
 
 export const isAdminHairServiceList = isArrayOf(isAdminHairServiceRow)
 
-/** Строка админского справочника специализаций. */
+/** Строка админского справочника специализаций: категория — обязательное поле DTO. */
 export function isAdminSpecializationRow(
   value: unknown
 ): value is AdminSpecialization {
@@ -1117,6 +1123,7 @@ export function isAdminSpecializationRow(
     isNonEmptyString(value.id) &&
     isString(value.name) &&
     isNullableString(value.description) &&
+    isServiceCategory(value.category) &&
     isBoolean(value.isActive) &&
     isNumber(value.usageCount)
   )
