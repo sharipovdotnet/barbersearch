@@ -494,6 +494,10 @@ $env:RateLimiting__WritePermitLimit = '240'
 # (Storage:Provider=S3, бакет barbersearch) — тот же srcset/304/404 проверяет S3-ветку.
 # Для локального S3: backend/docker compose up -d minio + Storage__S3__* (backend/.env.example).
 $env:Storage__RootPath = Join-Path $env:TEMP 'barbersearch-e2e-photos'
+# Подсказки адреса выключены: спеки витрины (`search-login.spec.ts`) исходят из того,
+# что у гостя список не открывается, а пользовательские секреты (`AddressSuggestions:Enabled`)
+# включают его и в e2e — попап уводит форму в `aria-hidden`, и «Найти» не находится по роли.
+$env:AddressSuggestions__Enabled = 'false'
 dotnet run --project ..\backend\BarberSearch\src\BarberSearch.Web --launch-profile http
 
 npm run test:e2e:install   # once: Chromium for the Playwright version in package-lock
