@@ -95,107 +95,12 @@ export const catalogueHairService = {
   defaultDurationMinutes: 45,
 } as const
 
-/**
- * Публичный справочник специализаций: по одной строке на каждую из шести категорий,
- * чтобы группы селекта в тестах не были пустыми. `category` — имя `ServiceCategory`,
- * как в ответе `GET api/specializations`.
- */
-export const catalogueSpecializations = [
-  {
-    id: '77777777-7777-4777-8777-777777777777',
-    name: 'Барберинг',
-    description: null,
-    category: 'Haircut',
-  },
-  {
-    id: '88888888-8888-4888-8888-888888888888',
-    name: 'Оформление бороды',
-    description: null,
-    category: 'Beard',
-  },
-  {
-    id: '99999999-9999-4999-8999-999999999999',
-    name: 'Окрашивание',
-    description: null,
-    category: 'Coloring',
-  },
-  {
-    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-    name: 'Укладка',
-    description: null,
-    category: 'Styling',
-  },
-  {
-    id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-    name: 'Уход за волосами',
-    description: null,
-    category: 'HairTreatment',
-  },
-  {
-    id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-    name: 'Бритьё головы',
-    description: null,
-    category: 'Other',
-  },
-] as const
-
 /** Строка справочника специализаций: описание может отсутствовать. */
-export const catalogueSpecialization = catalogueSpecializations[0]
-
-/**
- * Админский справочник специализаций: тот же DTO плюс флаг активности и счётчик
- * барберов. Те же шесть категорий — вкладка «Специализации» показывает их все.
- */
-export const adminCatalogueSpecializations = [
-  {
-    id: catalogueSpecializations[0].id,
-    name: catalogueSpecializations[0].name,
-    description: null,
-    category: 'Haircut',
-    isActive: true,
-    usageCount: 4,
-  },
-  {
-    id: catalogueSpecializations[1].id,
-    name: catalogueSpecializations[1].name,
-    description: null,
-    category: 'Beard',
-    isActive: true,
-    usageCount: 2,
-  },
-  {
-    id: catalogueSpecializations[2].id,
-    name: catalogueSpecializations[2].name,
-    description: null,
-    category: 'Coloring',
-    isActive: true,
-    usageCount: 1,
-  },
-  {
-    id: catalogueSpecializations[3].id,
-    name: catalogueSpecializations[3].name,
-    description: null,
-    category: 'Styling',
-    isActive: true,
-    usageCount: 1,
-  },
-  {
-    id: catalogueSpecializations[4].id,
-    name: catalogueSpecializations[4].name,
-    description: null,
-    category: 'HairTreatment',
-    isActive: false,
-    usageCount: 0,
-  },
-  {
-    id: catalogueSpecializations[5].id,
-    name: catalogueSpecializations[5].name,
-    description: null,
-    category: 'Other',
-    isActive: true,
-    usageCount: 3,
-  },
-] as const
+export const catalogueSpecialization = {
+  id: '77777777-7777-4777-8777-777777777777',
+  name: 'Барберинг',
+  description: null,
+} as const
 
 /** ProblemDetails, который проходит строгий гард `isProblemDetails` из `lib/api.ts`. */
 export function problemDetails(
@@ -329,12 +234,7 @@ export const handlers = [
     HttpResponse.json([catalogueHairService])
   ),
   http.get('/api/specializations', () =>
-    HttpResponse.json(catalogueSpecializations)
-  ),
-  // Админский справочник специализаций: по умолчанию все шесть строк. Фильтры
-  // `status`/`search` и сценарии ошибок собираются в тестах через `server.use`.
-  http.get('/api/admin/catalogue/specializations', () =>
-    HttpResponse.json(adminCatalogueSpecializations)
+    HttpResponse.json([catalogueSpecialization])
   ),
   // Подсказки города и адреса дергает любая форма салона, как только в поле
   // появляется минимальная строка. По умолчанию провайдер «ничего не нашёл»:

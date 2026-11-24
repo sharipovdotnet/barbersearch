@@ -15,11 +15,9 @@ import {
 import type { BarberSearchFilters } from '@/lib/barber-search'
 import {
   LANGUAGE_LABELS,
-  SERVICE_CATEGORY_LABELS,
   type Language,
 } from '@/lib/barber-profile-labels'
 import { scrollToSection } from '@/lib/router'
-import { groupSpecializations } from '@/lib/specialization-groups'
 
 type SearchFormProps = {
   isSearching: boolean
@@ -81,10 +79,6 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
   const showSpecializations =
     !isReady || catalogs.specializations.length > 0
   const showHairServices = !isReady || catalogs.hairServices.length > 0
-
-  // Порядок групп задаёт `SERVICE_CATEGORY_ORDER`, а не ответ API; пустые
-  // категории helper не возвращает, поэтому селект не показывает пустых `optgroup`.
-  const specializationGroups = groupSpecializations(catalogs.specializations)
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -176,17 +170,10 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
             <option value="">
               {isLoading ? t('Загрузка…') : t('Любая специализация')}
             </option>
-            {specializationGroups.map((group) => (
-              <optgroup
-                key={group.category}
-                label={t(SERVICE_CATEGORY_LABELS[group.category])}
-              >
-                {group.options.map((specialization) => (
-                  <option key={specialization.id} value={specialization.id}>
-                    {specialization.name}
-                  </option>
-                ))}
-              </optgroup>
+            {catalogs.specializations.map((specialization) => (
+              <option key={specialization.id} value={specialization.id}>
+                {specialization.name}
+              </option>
             ))}
           </select>
         </div>
