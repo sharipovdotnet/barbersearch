@@ -131,3 +131,82 @@ describe('groupHairServices', () => {
     expect(groups[0]?.services[0]).toBe(services[0])
   })
 })
+
+/**
+ * Фильтр по специализации — это тот же справочник, сужённый до одной группы:
+ * услуги других специализаций и «прочие» строки в селект не попадают.
+ */
+describe('groupHairServices, выбранная специализация', () => {
+  const specializations = [
+    specialization('haircut', 'Барберинг', 'Haircut'),
+    specialization('beard', 'Борода', 'Beard'),
+    specialization('empty', 'Укладка', 'Styling'),
+  ]
+  const services = [
+    service('fade', 'Фейд', 'haircut'),
+    service('beard-service', 'Оформление бороды', 'beard', 'Beard'),
+    service('classic', 'Классическая стрижка', 'haircut'),
+    // Строка без известной специализации: без фильтра она попадает в хвост.
+    service('unknown', 'Бритьё головы', 'deleted', 'Other'),
+  ]
+
+  it('оставляет только группу выбранной специализации с её услугами', () => {
+    const groups = groupHairServices(services, specializations, {
+      specializationId: 'beard',
+    })
+
+    expect(groups.map((group) => group.specialization?.id)).toStrictEqual([
+      'beard',
+    ])
+    expect(groups[0]?.services.map((row) => row.id)).toStrictEqual([
+      'beard-service',
+    ])
+  })
+
+  it('не показывает «Прочие услуги»: чужие строки в выбор не попадают', () => {
+    const groups = groupHairServices(services, specializations, {
+      specializationId: 'haircut',
+    })
+
+    expect(
+      groups.map((group) => group.specialization?.id ?? null)
+    ).toStrictEqual(['haircut'])
+    // Внутри группы сохраняется порядок API, а не порядок specializations.
+    expect(groups[0]?.services.map((row) => row.id)).toStrictEqual([
+      'fade',
+      'classic',
+    ])
+  })
+
+  it('возвращает пустой список, когда у специализации нет услуг', () => {
+    expect(
+      groupHairServices(services, specializations, {
+        specializationId: 'empty',
+      })
+    ).toStrictEqual([])
+  })
+
+  it('пустая строка — «фильтра нет»: форма так представляет невыбранное поле', () => {
+    const groups = groupHairServices(services, specializations, {
+      specializationId: '',
+    })
+
+    expect(
+      groups.map((group) => group.specialization?.id ?? null)
+    ).toStrictEqual(['haircut', 'beard', null])
+  })
+
+  it('не мутирует входы и ссылается на исходные строки', () => {
+    const servicesSnapshot = structuredClone(services)
+    const specializationsSnapshot = structuredClone(specializations)
+
+    const groups = groupHairServices(services, specializations, {
+      specializationId: 'beard',
+    })
+
+    expect(services).toStrictEqual(servicesSnapshot)
+    expect(specializations).toStrictEqual(specializationsSnapshot)
+    expect(groups[0]?.specialization).toBe(specializations[1])
+    expect(groups[0]?.services[0]).toBe(services[1])
+  })
+})

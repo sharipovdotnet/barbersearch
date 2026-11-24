@@ -13,6 +13,16 @@ export type HairServiceGroup = {
   services: HairServiceOption[]
 }
 
+/** Необязательное сужение групп до одной специализации, выбранной в фильтре. */
+export type GroupHairServicesOptions = {
+  /**
+   * Если задан и не пуст, в результат попадают только услуги этой специализации:
+   * селект «Услуга» показывает ровно услуги выбранной специализации. Пустая
+   * строка — «фильтра нет», как и у остальных полей формы.
+   */
+  specializationId?: string
+}
+
 /**
  * Раскладывает плоский справочник услуг по специализациям.
  *
@@ -25,16 +35,33 @@ export type HairServiceGroup = {
  * между двумя запросами), не теряются: они собираются в одну последнюю группу с
  * `specialization: null` в порядке входа. Внутри известной группы сохраняется
  * порядок API. Функция чистая: входные массивы и их элементы не мутируются.
+ *
+ * С `options.specializationId` остаются только услуги этой специализации: чужие
+ * и «прочие» строки в выбор не попадают, поэтому хвостовой группы с
+ * `specialization: null` в этом режиме нет. Если услуг у специализации нет,
+ * возвращается пустой массив — пустая группа не нужна.
  */
 export function groupHairServices(
   services: readonly HairServiceOption[],
-  specializations: readonly SpecializationOption[]
+  specializations: readonly SpecializationOption[],
+  options: GroupHairServicesOptions = {}
 ): HairServiceGroup[] {
+  const { specializationId } = options
+  // Пустая строка — «без фильтра»: так форма представляет невыбранное поле.
+  // Фильтр по специализации не копирует строки: дальше работают ссылки на них.
+  const isFiltered =
+    specializationId !== undefined && specializationId !== ''
+  const visible = isFiltered
+    ? services.filter(
+        (service) => service.specializationId === specializationId
+      )
+    : services
+
   const knownIds = new Set(specializations.map((row) => row.id))
   const bySpecialization = new Map<string, HairServiceOption[]>()
   const unknown: HairServiceOption[] = []
 
-  for (const service of services) {
+  for (const service of visible) {
     if (!knownIds.has(service.specializationId)) {
       unknown.push(service)
       continue
@@ -66,7 +93,9 @@ export function groupHairServices(
     }
   }
 
-  if (unknown.length > 0) {
+  // В режиме выбранной специализации хвостовой группы нет: её id пришёл из
+  // этого же справочника, поэтому «прочих» строк быть не может.
+  if (unknown.length > 0 && !isFiltered) {
     groups.push({ specialization: null, services: unknown })
   }
 

@@ -199,6 +199,11 @@ function SelectField(props: SelectFieldProps) {
  * Справочники грузятся отдельно: их ошибка не блокирует город, дату и язык.
  * Пустой справочник скрывает свой селект, чтобы не висел мёртвый список.
  *
+ * Специализация сужает список услуг: у каждой услуги справочника ровно одна
+ * специализация, и клиент, выбрав «Барбер-бородист», видит в «Услуге» только
+ * услуги этого мастера, а не весь каталог. Противоречивый старый выбор при этом
+ * сбрасывается на «Любую услугу» — см. `handleSpecializationChange`.
+ *
  * Раскладка — одна панель на всю ширину витрины (`max-w-5xl`, как у сетки
  * результатов). На `lg` это сетка из 12 колонок и двух ярусов:
  * - первый — где, когда и на каком языке: город (4), дата (3), язык (2) и
@@ -245,13 +250,16 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
 
   // Услуг в справочнике много, и плоский список не подсказывает, к какой
   // специализации относится строка: группы по специализациям легче просмотреть.
-  // «Любая услуга» остаётся вне групп — это отсутствие выбора, а не услуга.
+  // Выбранная специализация сужает селект до её услуг — чужую услугу выбрать
+  // нельзя. «Любая услуга» остаётся вне групп: это отсутствие выбора.
   const hairServiceGroups = groupHairServices(
     catalogs.hairServices,
-    catalogs.specializations
+    catalogs.specializations,
+    { specializationId }
   ).map((group) => ({
     // У хвостовой группы нет id специализации: даём ей постоянный служебный
     // ключ, чтобы ключи `optgroup` оставались уникальными при любых названиях.
+    // При выбранной специализации такой группы не бывает.
     id: group.specialization?.id ?? 'hair-services-without-specialization',
     label: group.specialization?.name ?? t('Прочие услуги'),
     options: group.services,
@@ -279,6 +287,30 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
       language,
       additionalService,
     })
+  }
+
+  /**
+   * Смена специализации сужает список услуг, и выбранная услуга может из него
+   * выпасть: у услуги ровно одна специализация. Сбрасываем такой выбор на
+   * «Любую услугу», иначе нативный селект показывал бы чужую строку, а на сервер
+   * ушла бы противоречивая пара фильтров. Возврат к «Любой специализации»
+   * ничего не сбрасывает — выбор остаётся допустимым.
+   */
+  function handleSpecializationChange(value: string) {
+    setSpecializationId(value)
+
+    if (value === '' || hairServiceId === '') {
+      return
+    }
+
+    const stillOffered = catalogs.hairServices.some(
+      (service) =>
+        service.id === hairServiceId && service.specializationId === value
+    )
+
+    if (!stillOffered) {
+      setHairServiceId('')
+    }
   }
 
   return (
@@ -359,7 +391,7 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
             }
             groups={specializationGroups}
             className="lg:col-span-4 lg:row-start-2"
-            onChange={setSpecializationId}
+            onChange={handleSpecializationChange}
           />
         )}
 
