@@ -20,10 +20,15 @@ export type SuggestionComboboxProps<T> = {
   id: string
   label: string
   /**
-   * Подпись только для скринридера. У полей формы поиска на витрине нет видимых
-   * подписей: текст живёт в `placeholder`, а `label` остаётся доступным именем.
+   * Подпись только для скринридера: текст живёт в `placeholder`, а `label`
+   * остаётся доступным именем. В панели поиска на витрине подпись видимая.
    */
   labelHidden?: boolean
+  /**
+   * Классы видимой подписи. Нужны, чтобы поле с подсказками не выбивалось из
+   * ряда подписей фильтров: сама форма задаёт им один размер и цвет.
+   */
+  labelClassName?: string
   value: string
   /** Ручной ввод: каждая правка сбрасывает выбор, сделанный подсказкой. */
   onValueChange: (value: string) => void
@@ -70,6 +75,7 @@ export function SuggestionCombobox<T>({
   id,
   label,
   labelHidden,
+  labelClassName,
   value,
   onValueChange,
   onSelect,
@@ -141,7 +147,9 @@ export function SuggestionCombobox<T>({
         // `sr-only` не снимает `w-fit` у FieldLabel: ширина остаётся по тексту, но
         // элемент обрезан. `pointer-events-none` гарантирует, что невидимая подпись
         // не перехватит клик по верхней кромке поля.
-        className={labelHidden ? 'sr-only pointer-events-none' : undefined}
+        className={
+          labelHidden ? 'sr-only pointer-events-none' : labelClassName
+        }
       >
         {label}
       </FieldLabel>
