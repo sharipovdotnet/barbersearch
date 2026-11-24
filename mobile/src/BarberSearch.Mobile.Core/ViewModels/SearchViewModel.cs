@@ -173,6 +173,16 @@ public sealed partial class SearchViewModel : ObservableObject
     private SearchCatalogOption _anyHairServiceOption = SearchCatalogOption.Any(AnyServiceText);
 
     /// <summary>
+    /// Пункт «Любая специализация» / «Загрузка…»: отсутствие выбора, а не категория.
+    /// </summary>
+    /// <remarks>
+    /// Как и «Любая услуга», живёт вне <see cref="SpecializationGroups"/>: в вебе это первый
+    /// пункт селекта перед <c>optgroup</c>, а не строка какой-то категории.
+    /// </remarks>
+    private SearchCatalogOption _anySpecializationOption =
+        SearchCatalogOption.Any(AnySpecializationText);
+
+    /// <summary>
     /// Фильтры последней неудачной попытки: цикл повторов обязан повторить именно этот запрос.
     /// </summary>
     /// <remarks>
@@ -311,9 +321,14 @@ public sealed partial class SearchViewModel : ObservableObject
     public ObservableCollection<BarberSearchItemResponse> Barbers { get; } = [];
 
     /// <summary>
-    /// Специализации для фильтра: «Любая специализация» первой, дальше порядок сервера.
+    /// Специализации для фильтра, сгруппированные по категориям.
     /// </summary>
-    public ObservableCollection<SearchCatalogOption> Specializations { get; } = [];
+    /// <remarks>
+    /// Порядок групп каталожный, внутри группы — порядок ответа API. Пункта «Любая
+    /// специализация» в списке нет: это отсутствие выбора (<see cref="SelectedSpecialization"/>),
+    /// как и у «Любой услуги».
+    /// </remarks>
+    public ObservableCollection<SearchSpecializationGroup> SpecializationGroups { get; } = [];
 
     /// <summary>
     /// Услуги справочника для фильтра, сгруппированные по специализациям.
@@ -353,7 +368,18 @@ public sealed partial class SearchViewModel : ObservableObject
     /// Выбранная специализация; пункт «Любая специализация» отправляет <c>null</c>.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SpecializationFieldText))]
     private SearchCatalogOption? _selectedSpecialization;
+
+    /// <summary>
+    /// Подпись поля «Специализация»: название выбранной строки или «Любая специализация».
+    /// </summary>
+    /// <remarks>
+    /// «Любая специализация» больше не строка <see cref="SpecializationGroups"/>: поле
+    /// показывает текст выбора, а не пункт сгруппированного списка.
+    /// </remarks>
+    public string SpecializationFieldText =>
+        SelectedSpecialization?.DisplayText ?? AnySpecializationText;
 
     /// <summary>
     /// Выбранная услуга справочника; пункт «Любая услуга» отправляет <c>null</c>.
@@ -371,6 +397,17 @@ public sealed partial class SearchViewModel : ObservableObject
     /// списка.
     /// </remarks>
     public string HairServiceFieldText => SelectedHairService?.DisplayText ?? AnyServiceText;
+
+    /// <summary>
+    /// Ставит выбранную специализацию, пришедшую с экрана выбора.
+    /// </summary>
+    /// <remarks>
+    /// Экран выбора показывает сгруппированный по категориям список и возвращает выбранную
+    /// строку; <c>null</c> означает «Любая специализация» — отсутствие фильтра.
+    /// </remarks>
+    /// <param name="specialization">Выбранная специализация; <c>null</c> — «любая».</param>
+    public void SelectSpecialization(SearchCatalogOption? specialization) =>
+        SelectedSpecialization = specialization ?? _anySpecializationOption;
 
     /// <summary>
     /// Ставит выбранную услугу, пришедшую с экрана выбора услуги.
@@ -523,13 +560,15 @@ public sealed partial class SearchViewModel : ObservableObject
     public bool IsCatalogsEnabled => !IsCatalogsLoading && !HasCatalogsError;
 
     /// <summary>
-    /// Виден ли селект специализации: пока справочник не готов — да, пустой — нет.
+    /// Видно ли поле специализации: пока справочник не готов — да, пустой — нет.
     /// </summary>
     /// <remarks>
-    /// Пустой справочник скрывает свой селект, как в вебе, чтобы не висел мёртвый список.
+    /// Пустой справочник скрывает поле, как в вебе, чтобы не висел мёртвый список. Поле, а
+    /// не <c>Picker</c>, с тех пор как специализации группируются по категориям: у нативного
+    /// <c>Picker</c> нет <c>optgroup</c>, поэтому выбор открывается отдельным экраном.
     /// </remarks>
     public bool ShowSpecializationPicker =>
-        Specializations.Count > 1 || IsCatalogsLoading || HasCatalogsError;
+        SpecializationGroups.Count > 0 || IsCatalogsLoading || HasCatalogsError;
 
     /// <summary>
     /// Виден ли селект услуги: пока справочник не готов — да, пустой — нет.
@@ -1421,7 +1460,7 @@ public sealed partial class SearchViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Раскладывает загруженные специализации, ставя «любой» пункт первым.
+    /// Раскладывает загруженные специализации по категориям и ставит «любой» выбор.
     /// </summary>
     /// <remarks>
     /// Справочник сохраняется целиком: он задаёт заголовки и порядок групп услуг. Группы
@@ -1432,15 +1471,17 @@ public sealed partial class SearchViewModel : ObservableObject
     {
         _specializations = specializations;
 
-        Specializations.Clear();
-        Specializations.Add(SearchCatalogOption.Any(AnySpecializationText));
+        SpecializationGroups.Clear();
 
-        foreach (var specialization in specializations)
+        foreach (var group in SearchSpecializationGroups.Build(specializations))
         {
-            Specializations.Add(SearchCatalogOption.From(specialization.Id, specialization.Name));
+            SpecializationGroups.Add(group);
         }
 
-        SelectedSpecialization = Specializations[0];
+        _anySpecializationOption = SearchCatalogOption.Any(AnySpecializationText);
+        SelectedSpecialization = _anySpecializationOption;
+
+        OnPropertyChanged(nameof(ShowSpecializationPicker));
 
         RebuildHairServiceGroups();
     }
@@ -1499,14 +1540,20 @@ public sealed partial class SearchViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Показывает заглушку селекта специализаций.
+    /// Показывает заглушку поля специализаций.
     /// </summary>
+    /// <remarks>
+    /// Группы очищаются: до ответа показывать нечего, а «Любая специализация» остаётся
+    /// выбранной — она вне групп и не даёт фильтру специализации уйти в запрос.
+    /// </remarks>
     private void ShowSpecializationPlaceholder()
     {
-        Specializations.Clear();
-        Specializations.Add(SearchCatalogOption.Any(
-            IsCatalogsLoading ? LoadingText : AnySpecializationText));
-        SelectedSpecialization = Specializations[0];
+        SpecializationGroups.Clear();
+        _anySpecializationOption = SearchCatalogOption.Any(
+            IsCatalogsLoading ? LoadingText : AnySpecializationText);
+        SelectedSpecialization = _anySpecializationOption;
+
+        OnPropertyChanged(nameof(ShowSpecializationPicker));
     }
 
     /// <summary>

@@ -302,6 +302,24 @@ in Core owns both base addresses.
   grouping (alphabetical order, a name tie broken by id, the unknown tail, filtered mode, an empty
   catalogue), the narrowing and reset, the field text, the «Прочие услуги» translation, and the
   visible field over an empty narrowed list.
+- **The «Специализация» filter is grouped by category on its own screen.** The web renders the
+  catalogue as `<optgroup>`s, so the phone leaves the flat native `Picker` out of the search form
+  for the same reason as «Услуга»: the field is a 44 pt `Border` showing `SpecializationFieldText`,
+  and a tap opens the `specialization-select` Shell page over the «Поиск» stack. The page receives
+  the same `SearchViewModel` as a route object, so a row applies the filter immediately and pops,
+  while the back gesture changes nothing. «Любая специализация» sits above the groups rather than
+  inside one — it is the absence of a filter (`SelectSpecialization(null)`), not a category — and
+  the groups reproduce `groupSpecializations` from
+  `frontend/src/lib/specialization-groups.ts`: the catalogue order of the web's
+  `SERVICE_CATEGORY_ORDER` (Haircut, Beard, Coloring, Styling, HairTreatment, Other), API order
+  inside a group, and no empty groups. Group titles reuse `BarberProfileText.CategoryText`, so
+  «Стрижка» / «Борода» / «Окрашивание» / «Укладка» / «Уход» / «Другое» are the cabinet's existing
+  localization keys and follow the interface language. `SearchSpecializationGroups.Build` is a pure
+  function, so re-laying out the same answer needs no request, and the ViewModel keeps the raw
+  specialization catalogue for the service groups. Tests add 9 cases (1697 total): the pure
+  grouping (catalogue order over API order, API order inside a category, omitted empty categories,
+  all six Russian titles, the English title path), the field text, and `SelectSpecialization` both
+  for a row (the request carries its `SpecializationId`) and for `null` (no filter is sent).
 - **The search reads the device position, and the server puts the nearest first.** When the
   «Поиск» tab first appears, the screen asks for the location permission and reads the position
   with `GeolocationAccuracy.Medium` (a city block is enough for an order, and high accuracy costs

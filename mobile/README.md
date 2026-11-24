@@ -87,6 +87,14 @@ chosen specialization narrows the list to its own services, and an incompatible 
 «Любая услуга» while clearing the specialization keeps it. The page reuses the `SearchViewModel`
 through the route, so a tap applies the filter and pops.
 
+The «Специализация» filter follows the same pattern: the field shows `SpecializationFieldText` and
+opens the `specialization-select` Shell page, where «Любая специализация» sits above the groups and
+the catalogue is listed under category headings. The groups follow the web's
+`SERVICE_CATEGORY_ORDER` — Haircut, Beard, Coloring, Styling, HairTreatment, Other — keep the API
+order inside a category and omit empty ones; the headings reuse the cabinet's category labels
+(«Стрижка», «Борода», …), so they follow the interface language. The page reuses the
+`SearchViewModel` through the route as well, and a tap applies the filter and pops.
+
 The city field suggests cities while typing: `GET api/addresses/cities` (the backend's DaData
 proxy) is asked after a 250 ms pause once two characters are typed, and up to eight rows appear
 under the field. A tap fills the bare city name — the server compares city strings exactly, so
@@ -803,7 +811,11 @@ in total. The booking-creation event adds two payload-routing cases (a `booking.
 «Записи», with or without `bookingId`), and the barber confirmation, cancellation and reschedule
 events add three more, which brings the suite to **842 tests**. The cabinet slice adds the gate
 and the four section ViewModels, the seven child screens' ViewModels and the five cabinet API
-clients; it brings the suite to **1402 tests**. The page layer, the two page timers and the
+clients; it brings the suite to **1402 tests**. Later slices bring it to **1688 tests**. The
+specialization-grouping slice adds the catalogue order over the API one, the preserved API order
+inside a category, omitted empty categories, the six Russian and English category titles, and the
+specialization field's text and `null` reset (9 cases), bringing the suite to **1697 tests**. The
+page layer, the two page timers and the
 platform intents are not covered — `AGENT.md` §5 says where the risk sits. The Android build
 stays at 0 warnings; the iOS C# compile is clean after an iOS
 `PlatformTheme` no-op partial and the CA1711 suppressions: one explicit line in the existing

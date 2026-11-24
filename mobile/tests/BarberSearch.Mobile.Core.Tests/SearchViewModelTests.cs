@@ -121,7 +121,7 @@ public sealed class SearchViewModelTests
         viewModel.AdditionalService = "  борода  ";
         viewModel.SelectedDate = Today.AddDays(2).ToDateTime(TimeOnly.MinValue);
         viewModel.SelectedLanguage = viewModel.Languages[1];
-        viewModel.SelectedSpecialization = viewModel.Specializations[1];
+        viewModel.SelectSpecialization(Option(SpecializationOptions(viewModel), "Классика"));
         viewModel.SelectedHairService = Assert.Single(HairServiceOptions(viewModel));
 
         await viewModel.SearchCommand.ExecuteAsync(null);
@@ -254,7 +254,7 @@ public sealed class SearchViewModelTests
     }
 
     [Fact]
-    public async Task InitializeAsync_LoadsCatalogsWithAnyOptionFirst()
+    public async Task InitializeAsync_LoadsCatalogsWithAnySelectionOutsideGroups()
     {
         var api = FakeApi.Returning(Page());
         api.Specializations = [new SpecializationResponse(SpecializationId, "Классика", null)];
@@ -273,11 +273,16 @@ public sealed class SearchViewModelTests
 
         await viewModel.InitializeAsync();
 
-        Assert.Equal("Любая специализация", viewModel.Specializations[0].DisplayText);
-        Assert.Null(viewModel.Specializations[0].Id);
-        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
-        Assert.Equal(SpecializationId, viewModel.Specializations[1].Id);
-        Assert.Same(viewModel.Specializations[0], viewModel.SelectedSpecialization);
+        // «Любая специализация» — отсутствие выбора, а не строка сгруппированного списка.
+        Assert.Equal("Любая специализация", viewModel.SpecializationFieldText);
+        Assert.Null(viewModel.SelectedSpecialization!.Id);
+
+        // Специализация без категории образует одну группу «Другое»; «Любой» строки в ней нет.
+        var specializationGroup = Assert.Single(viewModel.SpecializationGroups);
+        Assert.Equal("Другое", specializationGroup.Title);
+        var specialization = Assert.Single(specializationGroup);
+        Assert.Equal("Классика", specialization.DisplayText);
+        Assert.Equal(SpecializationId, specialization.Id);
 
         // «Любая услуга» — отсутствие выбора, а не строка сгруппированного списка.
         Assert.Equal("Любая услуга", viewModel.HairServiceFieldText);
@@ -317,7 +322,8 @@ public sealed class SearchViewModelTests
 
         await viewModel.InitializeAsync();
 
-        Assert.Single(viewModel.Specializations);
+        Assert.Empty(viewModel.SpecializationGroups);
+        Assert.Equal("Любая специализация", viewModel.SpecializationFieldText);
         Assert.Empty(viewModel.HairServiceGroups);
         Assert.Equal("Любая услуга", viewModel.HairServiceFieldText);
         Assert.False(viewModel.ShowSpecializationPicker);
@@ -357,10 +363,13 @@ public sealed class SearchViewModelTests
             ["Укладка"],
             viewModel.HairServiceGroups[1].Select(option => option.DisplayText));
 
-        // Селект специализаций остаётся в порядке сервера: группировка его не сортирует.
+        // Специализации без категории образуют одну группу «Другое», и внутри неё порядок
+        // ответа API, а не алфавит: группировка их не сортирует.
+        var specializations = Assert.Single(viewModel.SpecializationGroups);
+        Assert.Equal("Другое", specializations.Title);
         Assert.Equal(
-            ["Любая специализация", "Парикмахер", "Барбер"],
-            viewModel.Specializations.Select(option => option.DisplayText));
+            ["Парикмахер", "Барбер"],
+            specializations.Select(option => option.DisplayText));
     }
 
     [Fact]
@@ -416,13 +425,13 @@ public sealed class SearchViewModelTests
 
         await viewModel.InitializeAsync();
 
-        viewModel.SelectedSpecialization = Option(viewModel.Specializations, "Барбер");
+        viewModel.SelectedSpecialization = Option(SpecializationOptions(viewModel), "Барбер");
         viewModel.SelectHairService(Option(HairServiceOptions(viewModel), "Стрижка"));
 
         Assert.Equal("Стрижка", viewModel.HairServiceFieldText);
 
         // У услуги ровно одна специализация: прежний выбор в новый список не попадает.
-        viewModel.SelectedSpecialization = Option(viewModel.Specializations, "Парикмахер");
+        viewModel.SelectedSpecialization = Option(SpecializationOptions(viewModel), "Парикмахер");
 
         Assert.Null(viewModel.SelectedHairService!.Id);
         Assert.Equal("Любая услуга", viewModel.HairServiceFieldText);
@@ -457,7 +466,7 @@ public sealed class SearchViewModelTests
 
         await viewModel.InitializeAsync();
 
-        viewModel.SelectedSpecialization = Option(viewModel.Specializations, "Парикмахер");
+        viewModel.SelectedSpecialization = Option(SpecializationOptions(viewModel), "Парикмахер");
 
         // У специализации нет услуг, но поле остаётся, как в вебе: оно показывает «Любую
         // услугу», а форма не прыгает и не теряет доступ к снятию фильтра.
@@ -487,11 +496,11 @@ public sealed class SearchViewModelTests
 
         await viewModel.InitializeAsync();
 
-        viewModel.SelectedSpecialization = Option(viewModel.Specializations, "Парикмахер");
+        viewModel.SelectedSpecialization = Option(SpecializationOptions(viewModel), "Парикмахер");
         viewModel.SelectHairService(Option(HairServiceOptions(viewModel), "Укладка"));
 
         // Возврат к «Любой специализации» ничего не сбрасывает: выбор снова допустим.
-        viewModel.SelectedSpecialization = viewModel.Specializations[0];
+        viewModel.SelectSpecialization(null);
 
         Assert.Equal(StylingServiceId, viewModel.SelectedHairService!.Id);
         Assert.Equal("Укладка", viewModel.HairServiceFieldText);
@@ -525,7 +534,7 @@ public sealed class SearchViewModelTests
         // Услуги не пришли — специализацию можно выбрать и без них.
         Assert.Empty(viewModel.HairServiceGroups);
 
-        viewModel.SelectedSpecialization = Option(viewModel.Specializations, "Парикмахер");
+        viewModel.SelectedSpecialization = Option(SpecializationOptions(viewModel), "Парикмахер");
 
         api.HairServicesFailure = null;
         api.HairServices =
@@ -588,6 +597,50 @@ public sealed class SearchViewModelTests
     }
 
     [Fact]
+    public async Task SelectSpecialization_UpdatesSelectionFieldTextAndRequest()
+    {
+        var api = FakeApi.Returning(Page());
+        api.Specializations = [Specialization(BarberSpecializationId, "Барбер")];
+
+        var viewModel = Create(api);
+
+        await viewModel.InitializeAsync();
+
+        var specialization = Assert.Single(SpecializationOptions(viewModel));
+
+        viewModel.SelectSpecialization(specialization);
+
+        Assert.Same(specialization, viewModel.SelectedSpecialization);
+        Assert.Equal("Барбер", viewModel.SpecializationFieldText);
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.Equal(BarberSpecializationId, Assert.Single(api.SearchCalls).SpecializationId);
+    }
+
+    [Fact]
+    public async Task SelectSpecialization_Null_RestoresAnySpecialization()
+    {
+        var api = FakeApi.Returning(Page());
+        api.Specializations = [Specialization(BarberSpecializationId, "Барбер")];
+
+        var viewModel = Create(api);
+
+        await viewModel.InitializeAsync();
+
+        viewModel.SelectSpecialization(Assert.Single(SpecializationOptions(viewModel)));
+        viewModel.SelectSpecialization(null);
+
+        // «Любая специализация» — отсутствие выбора: идентификатора у неё нет, фильтр не уходит.
+        Assert.Null(viewModel.SelectedSpecialization!.Id);
+        Assert.Equal("Любая специализация", viewModel.SpecializationFieldText);
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.Null(Assert.Single(api.SearchCalls).SpecializationId);
+    }
+
+    [Fact]
     public async Task InitializeAsync_WhileHairServicesLoading_FieldShowsLoadingPlaceholder()
     {
         var gate = new TaskCompletionSource<IReadOnlyList<HairServiceResponse>>();
@@ -627,7 +680,8 @@ public sealed class SearchViewModelTests
         Assert.Equal("Нет связи с сервером. Проверьте подключение и повторите попытку.", viewModel.CatalogsErrorText);
         Assert.False(viewModel.IsCatalogsEnabled);
         Assert.True(viewModel.ShowSpecializationPicker);
-        Assert.Equal("Любая специализация", viewModel.Specializations[0].DisplayText);
+        Assert.Equal("Любая специализация", viewModel.SpecializationFieldText);
+        Assert.Empty(viewModel.SpecializationGroups);
 
         // Упавший справочник услуг не обещает загрузку и не показывает пустых групп.
         Assert.Empty(viewModel.HairServiceGroups);
@@ -661,7 +715,7 @@ public sealed class SearchViewModelTests
 
         Assert.False(viewModel.HasCatalogsError);
         Assert.True(viewModel.IsCatalogsEnabled);
-        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+        Assert.Equal("Классика", Assert.Single(SpecializationOptions(viewModel)).DisplayText);
         Assert.Equal(2, api.SpecializationCalls);
     }
 
@@ -1449,7 +1503,7 @@ public sealed class SearchViewModelTests
         Assert.Equal(2, viewModel.CatalogsAutoRetry.Attempts);
         Assert.False(viewModel.HasCatalogsError);
         Assert.True(viewModel.IsCatalogsEnabled);
-        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+        Assert.Equal("Классика", Assert.Single(SpecializationOptions(viewModel)).DisplayText);
         Assert.Equal("Стрижка", Assert.Single(HairServiceOptions(viewModel)).DisplayText);
         Assert.False(viewModel.IsCatalogsAutoRetrying);
     }
@@ -1504,7 +1558,7 @@ public sealed class SearchViewModelTests
         Assert.False(viewModel.HasCatalogsError);
         Assert.True(viewModel.IsCatalogsEnabled);
         Assert.False(viewModel.IsCatalogsAutoRetrying);
-        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+        Assert.Equal("Классика", Assert.Single(SpecializationOptions(viewModel)).DisplayText);
         Assert.Equal("Стрижка", Assert.Single(HairServiceOptions(viewModel)).DisplayText);
     }
 
@@ -1556,7 +1610,7 @@ public sealed class SearchViewModelTests
         Assert.Equal(0, viewModel.CatalogsAutoRetry.Attempts);
         Assert.False(viewModel.IsCatalogsAutoRetrying);
         Assert.False(viewModel.HasCatalogsError);
-        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+        Assert.Equal("Классика", Assert.Single(SpecializationOptions(viewModel)).DisplayText);
     }
 
     [Fact]
@@ -1601,7 +1655,7 @@ public sealed class SearchViewModelTests
         Assert.Equal(2, viewModel.CatalogsAutoRetry.Attempts);
         Assert.Equal(4, api.SpecializationCalls);
         Assert.False(viewModel.HasCatalogsError);
-        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+        Assert.Equal("Классика", Assert.Single(SpecializationOptions(viewModel)).DisplayText);
         Assert.False(viewModel.IsCatalogsAutoRetrying);
     }
 
@@ -1620,7 +1674,7 @@ public sealed class SearchViewModelTests
 
         Assert.True(viewModel.HasCatalogsError);
         Assert.Equal("Нет связи с сервером. Проверьте подключение и повторите попытку.", viewModel.CatalogsErrorText);
-        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+        Assert.Equal("Классика", Assert.Single(SpecializationOptions(viewModel)).DisplayText);
 
         viewModel.StartAutoRetry();
 
@@ -1629,14 +1683,14 @@ public sealed class SearchViewModelTests
         Assert.Equal(1, viewModel.CatalogsAutoRetry.Attempts);
         Assert.Equal("Нет связи с сервером. Проверьте подключение и повторите попытку.", viewModel.CatalogsErrorText);
         Assert.True(viewModel.HasCatalogsError);
-        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+        Assert.Equal("Классика", Assert.Single(SpecializationOptions(viewModel)).DisplayText);
         Assert.False(viewModel.IsCatalogsLoading);
         Assert.Equal(1, api.SpecializationCalls);
 
         silentAttempt.SetException(new HttpRequestException("refused"));
 
         Assert.True(viewModel.HasCatalogsError);
-        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+        Assert.Equal("Классика", Assert.Single(SpecializationOptions(viewModel)).DisplayText);
 
         viewModel.StopAutoRetry();
         await viewModel.CatalogsAutoRetryCompletion;
@@ -1664,7 +1718,7 @@ public sealed class SearchViewModelTests
         // Отмена попытки не оставляет форму пустой: причина, кнопка и загруженный справочник живы.
         Assert.True(viewModel.HasCatalogsError);
         Assert.Equal("Нет связи с сервером. Проверьте подключение и повторите попытку.", viewModel.CatalogsErrorText);
-        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+        Assert.Equal("Классика", Assert.Single(SpecializationOptions(viewModel)).DisplayText);
         Assert.False(viewModel.IsCatalogsAutoRetrying);
 
         silentAttempt.SetCanceled();
@@ -1726,7 +1780,7 @@ public sealed class SearchViewModelTests
         await viewModel.InitializeAsync();
 
         Assert.True(viewModel.HasCatalogsError);
-        Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
+        Assert.Equal("Классика", Assert.Single(SpecializationOptions(viewModel)).DisplayText);
         Assert.Equal(1, api.SpecializationCalls);
         Assert.Equal(1, api.HairServiceCalls);
 
@@ -1882,6 +1936,14 @@ public sealed class SearchViewModelTests
     /// </summary>
     private static IReadOnlyList<SearchCatalogOption> HairServiceOptions(SearchViewModel viewModel) =>
         [.. viewModel.HairServiceGroups.SelectMany(group => group)];
+
+    /// <summary>
+    /// Специализации сгруппированного списка одним потоком: пункта «Любая специализация»
+    /// в группах нет.
+    /// </summary>
+    private static IReadOnlyList<SearchCatalogOption> SpecializationOptions(
+        SearchViewModel viewModel) =>
+        [.. viewModel.SpecializationGroups.SelectMany(group => group)];
 
     /// <summary>
     /// Пункт селекта по подписи: тест называет значение, а не индекс ответа API.

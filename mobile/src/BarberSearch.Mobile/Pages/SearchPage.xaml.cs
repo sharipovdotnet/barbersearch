@@ -105,6 +105,39 @@ public partial class SearchPage : ContentPage
     }
 
     /// <summary>
+    /// Открывает экран выбора специализации.
+    /// </summary>
+    /// <remarks>
+    /// Выбор специализации — отдельный экран: MAUI <c>Picker</c> не умеет <c>optgroup</c>,
+    /// а веб группирует строки по категориям. Экран получает ту же ViewModel, чтобы выбранная
+    /// строка сразу применилась к фильтру. Пока переход идёт, повторный тап игнорируется.
+    /// </remarks>
+    /// <param name="sender">Жест тапа по полю специализации.</param>
+    /// <param name="e">Пустые аргументы жеста.</param>
+    private async void OnSpecializationFieldTapped(object? sender, TappedEventArgs e)
+    {
+        // Пока справочник не готов, поле показывает «Загрузка…»/«Любая специализация»:
+        // открывать пустой список незачем, даже если жест всё же дошёл до отключённого Border.
+        if (_isNavigating || !_viewModel.IsCatalogsEnabled)
+        {
+            return;
+        }
+
+        _isNavigating = true;
+
+        try
+        {
+            await Shell.Current.GoToAsync(
+                SpecializationSelectPage.Route,
+                new Dictionary<string, object> { ["owner"] = _viewModel });
+        }
+        finally
+        {
+            _isNavigating = false;
+        }
+    }
+
+    /// <summary>
     /// Открывает экран выбора услуги.
     /// </summary>
     /// <remarks>
