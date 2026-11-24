@@ -526,3 +526,117 @@ describe('SearchForm, группировка специализаций', () => 
     )
   })
 })
+
+/**
+ * Специализация сужает селект услуг: услуга принадлежит ровно одной
+ * специализации, поэтому чужие строки в «Услуге» — ложный выбор. Старый выбор,
+ * выпавший из сужённого списка, сбрасывается, а не остаётся скрытым значением.
+ */
+describe('SearchForm, услуги выбранной специализации', () => {
+  it('оставляет в «Услуге» только услуги выбранной специализации', async () => {
+    useGroupedCatalogs()
+
+    render(<SearchForm isSearching={false} onSearch={vi.fn()} />)
+
+    const specializationSelect = screen.getByLabelText('Специализация')
+    const serviceSelect = screen.getByLabelText('Услуга')
+
+    await waitFor(() => {
+      expect(within(serviceSelect).getAllByRole('group')).toHaveLength(3)
+    })
+
+    await userEvent.selectOptions(specializationSelect, BEARD_SPECIALIZATION.id)
+
+    const groups = within(serviceSelect).getAllByRole('group')
+
+    expect(groups.map((group) => group.getAttribute('label'))).toStrictEqual([
+      'Борода',
+    ])
+    expect(
+      within(groups[0])
+        .getAllByRole('option')
+        .map((option) => option.textContent)
+    ).toStrictEqual(['Оформление бороды'])
+    // «Любая услуга» остаётся первым пунктом и вне групп, «Прочих услуг» нет.
+    expect(
+      within(serviceSelect)
+        .getAllByRole('option')
+        .map((option) => option.getAttribute('value'))
+    ).toStrictEqual(['', HAIR_SERVICE_BEARD.id])
+  })
+
+  it('сбрасывает услугу другой специализации и отправляет пустой hairServiceId', async () => {
+    useGroupedCatalogs()
+
+    const onSearch = vi.fn()
+
+    render(<SearchForm isSearching={false} onSearch={onSearch} />)
+
+    const specializationSelect = screen.getByLabelText('Специализация')
+    const serviceSelect = screen.getByLabelText('Услуга')
+
+    await waitFor(() => {
+      expect(within(serviceSelect).getAllByRole('group')).toHaveLength(3)
+    })
+
+    await userEvent.selectOptions(serviceSelect, HAIR_SERVICE_BEARD.id)
+    expect(serviceSelect).toHaveValue(HAIR_SERVICE_BEARD.id)
+
+    await userEvent.selectOptions(specializationSelect, SPECIALIZATION.id)
+
+    expect(serviceSelect).toHaveValue('')
+    expect(serviceSelect).not.toHaveAttribute('title')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Найти' }))
+
+    expect(onSearch).toHaveBeenCalledTimes(1)
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        specializationId: SPECIALIZATION.id,
+        hairServiceId: '',
+      })
+    )
+  })
+
+  it('возврат к «Любой специализации» показывает все группы и сохраняет услугу', async () => {
+    useGroupedCatalogs()
+
+    render(<SearchForm isSearching={false} onSearch={vi.fn()} />)
+
+    const specializationSelect = screen.getByLabelText('Специализация')
+    const serviceSelect = screen.getByLabelText('Услуга')
+
+    await waitFor(() => {
+      expect(within(serviceSelect).getAllByRole('group')).toHaveLength(3)
+    })
+
+    await userEvent.selectOptions(specializationSelect, BEARD_SPECIALIZATION.id)
+    await userEvent.selectOptions(serviceSelect, HAIR_SERVICE_BEARD.id)
+
+    await userEvent.selectOptions(specializationSelect, '')
+
+    expect(within(serviceSelect).getAllByRole('group')).toHaveLength(3)
+    expect(serviceSelect).toHaveValue(HAIR_SERVICE_BEARD.id)
+  })
+
+  it('у специализации без услуг селект остаётся с одной «Любой услугой»', async () => {
+    useGroupedSpecializationCatalogs()
+
+    render(<SearchForm isSearching={false} onSearch={vi.fn()} />)
+
+    const specializationSelect = screen.getByLabelText('Специализация')
+    const serviceSelect = screen.getByLabelText('Услуга')
+
+    await waitFor(() => {
+      expect(within(serviceSelect).getAllByRole('group')).toHaveLength(1)
+    })
+
+    await userEvent.selectOptions(specializationSelect, STYLING_SPECIALIZATION.id)
+
+    expect(within(serviceSelect).queryAllByRole('group')).toHaveLength(0)
+    expect(within(serviceSelect).getAllByRole('option')).toHaveLength(1)
+    expect(
+      within(serviceSelect).getByRole('option', { name: 'Любая услуга' })
+    ).toBeInTheDocument()
+  })
+})
