@@ -1,5 +1,6 @@
-﻿using BarberSearch.Application.Common;
+using BarberSearch.Application.Common;
 using BarberSearch.Application.HairServices;
+using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.HairServices.Admin;
 using BarberSearch.Domain.HairServices;
 using CSharpFunctionalExtensions;
@@ -8,20 +9,22 @@ using Shared;
 namespace BarberSearch.Application.UnitTests.Fakes;
 
 /// <summary>
-/// In-memory <see cref="IHairServiceRepository"/> для тестов проверок ссылочной целостности
-/// и чтения справочника.
+/// In-memory <see cref="IHairServiceRepository"/> для тестов проверок ссылочной целостности,
+/// чтения справочника и записи услуги.
 /// </summary>
 /// <remarks>
 /// Реализовано только то, что вызывают проверяемые сценарии: <see cref="ExistsAsync"/>,
-/// <see cref="GetActiveAsync"/> и <see cref="GetAdminListAsync"/>. Админский список фильтрует
-/// и сортирует по тем же правилам, что и реальный репозиторий, иначе юнит-тест врал бы
-/// о контракте.
+/// <see cref="GetActiveAsync"/>, <see cref="GetAdminListAsync"/>, <see cref="GetByIdAsync"/>,
+/// <see cref="AddAsync"/> и <see cref="UpdateAsync"/>. Админский список фильтрует
+/// и сортирует по тем же правилам, что и реальный репозиторий (включая поиск по названию
+/// специализации), иначе юнит-тест врал бы о контракте.
 /// </remarks>
 public sealed class FakeHairServiceRepository : IHairServiceRepository
 {
     private readonly HashSet<Guid> _existingIds = [];
-    private readonly List<HairService> _active = [];
+    private readonly List<HairServiceCatalogRow> _active = [];
     private readonly List<AdminHairServiceResponse> _adminRows = [];
+    private readonly Dictionary<Guid, HairService> _stored = [];
 
     /// <summary>Сбой чтения справочника: обработчик обязан пробросить его как <c>Result</c>.</summary>
     public Failure? GetActiveFailure { get; set; }
@@ -35,26 +38,36 @@ public sealed class FakeHairServiceRepository : IHairServiceRepository
     /// <summary>Поиск после разбора обработчиком: <c>null</c>, если фильтра нет.</summary>
     public string? LastSearch { get; private set; }
 
+    /// <summary>Услуги, добавленные через <see cref="AddAsync"/>: проверка записи.</summary>
+    public List<HairService> Added { get; } = [];
+
+    /// <summary>Услуги, сохранённые через <see cref="UpdateAsync"/>: проверка смены специализации.</summary>
+    public List<HairService> Updated { get; } = [];
+
     public void AddExisting(Guid id) => _existingIds.Add(id);
 
-    public void AddActive(HairService hairService) => _active.Add(hairService);
+    public void AddActive(HairService hairService, ServiceCategory category)
+        => _active.Add(new HairServiceCatalogRow(hairService, category));
 
     public void AddAdminRow(AdminHairServiceResponse row) => _adminRows.Add(row);
+
+    /// <summary>Кладёт услугу в хранилище: её вернёт <see cref="GetByIdAsync"/>.</summary>
+    public void Store(HairService hairService) => _stored[hairService.Id] = hairService;
 
     public Task<Result<bool, Failure>> ExistsAsync(
         Guid id,
         CancellationToken cancellationToken = default)
         => Task.FromResult<Result<bool, Failure>>(_existingIds.Contains(id));
 
-    public Task<Result<IReadOnlyList<HairService>, Failure>> GetActiveAsync(
+    public Task<Result<IReadOnlyList<HairServiceCatalogRow>, Failure>> GetActiveAsync(
         CancellationToken cancellationToken = default)
     {
         if (GetActiveFailure is { } failure)
         {
-            return Task.FromResult<Result<IReadOnlyList<HairService>, Failure>>(failure);
+            return Task.FromResult<Result<IReadOnlyList<HairServiceCatalogRow>, Failure>>(failure);
         }
 
-        return Task.FromResult<Result<IReadOnlyList<HairService>, Failure>>(_active);
+        return Task.FromResult<Result<IReadOnlyList<HairServiceCatalogRow>, Failure>>(_active);
     }
 
     public Task<Result<IReadOnlyList<AdminHairServiceResponse>, Failure>> GetAdminListAsync(
@@ -84,8 +97,13 @@ public sealed class FakeHairServiceRepository : IHairServiceRepository
         {
             var needle = search.Trim();
 
+            // Как и реальный запрос: название услуги ИЛИ название специализации.
             rows = rows.Where(row =>
-                row.Name.Contains(needle, StringComparison.OrdinalIgnoreCase));
+                row.Name.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                || (row.SpecializationName?.Contains(
+                        needle,
+                        StringComparison.OrdinalIgnoreCase)
+                    ?? false));
         }
 
         var ordered = rows
@@ -100,14 +118,24 @@ public sealed class FakeHairServiceRepository : IHairServiceRepository
     public Task<Result<HairService, Failure>> GetByIdAsync(
         Guid id,
         CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    {
+        if (_stored.TryGetValue(id, out var hairService))
+        {
+            return Task.FromResult<Result<HairService, Failure>>(hairService);
+        }
 
-    public Task<Result<IReadOnlyList<HairService>, Failure>> GetByCategoryAsync(
+        return Task.FromResult<Result<HairService, Failure>>(new Failure(Error.NotFound(
+            ApiErrorCodes.HairService.NotFound,
+            $"Hair service '{id}' was not found.")));
+    }
+
+    public Task<Result<IReadOnlyList<HairServiceCatalogRow>, Failure>> GetByCategoryAsync(
         ServiceCategory category,
         CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+        => Task.FromResult<Result<IReadOnlyList<HairServiceCatalogRow>, Failure>>(
+            _active.Where(row => row.Category == category).ToList());
 
-    public Task<Result<IReadOnlyList<HairService>, Failure>> GetPagedAsync(
+    public Task<Result<IReadOnlyList<HairServiceCatalogRow>, Failure>> GetPagedAsync(
         int page,
         int pageSize,
         bool onlyActive = true,
@@ -117,12 +145,22 @@ public sealed class FakeHairServiceRepository : IHairServiceRepository
     public Task<UnitResult<Failure>> AddAsync(
         HairService hairService,
         CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    {
+        Added.Add(hairService);
+        Store(hairService);
+
+        return Task.FromResult(UnitResult.Success<Failure>());
+    }
 
     public Task<UnitResult<Failure>> UpdateAsync(
         HairService hairService,
         CancellationToken cancellationToken = default)
-        => throw new NotSupportedException();
+    {
+        Updated.Add(hairService);
+        Store(hairService);
+
+        return Task.FromResult(UnitResult.Success<Failure>());
+    }
 
     public Task<UnitResult<Failure>> DeleteAsync(
         HairService hairService,

@@ -59,6 +59,8 @@ export type AdminCatalogueList =
   | (CommonListFields & { tab: 'salons'; rows: AdminSalon[] })
 
 const LIST_FALLBACK = 'Не удалось загрузить справочник.'
+const SPECIALIZATIONS_FALLBACK =
+  'Не удалось загрузить специализации. Попробуйте ещё раз.'
 
 const INITIAL_STATE: CatalogueListState = {
   rows: [],
@@ -223,4 +225,89 @@ export function useAdminCatalogueList(
     case 'salons':
       return { ...common, tab, rows: state.rows as AdminSalon[] }
   }
+}
+
+type SpecializationOptionsState = {
+  options: AdminSpecialization[]
+  status: 'loading' | 'ready' | 'error'
+  error: string | null
+}
+
+export type AdminSpecializationOptions = SpecializationOptionsState & {
+  reload: () => void
+}
+
+/**
+ * Справочник специализаций для диалога услуги.
+ *
+ * Запрос уходит только когда `enabled` становится `true` — диалог открылся. Список
+ * всегда полный (`status=all`): выключенная специализация остаётся в селекте с
+ * пометкой, иначе правка старой услуги потеряла бы текущее значение. При закрытии
+ * диалога запрос отменяется, при повторном открытии справочник перечитывается:
+ * администратор мог только что создать строку во вкладке «Специализации».
+ */
+export function useAdminSpecializationOptions(
+  enabled: boolean
+): AdminSpecializationOptions {
+  const [state, setState] = useState<SpecializationOptionsState>({
+    options: [],
+    status: 'loading',
+    error: null,
+  })
+
+  const versionRef = useRef(0)
+  const abortRef = useRef<AbortController | null>(null)
+
+  const load = useCallback(() => {
+    const version = versionRef.current + 1
+    versionRef.current = version
+
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    // Старые строки остаются на экране: при повторном открытии диалог не мигает.
+    setState((previous) => ({ ...previous, status: 'loading', error: null }))
+
+    void (async () => {
+      try {
+        const rows = await fetchAdminSpecializations({
+          status: 'all',
+          signal: controller.signal,
+        })
+
+        if (versionRef.current !== version) {
+          return
+        }
+
+        setState({ options: rows, status: 'ready', error: null })
+      } catch (cause) {
+        if (versionRef.current !== version || controller.signal.aborted) {
+          return
+        }
+
+        setState((previous) => ({
+          ...previous,
+          status: 'error',
+          error: describeAdminCatalogueError(cause, t(SPECIALIZATIONS_FALLBACK)),
+        }))
+      }
+    })()
+  }, [])
+
+  useEffect(() => {
+    if (!enabled) {
+      return
+    }
+
+    // oxlint-disable-next-line react/set-state-in-effect -- ленивая загрузка справочника при открытии диалога
+    load()
+
+    return () => {
+      versionRef.current += 1
+      abortRef.current?.abort()
+    }
+  }, [enabled, load])
+
+  return { ...state, reload: load }
 }

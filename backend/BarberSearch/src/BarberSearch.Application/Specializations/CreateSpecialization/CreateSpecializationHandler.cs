@@ -37,6 +37,7 @@ public class CreateSpecializationHandler : ICommandHandler<Guid, CreateSpecializ
     {
         var specialization = Specialization.Create(
             command.Name,
+            command.Category,
             command.Description);
         if (specialization.IsFailure)
         {

@@ -2029,15 +2029,16 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
     }
 
     /// <summary>
-    /// Услуги профиля с названием и категорией из справочника.
+    /// Услуги профиля с названием и категорией специализации из справочника.
     /// </summary>
     /// <remarks>
-    /// Читает только <c>hair_services</c>: услуги и их цены уже загружены в агрегат.
-    /// Услуга, у которой справочник удалён, не показывается — как и в публичной карточке.
-    /// <paramref name="includeInactiveServices"/> = <c>false</c> — фильтр публичной карточки
-    /// и формы записи: скрытая услуга не показывается клиенту. <c>true</c> — собственный
-    /// прайс барбера: скрытая строка остаётся в списке со статусом «Скрыта», иначе её нельзя
-    /// было бы вернуть в работу.
+    /// Читает <c>hair_services</c> вместе со <c>specializations</c>: категории у услуги
+    /// больше нет, она берётся из категории специализации. Услуги и их цены уже загружены
+    /// в агрегат. Услуга, у которой справочник удалён, не показывается — как и в публичной
+    /// карточке. <paramref name="includeInactiveServices"/> = <c>false</c> — фильтр публичной
+    /// карточки и формы записи: скрытая услуга не показывается клиенту. <c>true</c> —
+    /// собственный прайс барбера: скрытая строка остаётся в списке со статусом «Скрыта»,
+    /// иначе её нельзя было бы вернуть в работу.
     /// </remarks>
     private async Task<List<BarberProfileServiceResponse>> LoadServicesAsync(
         BarberProfile profile,
@@ -2048,24 +2049,34 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
             .Select(service => service.HairServiceId)
             .Distinct()
             .ToArray();
-        var hairServicesById = await Context.HairServices
-            .AsNoTracking()
-            .Where(service => hairServiceIds.Contains(service.Id))
-            .ToDictionaryAsync(service => service.Id, cancellationToken);
+
+        // Join, а не два запроса: категория нужна в той же строке, что и услуга.
+        var hairServicesById = await (
+                from hairService in Context.HairServices.AsNoTracking()
+                join specialization in Context.Specializations.AsNoTracking()
+                    on hairService.SpecializationId equals specialization.Id
+                where hairServiceIds.Contains(hairService.Id)
+                select new
+                {
+                    HairService = hairService,
+                    specialization.Category
+                })
+            .ToDictionaryAsync(row => row.HairService.Id, cancellationToken);
 
         return profile.Services
             .Where(service => (includeInactiveServices || service.IsActive)
                               && hairServicesById.ContainsKey(service.HairServiceId))
-            .OrderBy(service => hairServicesById[service.HairServiceId].Name)
+            .OrderBy(service => hairServicesById[service.HairServiceId].HairService.Name)
             .Select(service =>
             {
-                var hairService = hairServicesById[service.HairServiceId];
+                var row = hairServicesById[service.HairServiceId];
+                var hairService = row.HairService;
 
                 return new BarberProfileServiceResponse(
                     service.Id,
                     service.HairServiceId,
                     hairService.Name,
-                    hairService.Category,
+                    row.Category,
                     hairService.DefaultDurationMinutes,
                     service.Price,
                     service.DurationMinutes,

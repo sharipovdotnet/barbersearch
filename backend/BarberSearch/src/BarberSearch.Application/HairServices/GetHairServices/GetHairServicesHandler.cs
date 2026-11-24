@@ -9,8 +9,10 @@ namespace BarberSearch.Application.HairServices.GetHairServices;
 /// Обработчик чтения публичного справочника услуг.
 /// </summary>
 /// <remarks>
-/// Порядок задаёт репозиторий (категория, затем имя) — обработчик его сохраняет,
-/// чтобы фильтр на витрине не переставлял строки между запросами.
+/// Порядок задаёт репозиторий (категория специализации, затем имя) — обработчик его
+/// сохраняет, чтобы фильтр на витрине не переставлял строки между запросами. Категория
+/// и специализация приходят из join'а с <c>specializations</c>: у услуги своего поля
+/// категории больше нет.
 /// </remarks>
 public sealed class GetHairServicesHandler
     : IQueryHandler<IReadOnlyList<HairServiceResponse>, GetHairServicesQuery>
@@ -40,12 +42,13 @@ public sealed class GetHairServicesHandler
         }
 
         return result.Value
-            .Select(hairService => new HairServiceResponse(
-                hairService.Id,
-                hairService.Name,
-                hairService.Category,
-                hairService.DefaultDurationMinutes,
-                hairService.Description))
+            .Select(row => new HairServiceResponse(
+                row.HairService.Id,
+                row.HairService.Name,
+                row.Category,
+                row.HairService.DefaultDurationMinutes,
+                row.HairService.Description,
+                row.HairService.SpecializationId))
             .ToList();
     }
 }

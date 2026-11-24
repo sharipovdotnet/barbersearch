@@ -55,14 +55,18 @@ public sealed class AdminCatalogueWriteTests
         await using var app = await TestApp.StartAsync(_database);
         await SignInAsAdminAsync(app);
 
-        var createdService = await CreateAsync<CreatedResourceResponse>(
-            app,
-            "api/hair-services",
-            new CreateHairServiceRequest("Catalogue Fade", ServiceCategory.Beard, 45, "Seeded"));
         var createdSpecialization = await CreateAsync<CreatedResourceResponse>(
             app,
             "api/specializations",
-            new CreateSpecializationRequest("Catalogue Skin Fade", "Seeded"));
+            new CreateSpecializationRequest("Catalogue Skin Fade", ServiceCategory.Beard, "Seeded"));
+        var createdService = await CreateAsync<CreatedResourceResponse>(
+            app,
+            "api/hair-services",
+            new CreateHairServiceRequest(
+                "Catalogue Fade",
+                createdSpecialization.Id,
+                45,
+                "Seeded"));
         var createdSalon = await CreateAsync<CreatedResourceResponse>(
             app,
             "api/salons",
@@ -80,7 +84,14 @@ public sealed class AdminCatalogueWriteTests
 
         var service = await ReadRowAsync(app.Client, HAIR_SERVICES, createdService.Id);
         Assert.Equal("Catalogue Fade", service.GetProperty("name").GetString());
+        // Категории в теле услуги нет: она выводится из категории специализации.
         Assert.Equal("Beard", service.GetProperty("category").GetString());
+        Assert.Equal(
+            createdSpecialization.Id,
+            service.GetProperty("specializationId").GetGuid());
+        Assert.Equal(
+            "Catalogue Skin Fade",
+            service.GetProperty("specializationName").GetString());
         Assert.Equal(45, service.GetProperty("defaultDurationMinutes").GetInt32());
         Assert.Equal("Seeded", service.GetProperty("description").GetString());
         Assert.True(service.GetProperty("isActive").GetBoolean());
@@ -91,6 +102,7 @@ public sealed class AdminCatalogueWriteTests
             SPECIALIZATIONS,
             createdSpecialization.Id);
         Assert.Equal("Catalogue Skin Fade", specialization.GetProperty("name").GetString());
+        Assert.Equal("Beard", specialization.GetProperty("category").GetString());
         Assert.True(specialization.GetProperty("isActive").GetBoolean());
 
         var salon = await ReadRowAsync(app.Client, SALONS, createdSalon.Id);
@@ -101,20 +113,34 @@ public sealed class AdminCatalogueWriteTests
     }
 
     [Fact(Timeout = 180_000)]
-    public async Task Hair_service_rename_keeps_the_category()
+    public async Task Hair_service_update_derives_category_from_its_specialization()
     {
         await using var app = await TestApp.StartAsync(_database);
         await SignInAsAdminAsync(app);
 
+        var beardSpecialization = await CreateAsync<CreatedResourceResponse>(
+            app,
+            "api/specializations",
+            new CreateSpecializationRequest("Catalogue Beard", ServiceCategory.Beard, null));
+        var coloringSpecialization = await CreateAsync<CreatedResourceResponse>(
+            app,
+            "api/specializations",
+            new CreateSpecializationRequest("Catalogue Coloring", ServiceCategory.Coloring, null));
+
         var created = await CreateAsync<CreatedResourceResponse>(
             app,
             "api/hair-services",
-            new CreateHairServiceRequest("Original Fade", ServiceCategory.Beard, 30, "Old"));
+            new CreateHairServiceRequest("Original Fade", beardSpecialization.Id, 30, "Old"));
         var id = created.Id;
 
         using (var renamed = await app.Client.PutAsJsonAsync(
                    $"api/hair-services/{id}",
-                   new UpdateHairServiceRequest("Renamed Fade", "New description", 60)))
+                   new UpdateHairServiceRequest(
+                       "Renamed Fade",
+                       "New description",
+                       60,
+                       beardSpecialization.Id),
+                   JsonOptions))
         {
             Assert.Equal(HttpStatusCode.NoContent, renamed.StatusCode);
         }
@@ -123,15 +149,38 @@ public sealed class AdminCatalogueWriteTests
         Assert.Equal("Renamed Fade", row.GetProperty("name").GetString());
         Assert.Equal("New description", row.GetProperty("description").GetString());
         Assert.Equal(60, row.GetProperty("defaultDurationMinutes").GetInt32());
-        // Категория не меняется после создания: иначе предложения барберов потеряли бы смысл.
         Assert.Equal("Beard", row.GetProperty("category").GetString());
+
+        // Специализацию менять можно: категория услуги переезжает вместе с ней.
+        using (var moved = await app.Client.PutAsJsonAsync(
+                   $"api/hair-services/{id}",
+                   new UpdateHairServiceRequest(
+                       "Renamed Fade",
+                       "New description",
+                       60,
+                       coloringSpecialization.Id),
+                   JsonOptions))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, moved.StatusCode);
+        }
+
+        var movedRow = await ReadRowAsync(app.Client, HAIR_SERVICES, id);
+        Assert.Equal("Coloring", movedRow.GetProperty("category").GetString());
+        Assert.Equal(
+            coloringSpecialization.Id,
+            movedRow.GetProperty("specializationId").GetGuid());
 
         // Границы длительности проверяет домен: 0 и 1441 — невалидные значения.
         foreach (var duration in new[] { 0, 1441 })
         {
             using var rejected = await app.Client.PutAsJsonAsync(
                 $"api/hair-services/{id}",
-                new UpdateHairServiceRequest("Renamed Fade", "New description", duration));
+                new UpdateHairServiceRequest(
+                    "Renamed Fade",
+                    "New description",
+                    duration,
+                    coloringSpecialization.Id),
+                JsonOptions);
 
             Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
         }
@@ -139,6 +188,37 @@ public sealed class AdminCatalogueWriteTests
         // Неудачные правки не испортили строку.
         Assert.Equal(60, (await ReadRowAsync(app.Client, HAIR_SERVICES, id))
             .GetProperty("defaultDurationMinutes").GetInt32());
+    }
+
+    [Fact(Timeout = 120_000)]
+    public async Task Hair_service_rejects_unknown_or_empty_specialization()
+    {
+        await using var app = await TestApp.StartAsync(_database);
+        await SignInAsAdminAsync(app);
+
+        using (var unknown = await app.Client.PostAsJsonAsync(
+                   "api/hair-services",
+                   new CreateHairServiceRequest("Orphan Fade", Guid.CreateVersion7(), 30, null),
+                   JsonOptions))
+        {
+            Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+            Assert.Contains(
+                "hairService.specialization.notFound",
+                await unknown.Content.ReadAsStringAsync());
+        }
+
+        // Пустой идентификатор — это ошибка валидации домена (400), а не «не найдено»:
+        // код проверяется отдельно, чтобы клиент различал эти два случая.
+        using (var empty = await app.Client.PostAsJsonAsync(
+                   "api/hair-services",
+                   new CreateHairServiceRequest("Orphan Fade", Guid.Empty, 30, null),
+                   JsonOptions))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
+            Assert.Contains(
+                "hairService.specializationId",
+                await empty.Content.ReadAsStringAsync());
+        }
     }
 
     [Fact(Timeout = 120_000)]
@@ -150,11 +230,12 @@ public sealed class AdminCatalogueWriteTests
         await CreateAsync<CreatedResourceResponse>(
             app,
             "api/specializations",
-            new CreateSpecializationRequest("Catalogue Fade", "First"));
+            new CreateSpecializationRequest("Catalogue Fade", ServiceCategory.Haircut, "First"));
 
         using var duplicate = await app.Client.PostAsJsonAsync(
             "api/specializations",
-            new CreateSpecializationRequest("catalogue fade", "Second"));
+            new CreateSpecializationRequest("catalogue fade", ServiceCategory.Beard, "Second"),
+            JsonOptions);
 
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
         Assert.Contains(
@@ -171,15 +252,19 @@ public sealed class AdminCatalogueWriteTests
         var first = await CreateAsync<CreatedResourceResponse>(
             app,
             "api/specializations",
-            new CreateSpecializationRequest("Catalogue First", null));
+            new CreateSpecializationRequest("Catalogue First", ServiceCategory.Haircut, null));
         var second = await CreateAsync<CreatedResourceResponse>(
             app,
             "api/specializations",
-            new CreateSpecializationRequest("Catalogue Second", null));
+            new CreateSpecializationRequest("Catalogue Second", ServiceCategory.Haircut, null));
 
         using var duplicate = await app.Client.PutAsJsonAsync(
             $"api/specializations/{second.Id}",
-            new RenameSpecializationRequest("CATALOGUE FIRST", null));
+            new RenameSpecializationRequest(
+                "CATALOGUE FIRST",
+                ServiceCategory.Haircut,
+                null),
+            JsonOptions);
 
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
         Assert.Contains(
@@ -233,18 +318,33 @@ public sealed class AdminCatalogueWriteTests
         {
             await app.Client.PostAsJsonAsync(
                 "api/hair-services",
-                new CreateHairServiceRequest("Forbidden", ServiceCategory.Haircut, 30, null)),
+                new CreateHairServiceRequest(
+                    "Forbidden",
+                    service.SpecializationId,
+                    30,
+                    null),
+                JsonOptions),
             await app.Client.PutAsJsonAsync(
                 $"api/hair-services/{service.Id}",
-                new UpdateHairServiceRequest("Forbidden", null, 30)),
+                new UpdateHairServiceRequest(
+                    "Forbidden",
+                    null,
+                    30,
+                    service.SpecializationId),
+                JsonOptions),
             await app.Client.PostAsync($"api/hair-services/{service.Id}/activation", null),
             await app.Client.DeleteAsync($"api/hair-services/{service.Id}/activation"),
             await app.Client.PostAsJsonAsync(
                 "api/specializations",
-                new CreateSpecializationRequest("Forbidden", null)),
+                new CreateSpecializationRequest("Forbidden", ServiceCategory.Haircut, null),
+                JsonOptions),
             await app.Client.PutAsJsonAsync(
                 $"api/specializations/{specialization.Id}",
-                new RenameSpecializationRequest("Forbidden", null)),
+                new RenameSpecializationRequest(
+                    "Forbidden",
+                    ServiceCategory.Haircut,
+                    null),
+                JsonOptions),
             await app.Client.PostAsync($"api/specializations/{specialization.Id}/activation", null),
             await app.Client.DeleteAsync($"api/specializations/{specialization.Id}/activation"),
             await app.Client.PostAsJsonAsync(

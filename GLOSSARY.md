@@ -126,8 +126,15 @@ _Avoid_: Vacation, holiday, day off
 
 ## Catalogue
 
+**Service Category**:
+The coarse grouping of a service — haircut, beard, colouring, styling, hair treatment, other
+(`ServiceCategory`). It belongs to a Specialization, not to a Hair Service: the Hair Service's
+category is the category of its Specialization.
+_Avoid_: Service type, section, group
+
 **Hair Service**:
 A service offered by the platform (haircut, beard trim, colouring …), with a default duration.
+It belongs to exactly one Specialization; its Service Category is that Specialization's category.
 _Avoid_: Service, procedure
 
 **Barber Service**:
@@ -135,7 +142,9 @@ The price and duration at which one Barber offers one Hair Service.
 _Avoid_: Price list entry, offering
 
 **Specialization**:
-A skill label from the platform's directory (fade master, beard master …).
+A skill label from the platform's directory (fade master, beard master …) with exactly one
+Service Category. The category can be changed at any time; the Hair Services of the
+Specialization follow it.
 _Avoid_: Skill, tag, category
 
 **Barber Specialization**:

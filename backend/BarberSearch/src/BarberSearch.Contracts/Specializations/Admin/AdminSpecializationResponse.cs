@@ -1,3 +1,5 @@
+using BarberSearch.Domain.HairServices;
+
 namespace BarberSearch.Contracts.Specializations.Admin;
 
 /// <summary>
@@ -6,7 +8,7 @@ namespace BarberSearch.Contracts.Specializations.Admin;
 /// <remarks>
 /// Отдельный контракт от публичного <c>SpecializationResponse</c>: администратор видит
 /// выключенные строки и число барберов, которые их используют. Ответ — полный справочник
-/// без пагинации.
+/// без пагинации. Категория добавлена в конец записи со значением по умолчанию.
 /// </remarks>
 /// <param name="Id">Идентификатор специализации.</param>
 /// <param name="Name">Название.</param>
@@ -18,9 +20,11 @@ namespace BarberSearch.Contracts.Specializations.Admin;
 /// «профиль активен и подтверждён». Выключенная строка остаётся на карточках барберов,
 /// поэтому счётчик не обнуляется вместе с флагом.
 /// </param>
+/// <param name="Category">Категория услуг направления.</param>
 public record AdminSpecializationResponse(
     Guid Id,
     string Name,
     string? Description,
     bool IsActive,
-    int UsageCount);
+    int UsageCount,
+    ServiceCategory Category = ServiceCategory.Other);

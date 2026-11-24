@@ -370,7 +370,25 @@ describe('подписи и константы контракта', () => {
       price: 'Цена',
       durationMinutes: 'Длительность, мин',
       hairServiceId: 'Услуга каталога',
+      specializationId: 'Специализация',
     })
+  })
+
+  it('категория специализации рендерится общей подписью категории', () => {
+    // Поле `category` одно у услуги и у специализации: подпись не зависит от типа.
+    expect(formatAuditValue('category', 'Haircut', 'specialization')).toBe(
+      'Стрижка'
+    )
+    expect(formatAuditValue('category', 'Beard', 'hair_service')).toBe('Борода')
+    expect(formatAuditValue('category', 'Massage', 'specialization')).toBe(
+      'Massage'
+    )
+  })
+
+  it('идентификатор специализации остаётся строкой сервера', () => {
+    const id = '44444444-4444-4444-8444-444444444444'
+
+    expect(formatAuditValue('specializationId', id, 'hair_service')).toBe(id)
   })
 
   it('displayName не подписан: сервер его не присылает (#96 D4)', () => {

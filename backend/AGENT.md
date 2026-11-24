@@ -4,11 +4,11 @@
 > Code state: **15 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **697 domain + 1196 application + 460 infrastructure** unit tests, all green locally
-> (2026-11-21); the integration project compiles, and the push-focused subset (30 tests) is green
-> on a local PostgreSQL 16 via `BARBERSEARCH_TEST_POSTGRES`; the four new `PushStaffCustomerTests`
-> are green 4/4 (run with the xunit console runner — the VSTest testhost cannot open its parent
-> process handle in this sandbox); the full integration suite was not run in this session.
+> Tests: **716 domain + 1204 application + 462 infrastructure** unit tests, all green locally
+> (2026-11-24); the whole integration project **366 tests** is green on a local PostgreSQL 16
+> via `BARBERSEARCH_TEST_POSTGRES` (the VSTest testhost cannot open its parent process handle
+> in this sandbox, so `dotnet test` runs with `-p:BaseOutputPath=<temp>`, §5.2).
+> `dotnet ef migrations has-pending-model-changes` reports no pending changes.
 
 ---
 
@@ -141,7 +141,7 @@ backend/                                  ← workspace root
         │
         ├── BarberSearch.Infrastructure.Postgresql/   ← Npgsql provider, DbContext, configs, repositories
         │   ├── Configurations/           ← 27 × IEntityTypeConfiguration<T>
-        │   ├── Migrations/               ← 37 migrations + ApplicationDbContextModelSnapshot
+        │   ├── Migrations/               ← 44 migrations + ApplicationDbContextModelSnapshot
         │   ├── Repositories/             ← RepositoryBase<T> + 22 repository implementations
         │   ├── ApplicationDbContext.cs   ← 27 DbSet + ApplyConfigurationsFromAssembly + extensions
         │   ├── DependencyInjection.cs    ← AddPostgresInfrastructure / AddRepositories
@@ -576,9 +576,9 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-13 (срез цены визита): domain **606**, application
-**965**, infrastructure **365**, integration **325** — всего **2261**, все зелёные на
-локальной PostgreSQL.
+Актуальный baseline на 2026-11-24 (срез «категория → специализация»): domain **716**,
+application **1204**, infrastructure **462**, integration **366** — всего **2748**, все зелёные
+на локальной PostgreSQL.
 История прогонов по срезам и
 негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
 
@@ -663,8 +663,9 @@ BarberProfile (AR)   ← owns everything below
  └─ * BarberSpecialization ─► SpecializationId
 
 Salon (AR)                   — standalone, no child collection
-HairService (AR)             — standalone, no child collection
-Specialization (AR)          — standalone, no child collection
+HairService (AR) ──► SpecializationId  — standalone, no child collection; belongs to one
+                               Specialization (plain Id, FK Restrict), its category comes from it
+Specialization (AR)          — standalone, no child collection; exactly one ServiceCategory
 EmailVerificationToken (AR)  — standalone one-time email confirmation token
 PasswordResetToken (AR)      — standalone one-time password-reset token (§17.12)
 EmailOutboxMessage (Entity)  — строка transactional outbox писем (§19); не агрегат:
@@ -735,8 +736,8 @@ parent id themselves — so "attach someone else's child" is not expressible:
 | `EmailVerificationToken` | `Create`: non-empty user id, 64-char lower-hex hash, non-default `issuedAt`/`now`, `issuedAt <= now`, `expiresAt > issuedAt`; `IsActive` is strict (`now < ExpiresAt`) and false after consume/revoke; `Consume` is idempotent for a used token, rejects a revoked one (`emailVerificationToken.consume.invalid`) and an expired one (`emailVerificationToken.consume.expired`); `Revoke` is idempotent and revokes an expired-but-live row |
 | `PasswordResetToken` | `Create`: non-empty user id, 64-char lower-hex hash, non-default `issuedAt`/`now`, `issuedAt <= now`, `expiresAt > issuedAt`; `IsActive` is strict (`now < ExpiresAt`) and false after consume/revoke; `Consume` is idempotent for a used token, rejects a revoked one (`passwordResetToken.consume.invalid`) and an expired one (`passwordResetToken.consume.expired`); `Revoke` is idempotent and revokes an expired-but-live row |
 | `Salon` | non-empty name/address/city/country; `TimeZoneId` resolves via `TimeZoneInfo` (Windows IDs are normalized to IANA, `salon.timeZoneId.unknown` otherwise); latitude `[-90, 90]`, longitude `[-180, 180]`; `WebsiteUrl` — absolute `http`/`https` URI, no `userinfo`, trimmed, ≤ 2048 (optional); `PhoneNumber` — optional Russian mobile number via the shared `PhoneNumber` value object, stored canonically as `+7XXXXXXXXXX` (`salon.phoneNumber` on an invalid value; `null`/blank clears it); `OwnerUserId` is set only by `SubmitByOwner` and never changes (no setter); `ModerationStatus` moves only `Pending → Active | Rejected` (`salon.review.invalidStatus` on a repeated decision); `RejectionReason` is trimmed and 1..500 chars only in `Rejected` (`salon.reject.reasonRequired`, `salon.reject.reasonTooLong`); `Activate` requires `ModerationStatus == Active` (`salon.activation.notApproved`); `Kind` is a defined `PlaceKind` value (`salon.kind.unknown` otherwise); `IsListed` is set only by the two factories, is always `true` for `Salon`/`RentalStudio` and may be `false` only for `SoloStudio`/`Home`/`Mobile` (`salon.isListed.kind` otherwise); `SubmitByOwner(isListed: false)` creates an `Active`/`IsActive` place with no `ReviewedAt`/`ReviewedByUserId` — an unlisted place is not moderated |
-| `HairService` | non-empty name, known category, duration `1..1440` |
-| `Specialization` | non-empty name |
+| `HairService` | non-empty name, non-empty `SpecializationId` (`hairService.specializationId`), duration `1..1440`; there is no `Category` on the service — it comes from the specialization (the row of `specializations` must exist, `404 hairService.specialization.notFound`) |
+| `Specialization` | non-empty name, known `Category` (`specialization.category`; `ChangeCategory` is allowed at any time and marks the aggregate updated) |
 | `Review` | `Rating` `1..5`, text ≤ 2000 chars, `BookingId` always set |
 | `WorkingSchedule` | `EndTime > StartTime` on a working day; unique `DayOfWeek` per salon; a day off has `TimeOnly.MinValue` |
 | `ScheduleOverride` | one per `(salon, date)`; `EndTime > StartTime` on a working day; a day off has `TimeOnly.MinValue`; reason ≤ 500 chars |
@@ -867,7 +868,10 @@ All persisted enums have **explicit numeric values** (§10.10).
 - `BookingStatus`: `Pending=1, Confirmed=2, Cancelled=3, Completed=4, NoShow=5` — all reachable:
   `Confirm` (Pending→Confirmed), `Complete` (Confirmed→Completed), `Cancel`
   (Pending|Confirmed→Cancelled), `MarkNoShow` (Confirmed→NoShow).
-- `ServiceCategory`: `Haircut=1, Beard=2, Coloring=3, Styling=4, HairTreatment=5, Other=99`.
+- `ServiceCategory`: `Haircut=1, Beard=2, Coloring=3, Styling=4, HairTreatment=5, Other=99` — the
+  category of a **Specialization** (`specializations.category`, check constraint). A Hair Service
+  has no category of its own: it belongs to one Specialization and its category is that
+  specialization's category, so moving the specialization moves the category of all its services.
 - `Grade`: `None=0, Intern=1 … BarbershopOwner=10`. The barber picks one of the assigned grades
   when the profile is created (`POST api/barber-profiles`, `grade` optional and defaulting to
   `None` for old clients); the administrator can change it later.
@@ -2012,8 +2016,11 @@ is served by the existing `ix_barber_services_hair_service_id_barber_profile_id`
 indexes from the table above — no migration and no new index. The dictionary search is a plain
 `ILIKE` without a trigram index on purpose: a dictionary is dozens of rows, a sequential scan is
 cheaper than maintaining an index, and the order (`category, name, id` / `name, id` /
-`city, name, id`) is a sort over the same small set. Add an index only with
-`EXPLAIN (ANALYZE, BUFFERS)` evidence.
+`city, name, id`) is a sort over the same small set. The hair-service search additionally
+matches the specialization name through a join on `specializations` (there is no separate
+specialization filter), and `ix_hair_services_specialization_id` serves that join and the
+`category` projection; the specialization search itself still scans the small dictionary.
+Add an index only with `EXPLAIN (ANALYZE, BUFFERS)` evidence.
 
 **Admin audit keyset (2026-11-02, issue-38).** The administrator's journal reads `audit_log`
 ordered `occurred_at DESC, id` with keyset paging. `EXPLAIN (ANALYZE, BUFFERS)` on 120 000 rows
@@ -2446,8 +2453,9 @@ not by a query plan. Details, plans and the same-key SQL check: `LOADTEST.md`.
   `reviewedAt`/`reviewedByUserId` и `thumbnailUrl`: это свободный текст администратора, дубли
   `occurred_at`/`actor_user_id` и производная файла. `review` — публикация, рейтинг и текст;
   `salon` — имя (только в `values` создания: переименования салона в API нет), адрес, город,
-  пояс, координаты, контакты и `isActive`; `hair_service` — имя, описание, категория,
-  длительность и `isActive`; `specialization` — имя, описание и `isActive`; `booking` —
+  пояс, координаты, контакты и `isActive`; `hair_service` — имя, описание, `specializationId`,
+  длительность и `isActive` (своего `category` у услуги нет — смена специализации видна как
+  `changes.specializationId`); `specialization` — имя, описание, `category` и `isActive`; `booking` —
   `Status`, `BarberNote`, `CancellationReason`, `StartAt`/`EndAt` (перенос, #95) и `Price` (правка
   суммы, #97)
   (`Confirm`/`Cancel`/`Complete`/`MarkNoShow`/`AddBarberNote`/`Reschedule`/`ChangePrice`).
@@ -2940,13 +2948,18 @@ Read endpoints (added 2026-10-19):
   reads (`GET api/hair-services`, `GET api/specializations`) only expose active rows and salons had
   no read at all, so an administrator could not find a row to edit or switch back on. `status` is
   `all` (default), `active` or `hidden` — `all` by default is the point of the screen, not a
-  convenience; `search` is `ILIKE` over the name (salons — name and city) with `%`, `_` and `\`
-  escaped, trimmed, and capped at 100 characters. `AdminHairServiceResponse`,
-  `AdminSpecializationResponse` and `AdminSalonResponse` carry every edit field plus `isActive` and
-  `usageCount` — the number of **active and verified** barber profiles using the row
-  (`DISTINCT barber_profile_id` over `barber_services`/`barber_specializations`/`barber_salons`,
-  and for a service only links with `barber_services.is_active`). Orders are `category, name, id`,
-  `name, id` and `city, name, id`. Responses are bare arrays (`IReadOnlyList<T>`): dictionaries are
+  convenience; `search` is `ILIKE` over the name (salons — name and city; hair services — the
+  name of the service **and** the name of its specialization, since there is no separate
+  specialization select) with `%`, `_` and `\` escaped, trimmed, and capped at 100 characters.
+  `AdminHairServiceResponse`, `AdminSpecializationResponse` and `AdminSalonResponse` carry every
+  edit field plus `isActive` and `usageCount` — the number of **active and verified** barber
+  profiles using the row (`DISTINCT barber_profile_id` over
+  `barber_services`/`barber_specializations`/`barber_salons`, and for a service only links with
+  `barber_services.is_active`). A service row also carries `specializationId` and
+  `specializationName`; its `category` is the category of that specialization, and a
+  specialization row carries its own `category`. The new response fields are appended with
+  defaults. Orders are `category, name, id` (category — of the specialization), `name, id` and
+  `city, name, id`. Responses are bare arrays (`IReadOnlyList<T>`): dictionaries are
   dozens of rows, and the row just created must be visible immediately, so there is no `cursor` or
   `pageSize` (an explicit exception to the pager rule, recorded in `frontend/README.md`); when a
   dictionary grows, paging it is a separate decision with a text keyset. Unknown `status` is
@@ -3189,14 +3202,24 @@ Read endpoints (added 2026-10-19):
   different barbers, the order is by value and `Take(100)` caps the hint list. The predicate is
   the search visibility (`is_active AND is_verified`), so a suggestion is always present in some
   result. It is a hint for a free-text field, not a dictionary: the filter accepts any substring.
-- **Public catalogues (2026-10-31, issue-29).** `GET api/specializations` and
-  `GET api/hair-services` are anonymous, `reads`-limited lists of active rows — a bare JSON array
-  without pagination (`200 []` for an empty catalogue), ordered by name and by category+name
-  respectively. Contracts: `SpecializationResponse(Id, Name, Description)` and
-  `HairServiceResponse(Id, Name, Category, DefaultDurationMinutes, Description)`; the handlers
-  read through `GetActiveAsync` and map, no repository filtering in the controller. The admin
-  write actions keep the class-level `[Authorize(AdminOnly)]`; `[AllowAnonymous]` on the action
-  overrides it. There is still no read by id.
+- **Public catalogues (2026-10-31, issue-29; specialization link 2026-11-24).**
+  `GET api/specializations` and `GET api/hair-services` are anonymous, `reads`-limited lists of
+  active rows — a bare JSON array without pagination (`200 []` for an empty catalogue), ordered
+  by name and by category+name respectively. Contracts:
+  `SpecializationResponse(Id, Name, Description, Category = Other)` and
+  `HairServiceResponse(Id, Name, Category, DefaultDurationMinutes, Description,
+  SpecializationId = default)`; the new positional parameters are appended **with defaults** so
+  the mobile tests that construct the responses positionally keep compiling. A Hair Service has
+  no category column: `Category` and `SpecializationId` come from the join with
+  `specializations`, and the same join drives the `category+name` order and the
+  `GetByCategoryAsync`/`GetPagedAsync` filters. The handlers read through `GetActiveAsync`
+  (returning `HairServiceCatalogRow(HairService, Category)`) and map, no filtering in the
+  controller. The admin write actions keep the class-level `[Authorize(AdminOnly)]`;
+  `[AllowAnonymous]` on the action overrides it. There is still no read by id.
+  `POST`/`PUT api/hair-services` accept `specializationId` (no `category`); an empty id is
+  `400 hairService.specializationId`, an unknown one `404 hairService.specialization.notFound`.
+  `POST`/`PUT api/specializations` accept `category` (`400 specialization.category` when it is
+  not a `ServiceCategory` value); renaming and the category change are one save.
 - **Salon directory and «My salons» (2026-11-06, issue-47).** `GET api/salons?city=&search=` is the
   anonymous `reads`-limited selection catalogue for the barber cabinet: a bare
   `SalonDirectoryItemResponse[]` (`id`, `name`, `city`, `address`, `timeZoneId`, `kind`) without

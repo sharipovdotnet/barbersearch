@@ -4,13 +4,17 @@ import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/lib/api'
 import {
   approveSalon,
+  createHairService,
   createSalon,
+  createSpecialization,
   describeAdminCatalogueError,
   describeSalonModerationError,
   fetchAdminHairServices,
   fetchAdminSalons,
   rejectSalon,
+  renameSpecialization,
   setHairServiceActive,
+  updateHairService,
 } from '@/lib/admin-catalogue'
 import { problemDetails } from '@/test/msw/handlers'
 import { countRequests } from '@/test/msw/requests'
@@ -102,6 +106,8 @@ describe('fetchAdminHairServices', () => {
             description: null,
             isActive: true,
             usageCount: 3,
+            specializationId: '33333333-3333-4333-8333-333333333333',
+            specializationName: 'Барберинг',
             internalNote: 'лишнее',
           },
         ])
@@ -113,6 +119,109 @@ describe('fetchAdminHairServices', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0].name).toBe('Фейд')
     expect(rows[0].usageCount).toBe(3)
+  })
+})
+
+describe('мутации услуг и специализаций', () => {
+  const SPECIALIZATION_ID = '44444444-4444-4444-8444-444444444444'
+
+  /** Перехватывает мутацию и складывает тело запроса. */
+  function captureBody(path: string, status = 204): unknown[] {
+    const bodies: unknown[] = []
+
+    server.use(
+      http.post(path, async ({ request }) => {
+        bodies.push(await request.json())
+
+        return status === 201
+          ? HttpResponse.json({ id: 'created-id' }, { status: 201 })
+          : new HttpResponse(null, { status })
+      }),
+      http.put(path, async ({ request }) => {
+        bodies.push(await request.json())
+
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+
+    return bodies
+  }
+
+  it('создание услуги отправляет specializationId и не отправляет category', async () => {
+    const bodies = captureBody('/api/hair-services', 201)
+
+    await expect(
+      createHairService({
+        name: 'Фейд',
+        specializationId: SPECIALIZATION_ID,
+        defaultDurationMinutes: 45,
+        description: null,
+      })
+    ).resolves.toStrictEqual({ id: 'created-id' })
+
+    expect(bodies).toStrictEqual([
+      {
+        name: 'Фейд',
+        specializationId: SPECIALIZATION_ID,
+        defaultDurationMinutes: 45,
+        description: null,
+      },
+    ])
+    expect(bodies[0]).not.toHaveProperty('category')
+  })
+
+  it('правка услуги передаёт новую специализацию', async () => {
+    const url = '/api/hair-services/55555555-5555-4555-8555-555555555555'
+    const bodies = captureBody(url)
+
+    await updateHairService('55555555-5555-4555-8555-555555555555', {
+      name: 'Фейд',
+      description: 'Короткая стрижка',
+      defaultDurationMinutes: 60,
+      specializationId: SPECIALIZATION_ID,
+    })
+
+    expect(bodies).toStrictEqual([
+      {
+        name: 'Фейд',
+        description: 'Короткая стрижка',
+        defaultDurationMinutes: 60,
+        specializationId: SPECIALIZATION_ID,
+      },
+    ])
+    expect(bodies[0]).not.toHaveProperty('category')
+  })
+
+  it('создание специализации отправляет обязательную категорию', async () => {
+    const bodies = captureBody('/api/specializations', 201)
+
+    await expect(
+      createSpecialization({
+        name: 'Массаж',
+        category: 'Other',
+        description: null,
+      })
+    ).resolves.toStrictEqual({ id: 'created-id' })
+
+    expect(bodies).toStrictEqual([
+      { name: 'Массаж', category: 'Other', description: null },
+    ])
+  })
+
+  it('правка специализации меняет категорию вместе с названием', async () => {
+    const url =
+      '/api/specializations/66666666-6666-4666-8666-666666666666'
+    const bodies = captureBody(url)
+
+    await renameSpecialization('66666666-6666-4666-8666-666666666666', {
+      name: 'Оформление бороды',
+      category: 'Beard',
+      description: null,
+    })
+
+    expect(bodies).toStrictEqual([
+      { name: 'Оформление бороды', category: 'Beard', description: null },
+    ])
   })
 })
 
@@ -350,6 +459,39 @@ describe('describeAdminCatalogueError', () => {
 
     expect(describeAdminCatalogueError(error, 'Не удалось.')).toBe(
       'Неизвестный часовой пояс. Выберите зону из списка.'
+    )
+  })
+
+  it('объясняет пустую или исчезнувшую специализацию услуги', () => {
+    const empty = new ApiError(
+      400,
+      problemDetails(400, { errorCodes: ['hairService.specializationId'] }),
+      'Invalid.'
+    )
+    const missing = new ApiError(
+      404,
+      problemDetails(404, { errorCodes: ['hairService.specialization.notFound'] }),
+      'Not found.'
+    )
+
+    expect(describeAdminCatalogueError(empty, 'Не удалось.')).toBe(
+      'Выберите специализацию для услуги.'
+    )
+    // Код важнее общего 404: текст говорит, что именно исчезло.
+    expect(describeAdminCatalogueError(missing, 'Не удалось.')).toBe(
+      'Специализация не найдена — обновите список.'
+    )
+  })
+
+  it('объясняет неизвестную категорию специализации', () => {
+    const error = new ApiError(
+      400,
+      problemDetails(400, { errorCodes: ['specialization.category'] }),
+      'Invalid.'
+    )
+
+    expect(describeAdminCatalogueError(error, 'Не удалось.')).toBe(
+      'Неизвестная категория. Выберите категорию из списка.'
     )
   })
 

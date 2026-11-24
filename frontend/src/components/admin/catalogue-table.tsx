@@ -68,9 +68,18 @@ export function HairServiceTable({
       columns={[
         { id: 'name', label: t('Название'), render: (row) => row.name },
         {
-          id: 'category',
-          label: t('Категория'),
-          render: (row) => t(SERVICE_CATEGORY_LABELS[row.category]),
+          id: 'specialization',
+          label: t('Специализация'),
+          // Категория услуги производная: отдельной колонки нет, но вторая строка
+          // строки показывает, к какому фильтру витрины услуга относится.
+          render: (row) => (
+            <span className="block">
+              {row.specializationName}
+              <span className="mt-1 block text-xs text-muted-foreground">
+                {t(SERVICE_CATEGORY_LABELS[row.category])}
+              </span>
+            </span>
+          ),
         },
         {
           id: 'duration',
@@ -95,6 +104,11 @@ export function SpecializationTable({
       tab="specializations"
       columns={[
         { id: 'name', label: t('Название'), render: (row) => row.name },
+        {
+          id: 'category',
+          label: t('Категория'),
+          render: (row) => t(SERVICE_CATEGORY_LABELS[row.category]),
+        },
         {
           id: 'description',
           label: t('Описание'),

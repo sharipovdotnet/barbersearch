@@ -19,7 +19,7 @@ import { SpecializationDialog } from '@/components/admin/specialization-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useAdminCatalogueList } from '@/hooks/use-admin-catalogue'
+import { useAdminCatalogueList, useAdminSpecializationOptions } from '@/hooks/use-admin-catalogue'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 import { useI18n } from '@/i18n'
 import {
@@ -105,6 +105,12 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
     status: statusFilter,
     search,
   })
+
+  // Справочник специализаций нужен только диалогу услуги: грузим его при открытии,
+  // а не на монтировании вкладки, чтобы не делать лишний запрос.
+  const specializationOptions = useAdminSpecializationOptions(
+    tab === 'services' && (createOpen || editId !== null)
+  )
 
   // Справочник не опрашиваем по таймеру: он меняется редко. Но при возврате
   // на вкладку перечитываем — новый салон на проверке мог появиться, пока
@@ -508,6 +514,10 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
         <HairServiceDialog
           mode="create"
           service={null}
+          specializations={specializationOptions.options}
+          specializationsStatus={specializationOptions.status}
+          specializationsError={specializationOptions.error}
+          onReloadSpecializations={specializationOptions.reload}
           onClose={() => {
             setCreateOpen(false)
             focusRowAction(null)
@@ -545,6 +555,10 @@ export function CatalogueScreen({ tab }: { tab: CatalogueTab }) {
         <HairServiceDialog
           mode="edit"
           service={editingService}
+          specializations={specializationOptions.options}
+          specializationsStatus={specializationOptions.status}
+          specializationsError={specializationOptions.error}
+          onReloadSpecializations={specializationOptions.reload}
           onClose={() => {
             const rowId = editingService.id
             setEditId(null)

@@ -92,6 +92,7 @@ export const catalogueHairService = {
   id: '99999999-9999-4999-8999-999999999999',
   name: 'Стрижка',
   category: 'Haircut',
+  specializationId: '77777777-7777-4777-8777-777777777777',
   defaultDurationMinutes: 45,
 } as const
 
@@ -100,6 +101,40 @@ export const catalogueSpecialization = {
   id: '77777777-7777-4777-8777-777777777777',
   name: 'Барберинг',
   description: null,
+  category: 'Haircut',
+} as const
+
+/** Строка админского справочника услуг: категория производная, ссылка обязательна. */
+export const adminCatalogueHairService = {
+  id: '9a000000-0000-4000-8000-000000000001',
+  name: 'Фейд',
+  category: 'Haircut',
+  defaultDurationMinutes: 45,
+  description: null,
+  isActive: true,
+  usageCount: 2,
+  specializationId: '9a000000-0000-4000-8000-000000000101',
+  specializationName: 'Барберинг',
+} as const
+
+/** Активная строка админского справочника специализаций. */
+export const adminCatalogueSpecialization = {
+  id: '9a000000-0000-4000-8000-000000000101',
+  name: 'Барберинг',
+  description: 'Мужские стрижки и борода.',
+  isActive: true,
+  usageCount: 2,
+  category: 'Haircut',
+} as const
+
+/** Выключенная строка: остаётся в селекте диалога услуги с пометкой. */
+export const adminDisabledSpecialization = {
+  id: '9a000000-0000-4000-8000-000000000102',
+  name: 'Оформление бороды',
+  description: null,
+  isActive: false,
+  usageCount: 1,
+  category: 'Beard',
 } as const
 
 /** ProblemDetails, который проходит строгий гард `isProblemDetails` из `lib/api.ts`. */
@@ -235,6 +270,17 @@ export const handlers = [
   ),
   http.get('/api/specializations', () =>
     HttpResponse.json([catalogueSpecialization])
+  ),
+  // Админский каталог: вкладка услуг и справочник специализаций для диалога.
+  // Пустые и ошибочные ответы собираются в тестах через `server.use`.
+  http.get('/api/admin/catalogue/hair-services', () =>
+    HttpResponse.json([adminCatalogueHairService])
+  ),
+  http.get('/api/admin/catalogue/specializations', () =>
+    HttpResponse.json([
+      adminCatalogueSpecialization,
+      adminDisabledSpecialization,
+    ])
   ),
   // Подсказки города и адреса дергает любая форма салона, как только в поле
   // появляется минимальная строка. По умолчанию провайдер «ничего не нашёл»:

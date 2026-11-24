@@ -32,11 +32,13 @@ public class CatalogReadHandlerTests
             {
                 Assert.Equal("Alpha", row.Name);
                 Assert.Equal("First", row.Description);
+                Assert.Equal(ServiceCategory.Haircut, row.Category);
             },
             row =>
             {
                 Assert.Equal("Zeta", row.Name);
                 Assert.Null(row.Description);
+                Assert.Equal(ServiceCategory.Haircut, row.Category);
             });
     }
 
@@ -61,8 +63,14 @@ public class CatalogReadHandlerTests
     public async Task GetHairServices_MapsRowsInRepositoryOrder()
     {
         var repository = new FakeHairServiceRepository();
-        repository.AddActive(CreateHairService("Fade", ServiceCategory.Haircut, 60, "A fade"));
-        repository.AddActive(CreateHairService("Beard Trim", ServiceCategory.Beard, 30, null));
+        var haircutSpecializationId = Guid.CreateVersion7();
+        var beardSpecializationId = Guid.CreateVersion7();
+        repository.AddActive(
+            CreateHairService("Fade", haircutSpecializationId, 60, "A fade"),
+            ServiceCategory.Haircut);
+        repository.AddActive(
+            CreateHairService("Beard Trim", beardSpecializationId, 30, null),
+            ServiceCategory.Beard);
         var handler = new GetHairServicesHandler(repository);
 
         var result = await handler.Handle(
@@ -75,7 +83,9 @@ public class CatalogReadHandlerTests
             row =>
             {
                 Assert.Equal("Fade", row.Name);
+                // Категория приходит из специализации услуги, а не из самой услуги.
                 Assert.Equal(ServiceCategory.Haircut, row.Category);
+                Assert.Equal(haircutSpecializationId, row.SpecializationId);
                 Assert.Equal(60, row.DefaultDurationMinutes);
                 Assert.Equal("A fade", row.Description);
             },
@@ -83,6 +93,7 @@ public class CatalogReadHandlerTests
             {
                 Assert.Equal("Beard Trim", row.Name);
                 Assert.Equal(ServiceCategory.Beard, row.Category);
+                Assert.Equal(beardSpecializationId, row.SpecializationId);
                 Assert.Equal(30, row.DefaultDurationMinutes);
                 Assert.Null(row.Description);
             });
@@ -107,7 +118,7 @@ public class CatalogReadHandlerTests
 
     private static Specialization CreateSpecialization(string name, string? description)
     {
-        var created = Specialization.Create(name, description);
+        var created = Specialization.Create(name, ServiceCategory.Haircut, description);
         Assert.True(created.IsSuccess);
 
         return created.Value;
@@ -115,11 +126,11 @@ public class CatalogReadHandlerTests
 
     private static HairService CreateHairService(
         string name,
-        ServiceCategory category,
+        Guid specializationId,
         int defaultDurationMinutes,
         string? description)
     {
-        var created = HairService.Create(name, category, defaultDurationMinutes, description);
+        var created = HairService.Create(name, specializationId, defaultDurationMinutes, description);
         Assert.True(created.IsSuccess);
 
         return created.Value;

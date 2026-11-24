@@ -568,12 +568,14 @@ public class AuditTrailTests
     {
         using var context = CreateContext();
         var audit = CreateAudit();
+        var specializationId = Guid.CreateVersion7();
         var hairService = TrackUnchanged(
             context,
-            HairService.Create("Classic Cut", ServiceCategory.Haircut, 30, "Short").Value,
+            HairService.Create("Classic Cut", specializationId, 30, "Short").Value,
             context.HairServices);
 
-        Assert.True(hairService.Update("Premium Cut", "Short", 45).IsSuccess);
+        Assert.True(
+            hairService.Update("Premium Cut", "Short", 45, specializationId).IsSuccess);
 
         audit.Capture(context);
 
@@ -598,9 +600,44 @@ public class AuditTrailTests
             45,
             changes.GetProperty("defaultDurationMinutes").GetProperty("to").GetInt32());
 
-        // Update не меняет категорию: она задаётся только при создании и живёт в values.
+        // Специализация не менялась: своего поля категории у услуги больше нет,
+        // а specializationId остаётся тем же — в diff он не попадает.
+        Assert.False(changes.TryGetProperty("specializationId", out _));
         Assert.False(changes.TryGetProperty("category", out _));
         Assert.False(changes.TryGetProperty("description", out _));
+    }
+
+    [Fact]
+    public void Capture_WhenHairServiceSpecializationChanged_WritesSpecializationId()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var oldSpecializationId = Guid.CreateVersion7();
+        var newSpecializationId = Guid.CreateVersion7();
+        var hairService = TrackUnchanged(
+            context,
+            HairService.Create("Classic Cut", oldSpecializationId, 30, "Short").Value,
+            context.HairServices);
+
+        Assert.True(
+            hairService.Update("Classic Cut", "Short", 30, newSpecializationId).IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+        Assert.Equal("hair_service.updated", row.Action);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var change = payload.RootElement
+            .GetProperty("changes")
+            .GetProperty("specializationId");
+
+        Assert.Equal(
+            oldSpecializationId.ToString(),
+            change.GetProperty("from").GetString());
+        Assert.Equal(
+            newSpecializationId.ToString(),
+            change.GetProperty("to").GetString());
     }
 
     [Fact]
@@ -610,7 +647,7 @@ public class AuditTrailTests
         var audit = CreateAudit();
         var specialization = TrackUnchanged(
             context,
-            Specialization.Create("Fade", "Short fade").Value,
+            Specialization.Create("Fade", ServiceCategory.Haircut, "Short fade").Value,
             context.Specializations);
 
         Assert.True(specialization.Rename("Skin Fade", "Short fade").IsSuccess);
@@ -628,8 +665,32 @@ public class AuditTrailTests
         Assert.Equal("Fade", changes.GetProperty("name").GetProperty("from").GetString());
         Assert.Equal("Skin Fade", changes.GetProperty("name").GetProperty("to").GetString());
 
-        // Описание не менялось — в diff его нет.
+        // Описание и категория не менялись — в diff их нет.
         Assert.Single(changes.EnumerateObject());
+    }
+
+    [Fact]
+    public void Capture_WhenSpecializationCategoryChanged_WritesCategory()
+    {
+        using var context = CreateContext();
+        var audit = CreateAudit();
+        var specialization = TrackUnchanged(
+            context,
+            Specialization.Create("Fade", ServiceCategory.Haircut, "Short fade").Value,
+            context.Specializations);
+
+        Assert.True(specialization.ChangeCategory(ServiceCategory.Beard).IsSuccess);
+
+        audit.Capture(context);
+
+        var row = Assert.Single(context.AuditLogs.Local);
+        Assert.Equal("specialization.updated", row.Action);
+
+        using var payload = JsonDocument.Parse(row.Payload);
+        var change = payload.RootElement.GetProperty("changes").GetProperty("category");
+
+        Assert.Equal("Haircut", change.GetProperty("from").GetString());
+        Assert.Equal("Beard", change.GetProperty("to").GetString());
     }
 
     [Fact]

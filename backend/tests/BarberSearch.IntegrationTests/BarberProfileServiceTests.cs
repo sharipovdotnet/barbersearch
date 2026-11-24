@@ -9,6 +9,7 @@ using BarberSearch.Contracts.Bookings.Admin;
 using BarberSearch.Contracts.Bookings.Barber;
 using BarberSearch.Contracts.Bookings.CreateBarberBooking;
 using BarberSearch.Contracts.Common;
+using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.Users;
 using BarberSearch.Infrastructure.Postgresql;
 using CSharpFunctionalExtensions;
@@ -184,6 +185,9 @@ public sealed class BarberProfileServiceTests
             var service = Assert.Single(card.Services);
             Assert.Equal(2500m, service.Price);
             Assert.Equal(75, service.DurationMinutes);
+            // Категория в карточке выводится из категории специализации услуги (join),
+            // а не хранится у услуги.
+            Assert.Equal(ServiceCategory.Haircut, service.Category);
         }
 
         using (var unknown = await app.Client.PutAsJsonAsync(

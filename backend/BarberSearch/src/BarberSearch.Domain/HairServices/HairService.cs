@@ -8,12 +8,23 @@ namespace BarberSearch.Domain.HairServices;
 /// Услуга из каталога — агрегатный корень. Цены и длительности конкретных барберов
 /// живут в агрегате <c>BarberProfile</c> (сущность <c>BarberService</c>).
 /// </summary>
+/// <remarks>
+/// Услуга принадлежит ровно одной специализации. Категории у услуги нет: категория —
+/// свойство специализации, и витрина получает её через join, поэтому две одинаковые
+/// категории в двух местах не расходятся. Ссылка на агрегат <c>Specialization</c> —
+/// граница другого агрегата: навигации нет, только идентификатор, а существование
+/// строки проверяет Application до вставки.
+/// </remarks>
 public class HairService : AggregateRoot
 {
     public string Name { get; private set; } = null!;
     public string? Description { get; private set; }
 
-    public ServiceCategory Category { get; private set; }
+    /// <summary>
+    /// Специализация, к которой относится услуга. Обязательна: категория услуги
+    /// вычисляется из категории специализации.
+    /// </summary>
+    public Guid SpecializationId { get; private set; }
 
     public int DefaultDurationMinutes { get; private set; }
 
@@ -25,13 +36,13 @@ public class HairService : AggregateRoot
 
     public static Result<HairService, Failure> Create(
         string name,
-        ServiceCategory category,
+        Guid specializationId,
         int defaultDurationMinutes,
         string? description = null)
     {
         var errors = DomainErrors.Collect();
 
-        Validate(name, category, defaultDurationMinutes, errors);
+        Validate(name, specializationId, defaultDurationMinutes, errors);
 
         if (errors.Count != 0)
         {
@@ -41,21 +52,29 @@ public class HairService : AggregateRoot
         return new HairService
         {
             Name = name,
-            Category = category,
+            SpecializationId = specializationId,
             DefaultDurationMinutes = defaultDurationMinutes,
             Description = description,
             IsActive = true
         };
     }
 
+    /// <summary>
+    /// Меняет название, описание, длительность и специализацию услуги.
+    /// </summary>
+    /// <remarks>
+    /// Смена специализации разрешена всегда: категория услуги — это категория её
+    /// специализации, отдельного запрета на перевод нет.
+    /// </remarks>
     public UnitResult<Failure> Update(
         string name,
         string? description,
-        int defaultDurationMinutes)
+        int defaultDurationMinutes,
+        Guid specializationId)
     {
         var errors = DomainErrors.Collect();
 
-        Validate(name, Category, defaultDurationMinutes, errors);
+        Validate(name, specializationId, defaultDurationMinutes, errors);
 
         if (errors.Count != 0)
         {
@@ -65,6 +84,7 @@ public class HairService : AggregateRoot
         Name = name;
         Description = description;
         DefaultDurationMinutes = defaultDurationMinutes;
+        SpecializationId = specializationId;
 
         MarkUpdated();
 
@@ -99,7 +119,7 @@ public class HairService : AggregateRoot
 
     private static void Validate(
         string? name,
-        ServiceCategory category,
+        Guid specializationId,
         int defaultDurationMinutes,
         List<Error> errors)
     {
@@ -111,12 +131,12 @@ public class HairService : AggregateRoot
                 nameof(name)));
         }
 
-        if (!Enum.IsDefined(category))
+        if (specializationId == Guid.Empty)
         {
             errors.Add(Error.Validation(
-                "hairService.category",
-                DomainMessages.UnknownServiceCategory(category),
-                nameof(category)));
+                "hairService.specializationId",
+                DomainMessages.HAIR_SERVICE_SPECIALIZATION_REQUIRED,
+                nameof(specializationId)));
         }
 
         if (defaultDurationMinutes < Constants.MIN_DURATION_MINUTES ||

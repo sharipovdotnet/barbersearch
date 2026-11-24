@@ -22,9 +22,11 @@ namespace BarberSearch.Web.Controllers;
 /// </summary>
 /// <remarks>
 /// Цена и длительность конкретного барбера живут в профиле барбера, а не здесь:
-/// каталог хранит только длительность по умолчанию. Каталог — админский справочник:
-/// создание, правка и активация доступны только администратору. Публичное чтение
-/// одно — список активных строк для фильтра витрины (анонимно, без пагинации).
+/// каталог хранит только длительность по умолчанию. Услуга принадлежит специализации,
+/// и её категория в ответах — категория этой специализации; отдельного поля у услуги нет.
+/// Каталог — админский справочник: создание, правка и активация доступны только
+/// администратору. Публичное чтение одно — список активных строк для фильтра витрины
+/// (анонимно, без пагинации).
 /// </remarks>
 [ApiController]
 [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
@@ -62,13 +64,14 @@ public class HairServicesController : ApiController
         => ToCreatedResult(await handler.Handle(
             new CreateHairServiceCommand(
                 request.Name,
-                request.Category,
+                request.SpecializationId,
                 request.DefaultDurationMinutes,
                 request.Description),
             cancellationToken));
 
     /// <summary>
-    /// Меняет услугу каталога. Категория не меняется — это правило Application.
+    /// Меняет услугу каталога. Специализацию можно менять: категория услуги —
+    /// это категория её специализации.
     /// </summary>
     [HttpPut("{hairServiceId:guid}")]
     public async Task<ActionResult> Update(
@@ -81,7 +84,8 @@ public class HairServicesController : ApiController
                 hairServiceId,
                 request.Name,
                 request.Description,
-                request.DefaultDurationMinutes),
+                request.DefaultDurationMinutes,
+                request.SpecializationId),
             cancellationToken));
 
     /// <summary>

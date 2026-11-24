@@ -767,10 +767,6 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<int>("Category")
-                        .HasColumnType("integer")
-                        .HasColumnName("category");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -792,6 +788,10 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name");
 
+                    b.Property<Guid>("SpecializationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("specialization_id");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -805,13 +805,11 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                     b.HasKey("Id")
                         .HasName("pk_hair_services");
 
-                    b.HasIndex("Category", "IsActive")
-                        .HasDatabaseName("ix_hair_services_category_is_active");
+                    b.HasIndex("SpecializationId")
+                        .HasDatabaseName("ix_hair_services_specialization_id");
 
                     b.ToTable("hair_services", null, t =>
                         {
-                            t.HasCheckConstraint("ck_hair_services_category", "category IN (1, 2, 3, 4, 5, 99)");
-
                             t.HasCheckConstraint("ck_hair_services_default_duration_minutes", "default_duration_minutes BETWEEN 1 AND 1440");
 
                             t.HasCheckConstraint("ck_hair_services_name", "char_length(btrim(name)) > 0");
@@ -1574,6 +1572,10 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<int>("Category")
+                        .HasColumnType("integer")
+                        .HasColumnName("category");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1610,6 +1612,8 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
 
                     b.ToTable("specializations", null, t =>
                         {
+                            t.HasCheckConstraint("ck_specializations_category", "category IN (1, 2, 3, 4, 5, 99)");
+
                             t.HasCheckConstraint("ck_specializations_name", "char_length(btrim(name)) > 0");
                         });
                 });
@@ -2202,6 +2206,16 @@ namespace BarberSearch.Infrastructure.Postgresql.Migrations
                         .HasConstraintName("fk_favorite_barbers_users_user_id");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("BarberSearch.Domain.HairServices.HairService", b =>
+                {
+                    b.HasOne("BarberSearch.Domain.Specializations.Specialization", null)
+                        .WithMany()
+                        .HasForeignKey("SpecializationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_hair_services_specializations_specialization_id");
                 });
 
             modelBuilder.Entity("BarberSearch.Domain.Notifications.BarberNotificationSettings", b =>

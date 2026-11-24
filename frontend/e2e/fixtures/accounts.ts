@@ -145,7 +145,13 @@ export const fixtures = {
   catalogueLabels: {
     activeHairService: 'E2E Стрижка',
     hiddenHairService: 'E2E Борода',
-    hiddenSpecialization: 'E2E Фейд',
+    /**
+     * Специализация активной услуги `E2E Стрижка` (выключенная, категория «Стрижка»).
+     * «E2E Фейд» нет в названии услуги, поэтому строка услуги доказывает join.
+     */
+    fadeSpecialization: 'E2E Фейд',
+    /** Специализация выключенной услуги `E2E Борода`; её имя совпадает с именем услуги. */
+    beardSpecialization: 'E2E Борода',
     activeSalon: 'E2E Studio',
     hiddenSalon: 'E2E Studio Nord',
   },
