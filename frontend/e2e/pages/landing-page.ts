@@ -43,16 +43,8 @@ export class LandingPage {
     return this.page.getByRole('button', { name: 'Показать ещё' })
   }
 
-  /**
-   * Подсказки города — прогрессивное улучшение, и их доступность зависит от стенда:
-   * с включённым провайдером (`AddressSuggestions:Enabled`) список открывается прямо
-   * на вводе, и Base UI прячет остальную форму от скринридера (`aria-hidden`), так что
-   * «Найти» перестаёт находиться по роли. Escape закрывает список, не стирая ввод
-   * (компонент игнорирует причины, кроме `input-change`); без провайдера — no-op.
-   */
   async search(city: string): Promise<void> {
     await this.cityInput.fill(city)
-    await this.cityInput.press('Escape')
     await this.submit.click()
   }
 
