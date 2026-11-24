@@ -11,10 +11,11 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// </remarks>
 public sealed class SearchCatalogOption
 {
-    private SearchCatalogOption(Guid? id, string displayText)
+    private SearchCatalogOption(Guid? id, string displayText, Guid? specializationId)
     {
         Id = id;
         DisplayText = displayText;
+        SpecializationId = specializationId;
     }
 
     /// <summary>
@@ -28,6 +29,17 @@ public sealed class SearchCatalogOption
     public string DisplayText { get; }
 
     /// <summary>
+    /// Специализация строки-услуги; <c>null</c> у пункта «Любая услуга» и у строк
+    /// специализаций.
+    /// </summary>
+    /// <remarks>
+    /// Нужна, чтобы фильтр «Услуга» сужался выбранной специализацией, как в вебе: у услуги
+    /// справочника ровно одна специализация, и по этому полю экран понимает, осталась ли
+    /// выбранная услуга в новом списке.
+    /// </remarks>
+    public Guid? SpecializationId { get; }
+
+    /// <summary>
     /// Пункт «фильтра нет» с заданной подписью.
     /// </summary>
     /// <param name="text">Подпись пункта.</param>
@@ -36,7 +48,7 @@ public sealed class SearchCatalogOption
     {
         ArgumentNullException.ThrowIfNull(text);
 
-        return new SearchCatalogOption(null, text);
+        return new SearchCatalogOption(null, text, null);
     }
 
     /// <summary>
@@ -44,11 +56,14 @@ public sealed class SearchCatalogOption
     /// </summary>
     /// <param name="id">Идентификатор строки справочника.</param>
     /// <param name="name">Название для подписи.</param>
+    /// <param name="specializationId">
+    /// Специализация строки-услуги; <c>null</c> — строка специализации или пункт «любая».
+    /// </param>
     /// <returns>Пункт для <c>Picker</c>.</returns>
-    public static SearchCatalogOption From(Guid id, string name)
+    public static SearchCatalogOption From(Guid id, string name, Guid? specializationId = null)
     {
         ArgumentNullException.ThrowIfNull(name);
 
-        return new SearchCatalogOption(id, name);
+        return new SearchCatalogOption(id, name, specializationId);
     }
 }

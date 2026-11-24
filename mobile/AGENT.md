@@ -281,6 +281,27 @@ in Core owns both base addresses.
   device language like the calendar itself. The additional-service field still has no `<datalist>`
   suggestions, because there is no native equivalent and the filter itself is free text; that is
   now the only touch adaptation and is recorded here instead of being left as a silent omission.
+- **The «Услуга» filter is grouped by specialization on its own screen.** The web renders the
+  catalogue as `<optgroup>`s; MAUI's `Picker` has no grouping, so the phone leaves the flat native
+  select out of the search form: the field is a 44 pt `Border` showing `HairServiceFieldText`, and a
+  tap opens the `hair-service-select` Shell page over the «Поиск» stack. The page receives the same
+  `SearchViewModel` as a route object, so a row applies the filter immediately and pops, while the
+  back gesture changes nothing. «Любая услуга» sits above the groups rather than inside one — it is
+  the absence of a filter, like the web's first ungrouped option — and the groups reproduce
+  `groupHairServices` from `frontend/src/lib/service-groups.ts`: alphabetical by specialization name
+  in the Russian collation (id as the tiebreaker), API order inside a group, no empty groups, and
+  services whose specialization is missing from the public list stay selectable in a trailing
+  «Прочие услуги» / «Other services» group. The selected specialization narrows the page to its own
+  services, and a now-incompatible choice resets to «Любая услуга»; clearing the specialization
+  restores every group and keeps the service — the web's `handleSpecializationChange`, so
+  `specializationId` and `hairServiceId` can never contradict each other. The field stays visible
+  while the whole catalogue has any service, as the web's `showHairServices` does, even when the
+  narrowed list is empty. `SearchServiceGroups.Build` is a pure function, so the repeated layout
+  needs no request, and the ViewModel keeps both raw catalogues and rebuilds the groups after either
+  answer, which makes the parallel load order irrelevant. Tests add 21 cases (1688 total): the pure
+  grouping (alphabetical order, a name tie broken by id, the unknown tail, filtered mode, an empty
+  catalogue), the narrowing and reset, the field text, the «Прочие услуги» translation, and the
+  visible field over an empty narrowed list.
 - **The search reads the device position, and the server puts the nearest first.** When the
   «Поиск» tab first appears, the screen asks for the location permission and reads the position
   with `GeolocationAccuracy.Medium` (a city block is enough for an order, and high accuracy costs

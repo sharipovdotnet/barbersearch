@@ -79,6 +79,14 @@ are omitted from the query, exactly as in `frontend/src/lib/barber-search.ts`. T
 the city exactly, the language is one enum name (`Ru`, `En`, …), and the additional service is a
 case-insensitive substring of the barber's own list.
 
+The «Услуга» filter is not a native `Picker`: MAUI's select cannot draw groups, so the field opens
+the `hair-service-select` Shell page, where the catalogue is listed under specialization headings —
+alphabetical in the Russian collation, API order inside a group, and a trailing «Прочие услуги» for
+services whose specialization is not in the public list. «Любая услуга» stays above the groups, the
+chosen specialization narrows the list to its own services, and an incompatible service resets to
+«Любая услуга» while clearing the specialization keeps it. The page reuses the `SearchViewModel`
+through the route, so a tap applies the filter and pops.
+
 The city field suggests cities while typing: `GET api/addresses/cities` (the backend's DaData
 proxy) is asked after a 250 ms pause once two characters are typed, and up to eight rows appear
 under the field. A tap fills the bare city name — the server compares city strings exactly, so

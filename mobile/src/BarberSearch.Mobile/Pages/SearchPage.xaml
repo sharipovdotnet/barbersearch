@@ -187,16 +187,48 @@
                                 SelectedItem="{Binding SelectedSpecialization}" />
                         </VerticalStackLayout>
 
+                        <!--
+                            Поле услуги — кнопка, открывающая отдельный экран выбора: в MAUI
+                            у Picker нет optgroup, поэтому заголовки специализаций живут на
+                            экране HairServiceSelectPage. Пока справочник не готов, поле
+                            показывает «Загрузка…»/«Любая услуга» и недоступно.
+                        -->
                         <VerticalStackLayout IsVisible="{Binding ShowHairServicePicker}" Spacing="2">
                             <Label
                                 FontSize="12"
                                 Text="{loc:Translate Key='Услуга'}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                            <Picker
+                            <Border
+                                MinimumHeightRequest="44"
                                 IsEnabled="{Binding IsCatalogsEnabled}"
-                                ItemDisplayBinding="{Binding DisplayText, x:DataType=vm:SearchCatalogOption}"
-                                ItemsSource="{Binding HairServices}"
-                                SelectedItem="{Binding SelectedHairService}" />
+                                Padding="12,10"
+                                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                StrokeShape="RoundRectangle 10">
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer Tapped="OnHairServiceFieldTapped" />
+                                </Border.GestureRecognizers>
+                                <Border.Triggers>
+                                    <DataTrigger
+                                        Binding="{Binding IsCatalogsEnabled}"
+                                        TargetType="Border"
+                                        Value="False">
+                                        <Setter Property="Opacity" Value="0.5" />
+                                    </DataTrigger>
+                                </Border.Triggers>
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <Label
+                                        FontSize="16"
+                                        LineBreakMode="TailTruncation"
+                                        Text="{Binding HairServiceFieldText}"
+                                        VerticalOptions="Center" />
+                                    <Label
+                                        Grid.Column="1"
+                                        FontSize="16"
+                                        Text="▾"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                        VerticalOptions="Center" />
+                                </Grid>
+                            </Border>
                         </VerticalStackLayout>
                     </VerticalStackLayout>
 

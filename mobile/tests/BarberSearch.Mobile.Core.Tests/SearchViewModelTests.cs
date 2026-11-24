@@ -24,6 +24,13 @@ public sealed class SearchViewModelTests
     private static readonly DateOnly Today = new(2026, 11, 15);
     private static readonly Guid SpecializationId = Guid.Parse("a1000000-0000-4000-8000-000000000001");
     private static readonly Guid HairServiceId = Guid.Parse("a1000000-0000-4000-8000-000000000002");
+    private static readonly Guid BarberSpecializationId = Guid.Parse("a1000000-0000-4000-8000-000000000011");
+    private static readonly Guid HairdresserSpecializationId = Guid.Parse("a1000000-0000-4000-8000-000000000012");
+    private static readonly Guid UnknownSpecializationId = Guid.Parse("a1000000-0000-4000-8000-0000000000ff");
+    private static readonly Guid HaircutServiceId = Guid.Parse("a1000000-0000-4000-8000-000000000021");
+    private static readonly Guid BeardServiceId = Guid.Parse("a1000000-0000-4000-8000-000000000022");
+    private static readonly Guid StylingServiceId = Guid.Parse("a1000000-0000-4000-8000-000000000023");
+    private static readonly Guid UnknownServiceId = Guid.Parse("a1000000-0000-4000-8000-0000000000fe");
 
     [Fact]
     public async Task SearchAsync_FillsBarbersAndClearsError()
@@ -95,7 +102,16 @@ public sealed class SearchViewModelTests
     {
         var api = FakeApi.Returning(Page());
         api.Specializations = [new SpecializationResponse(SpecializationId, "Классика", null)];
-        api.HairServices = [new HairServiceResponse(HairServiceId, "Стрижка", ServiceCategory.Haircut, 40, null)];
+        api.HairServices =
+        [
+            new HairServiceResponse(
+                HairServiceId,
+                "Стрижка",
+                ServiceCategory.Haircut,
+                40,
+                null,
+                SpecializationId),
+        ];
 
         var viewModel = Create(api);
 
@@ -106,7 +122,7 @@ public sealed class SearchViewModelTests
         viewModel.SelectedDate = Today.AddDays(2).ToDateTime(TimeOnly.MinValue);
         viewModel.SelectedLanguage = viewModel.Languages[1];
         viewModel.SelectedSpecialization = viewModel.Specializations[1];
-        viewModel.SelectedHairService = viewModel.HairServices[1];
+        viewModel.SelectedHairService = Assert.Single(HairServiceOptions(viewModel));
 
         await viewModel.SearchCommand.ExecuteAsync(null);
 
@@ -242,7 +258,16 @@ public sealed class SearchViewModelTests
     {
         var api = FakeApi.Returning(Page());
         api.Specializations = [new SpecializationResponse(SpecializationId, "Классика", null)];
-        api.HairServices = [new HairServiceResponse(HairServiceId, "Стрижка", ServiceCategory.Haircut, 40, null)];
+        api.HairServices =
+        [
+            new HairServiceResponse(
+                HairServiceId,
+                "Стрижка",
+                ServiceCategory.Haircut,
+                40,
+                null,
+                SpecializationId),
+        ];
 
         var viewModel = Create(api);
 
@@ -254,9 +279,16 @@ public sealed class SearchViewModelTests
         Assert.Equal(SpecializationId, viewModel.Specializations[1].Id);
         Assert.Same(viewModel.Specializations[0], viewModel.SelectedSpecialization);
 
-        Assert.Equal("Любая услуга", viewModel.HairServices[0].DisplayText);
-        Assert.Equal("Стрижка", viewModel.HairServices[1].DisplayText);
-        Assert.Same(viewModel.HairServices[0], viewModel.SelectedHairService);
+        // «Любая услуга» — отсутствие выбора, а не строка сгруппированного списка.
+        Assert.Equal("Любая услуга", viewModel.HairServiceFieldText);
+        Assert.Null(viewModel.SelectedHairService!.Id);
+
+        var group = Assert.Single(viewModel.HairServiceGroups);
+        Assert.Equal("Классика", group.Title);
+
+        var service = Assert.Single(group);
+        Assert.Equal("Стрижка", service.DisplayText);
+        Assert.Equal(SpecializationId, service.SpecializationId);
 
         Assert.False(viewModel.IsCatalogsLoading);
         Assert.True(viewModel.IsCatalogsEnabled);
@@ -286,9 +318,299 @@ public sealed class SearchViewModelTests
         await viewModel.InitializeAsync();
 
         Assert.Single(viewModel.Specializations);
-        Assert.Single(viewModel.HairServices);
+        Assert.Empty(viewModel.HairServiceGroups);
+        Assert.Equal("Любая услуга", viewModel.HairServiceFieldText);
         Assert.False(viewModel.ShowSpecializationPicker);
         Assert.False(viewModel.ShowHairServicePicker);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_GroupsHairServicesBySpecializationAlphabetically()
+    {
+        var api = FakeApi.Returning(Page());
+        api.Specializations =
+        [
+            Specialization(HairdresserSpecializationId, "Парикмахер"),
+            Specialization(BarberSpecializationId, "Барбер"),
+        ];
+        api.HairServices =
+        [
+            HairService(StylingServiceId, "Укладка", HairdresserSpecializationId),
+            HairService(HaircutServiceId, "Стрижка", BarberSpecializationId),
+            HairService(BeardServiceId, "Бритьё", BarberSpecializationId),
+        ];
+
+        var viewModel = Create(api);
+
+        await viewModel.InitializeAsync();
+
+        // Группы — по алфавиту названий, хотя API отдал специализации наоборот.
+        Assert.Equal(
+            ["Барбер", "Парикмахер"],
+            viewModel.HairServiceGroups.Select(group => group.Title));
+
+        // Внутри группы порядок ответа API, а не алфавит услуг.
+        Assert.Equal(
+            ["Стрижка", "Бритьё"],
+            viewModel.HairServiceGroups[0].Select(option => option.DisplayText));
+        Assert.Equal(
+            ["Укладка"],
+            viewModel.HairServiceGroups[1].Select(option => option.DisplayText));
+
+        // Селект специализаций остаётся в порядке сервера: группировка его не сортирует.
+        Assert.Equal(
+            ["Любая специализация", "Парикмахер", "Барбер"],
+            viewModel.Specializations.Select(option => option.DisplayText));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_UnknownSpecializationService_LivesInOtherGroup()
+    {
+        var api = FakeApi.Returning(Page());
+        api.Specializations = [Specialization(BarberSpecializationId, "Барбер")];
+        api.HairServices =
+        [
+            HairService(HaircutServiceId, "Стрижка", BarberSpecializationId),
+            HairService(UnknownServiceId, "Загадочная услуга", UnknownSpecializationId),
+        ];
+
+        var viewModel = Create(api);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(
+            ["Барбер", "Прочие услуги"],
+            viewModel.HairServiceGroups.Select(group => group.Title));
+
+        // Услуга с неизвестной специализацией не потеряна: она в последней группе.
+        var other = viewModel.HairServiceGroups[^1];
+        var service = Assert.Single(other);
+        Assert.Equal("Загадочная услуга", service.DisplayText);
+        Assert.Equal(UnknownSpecializationId, service.SpecializationId);
+
+        // Выбрать её и отправить в запрос можно как любую другую услугу справочника.
+        viewModel.SelectHairService(service);
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.Equal(UnknownServiceId, Assert.Single(api.SearchCalls).HairServiceId);
+    }
+
+    [Fact]
+    public async Task SelectedSpecialization_OtherGroup_ResetsHairServiceToAny()
+    {
+        var api = FakeApi.Returning(Page());
+
+        api.Specializations =
+        [
+            Specialization(BarberSpecializationId, "Барбер"),
+            Specialization(HairdresserSpecializationId, "Парикмахер"),
+        ];
+        api.HairServices =
+        [
+            HairService(HaircutServiceId, "Стрижка", BarberSpecializationId),
+            HairService(StylingServiceId, "Укладка", HairdresserSpecializationId),
+        ];
+
+        var viewModel = Create(api);
+
+        await viewModel.InitializeAsync();
+
+        viewModel.SelectedSpecialization = Option(viewModel.Specializations, "Барбер");
+        viewModel.SelectHairService(Option(HairServiceOptions(viewModel), "Стрижка"));
+
+        Assert.Equal("Стрижка", viewModel.HairServiceFieldText);
+
+        // У услуги ровно одна специализация: прежний выбор в новый список не попадает.
+        viewModel.SelectedSpecialization = Option(viewModel.Specializations, "Парикмахер");
+
+        Assert.Null(viewModel.SelectedHairService!.Id);
+        Assert.Equal("Любая услуга", viewModel.HairServiceFieldText);
+        Assert.Equal(
+            ["Парикмахер"],
+            viewModel.HairServiceGroups.Select(group => group.Title));
+        Assert.Equal(
+            ["Укладка"],
+            HairServiceOptions(viewModel).Select(option => option.DisplayText));
+
+        // Противоречивая пара фильтров в запрос не уходит.
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        var filters = Assert.Single(api.SearchCalls);
+        Assert.Equal(HairdresserSpecializationId, filters.SpecializationId);
+        Assert.Null(filters.HairServiceId);
+    }
+
+    [Fact]
+    public async Task SelectedSpecializationWithoutServices_KeepsHairServiceFieldVisible()
+    {
+        var api = FakeApi.Returning(Page());
+
+        api.Specializations =
+        [
+            Specialization(BarberSpecializationId, "Барбер"),
+            Specialization(HairdresserSpecializationId, "Парикмахер"),
+        ];
+        api.HairServices = [HairService(HaircutServiceId, "Стрижка", BarberSpecializationId)];
+
+        var viewModel = Create(api);
+
+        await viewModel.InitializeAsync();
+
+        viewModel.SelectedSpecialization = Option(viewModel.Specializations, "Парикмахер");
+
+        // У специализации нет услуг, но поле остаётся, как в вебе: оно показывает «Любую
+        // услугу», а форма не прыгает и не теряет доступ к снятию фильтра.
+        Assert.Empty(viewModel.HairServiceGroups);
+        Assert.True(viewModel.ShowHairServicePicker);
+        Assert.Equal("Любая услуга", viewModel.HairServiceFieldText);
+    }
+
+    [Fact]
+    public async Task SelectedAnySpecialization_KeepsChosenHairServiceAndReturnsEveryGroup()
+    {
+        var api = FakeApi.Returning(Page());
+
+        api.Specializations =
+        [
+            Specialization(BarberSpecializationId, "Барбер"),
+            Specialization(HairdresserSpecializationId, "Парикмахер"),
+        ];
+        api.HairServices =
+        [
+            HairService(HaircutServiceId, "Стрижка", BarberSpecializationId),
+            HairService(StylingServiceId, "Укладка", HairdresserSpecializationId),
+            HairService(UnknownServiceId, "Загадочная услуга", UnknownSpecializationId),
+        ];
+
+        var viewModel = Create(api);
+
+        await viewModel.InitializeAsync();
+
+        viewModel.SelectedSpecialization = Option(viewModel.Specializations, "Парикмахер");
+        viewModel.SelectHairService(Option(HairServiceOptions(viewModel), "Укладка"));
+
+        // Возврат к «Любой специализации» ничего не сбрасывает: выбор снова допустим.
+        viewModel.SelectedSpecialization = viewModel.Specializations[0];
+
+        Assert.Equal(StylingServiceId, viewModel.SelectedHairService!.Id);
+        Assert.Equal("Укладка", viewModel.HairServiceFieldText);
+        Assert.Equal(
+            ["Барбер", "Парикмахер", "Прочие услуги"],
+            viewModel.HairServiceGroups.Select(group => group.Title));
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        var filters = Assert.Single(api.SearchCalls);
+        Assert.Null(filters.SpecializationId);
+        Assert.Equal(StylingServiceId, filters.HairServiceId);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_HairServicesArriveAfterSpecializationChoice_GroupsFollowIt()
+    {
+        var api = FakeApi.Returning(Page());
+
+        api.Specializations =
+        [
+            Specialization(BarberSpecializationId, "Барбер"),
+            Specialization(HairdresserSpecializationId, "Парикмахер"),
+        ];
+        api.HairServicesFailure = new HttpRequestException("refused");
+
+        var viewModel = Create(api);
+
+        await viewModel.InitializeAsync();
+
+        // Услуги не пришли — специализацию можно выбрать и без них.
+        Assert.Empty(viewModel.HairServiceGroups);
+
+        viewModel.SelectedSpecialization = Option(viewModel.Specializations, "Парикмахер");
+
+        api.HairServicesFailure = null;
+        api.HairServices =
+        [
+            HairService(HaircutServiceId, "Стрижка", BarberSpecializationId),
+            HairService(StylingServiceId, "Укладка", HairdresserSpecializationId),
+        ];
+
+        await viewModel.RetryCatalogsCommand.ExecuteAsync(null);
+
+        // Поздний ответ услуг раскладывается по уже выбранной специализации.
+        Assert.Equal(
+            ["Парикмахер"],
+            viewModel.HairServiceGroups.Select(group => group.Title));
+        Assert.Equal(
+            ["Укладка"],
+            HairServiceOptions(viewModel).Select(option => option.DisplayText));
+        Assert.Equal("Любая услуга", viewModel.HairServiceFieldText);
+    }
+
+    [Fact]
+    public async Task SelectHairService_UpdatesSelectionAndFieldText()
+    {
+        var api = FakeApi.Returning(Page());
+        api.Specializations = [Specialization(BarberSpecializationId, "Барбер")];
+        api.HairServices = [HairService(HaircutServiceId, "Стрижка", BarberSpecializationId)];
+
+        var viewModel = Create(api);
+
+        await viewModel.InitializeAsync();
+
+        var service = Assert.Single(HairServiceOptions(viewModel));
+
+        viewModel.SelectHairService(service);
+
+        Assert.Same(service, viewModel.SelectedHairService);
+        Assert.Equal("Стрижка", viewModel.HairServiceFieldText);
+    }
+
+    [Fact]
+    public async Task SelectHairService_Null_RestoresAnyService()
+    {
+        var api = FakeApi.Returning(Page());
+        api.Specializations = [Specialization(BarberSpecializationId, "Барбер")];
+        api.HairServices = [HairService(HaircutServiceId, "Стрижка", BarberSpecializationId)];
+
+        var viewModel = Create(api);
+
+        await viewModel.InitializeAsync();
+
+        viewModel.SelectHairService(Assert.Single(HairServiceOptions(viewModel)));
+        viewModel.SelectHairService(null);
+
+        Assert.Null(viewModel.SelectedHairService!.Id);
+        Assert.Equal("Любая услуга", viewModel.HairServiceFieldText);
+
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.Null(Assert.Single(api.SearchCalls).HairServiceId);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WhileHairServicesLoading_FieldShowsLoadingPlaceholder()
+    {
+        var gate = new TaskCompletionSource<IReadOnlyList<HairServiceResponse>>();
+        var api = FakeApi.Returning(Page());
+        api.Specializations = [Specialization(BarberSpecializationId, "Барбер")];
+        api.HairServicesRespond = _ => gate.Task;
+
+        var viewModel = Create(api);
+
+        var initialization = viewModel.InitializeAsync();
+
+        // Пока справочник услуг не ответил, поле обещает загрузку, а групп ещё нет.
+        Assert.True(viewModel.IsCatalogsLoading);
+        Assert.Empty(viewModel.HairServiceGroups);
+        Assert.Equal("Загрузка…", viewModel.HairServiceFieldText);
+
+        gate.SetResult([]);
+
+        await initialization;
+
+        Assert.False(viewModel.IsCatalogsLoading);
+        Assert.Equal("Любая услуга", viewModel.HairServiceFieldText);
+        Assert.Empty(viewModel.HairServiceGroups);
     }
 
     [Fact]
@@ -306,6 +628,10 @@ public sealed class SearchViewModelTests
         Assert.False(viewModel.IsCatalogsEnabled);
         Assert.True(viewModel.ShowSpecializationPicker);
         Assert.Equal("Любая специализация", viewModel.Specializations[0].DisplayText);
+
+        // Упавший справочник услуг не обещает загрузку и не показывает пустых групп.
+        Assert.Empty(viewModel.HairServiceGroups);
+        Assert.Equal("Любая услуга", viewModel.HairServiceFieldText);
 
         await viewModel.SearchCommand.ExecuteAsync(null);
 
@@ -1124,7 +1450,7 @@ public sealed class SearchViewModelTests
         Assert.False(viewModel.HasCatalogsError);
         Assert.True(viewModel.IsCatalogsEnabled);
         Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
-        Assert.Equal("Стрижка", viewModel.HairServices[1].DisplayText);
+        Assert.Equal("Стрижка", Assert.Single(HairServiceOptions(viewModel)).DisplayText);
         Assert.False(viewModel.IsCatalogsAutoRetrying);
     }
 
@@ -1179,7 +1505,7 @@ public sealed class SearchViewModelTests
         Assert.True(viewModel.IsCatalogsEnabled);
         Assert.False(viewModel.IsCatalogsAutoRetrying);
         Assert.Equal("Классика", viewModel.Specializations[1].DisplayText);
-        Assert.Equal("Стрижка", viewModel.HairServices[1].DisplayText);
+        Assert.Equal("Стрижка", Assert.Single(HairServiceOptions(viewModel)).DisplayText);
     }
 
     [Fact]
@@ -1415,7 +1741,7 @@ public sealed class SearchViewModelTests
         Assert.Equal(2, api.HairServiceCalls);
         Assert.Equal(1, viewModel.CatalogsAutoRetry.Attempts);
         Assert.False(viewModel.HasCatalogsError);
-        Assert.Equal("Стрижка", viewModel.HairServices[1].DisplayText);
+        Assert.Equal("Стрижка", Assert.Single(HairServiceOptions(viewModel)).DisplayText);
     }
 
     [Fact]
@@ -1539,6 +1865,31 @@ public sealed class SearchViewModelTests
         Assert.False(viewModel.IsCatalogsAutoRetrying);
         Assert.Equal("Не удалось загрузить фильтры.", viewModel.CatalogsErrorText);
     }
+
+    /// <summary>
+    /// Строка справочника специализаций для проверок группировки услуг.
+    /// </summary>
+    private static SpecializationResponse Specialization(Guid id, string name) => new(id, name, null);
+
+    /// <summary>
+    /// Строка справочника услуг с явной специализацией.
+    /// </summary>
+    private static HairServiceResponse HairService(Guid id, string name, Guid specializationId) =>
+        new(id, name, ServiceCategory.Haircut, 40, null, specializationId);
+
+    /// <summary>
+    /// Услуги сгруппированного списка одним потоком: пункта «Любая услуга» в группах нет.
+    /// </summary>
+    private static IReadOnlyList<SearchCatalogOption> HairServiceOptions(SearchViewModel viewModel) =>
+        [.. viewModel.HairServiceGroups.SelectMany(group => group)];
+
+    /// <summary>
+    /// Пункт селекта по подписи: тест называет значение, а не индекс ответа API.
+    /// </summary>
+    private static SearchCatalogOption Option(
+        IEnumerable<SearchCatalogOption> options,
+        string displayText) =>
+        options.Single(option => string.Equals(option.DisplayText, displayText, StringComparison.Ordinal));
 
     /// <summary>
     /// Создаёт ViewModel с фиксированным «сегодня»: границы календаря не зависят от машины теста.

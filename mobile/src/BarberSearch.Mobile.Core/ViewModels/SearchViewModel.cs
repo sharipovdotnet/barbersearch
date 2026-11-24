@@ -145,6 +145,34 @@ public sealed partial class SearchViewModel : ObservableObject
     private readonly AutoRetryLoop _catalogsAutoRetry;
 
     /// <summary>
+    /// Последний загруженный справочник услуг: из него пересобираются группы при смене
+    /// специализации.
+    /// </summary>
+    /// <remarks>
+    /// Хранится ответ API, а не пункты <see cref="SearchHairServiceGroup"/>: сужение по
+    /// специализации — это повторная раскладка одного и того же ответа, а не новый запрос.
+    /// </remarks>
+    private IReadOnlyList<HairServiceResponse> _hairServices = [];
+
+    /// <summary>
+    /// Последний загруженный справочник специализаций: он же задаёт заголовки и порядок групп.
+    /// </summary>
+    /// <remarks>
+    /// Оба справочника грузятся параллельно, и порядок ответов не определён: группы собираются
+    /// из того, что уже пришло, и пересобираются после каждого ответа.
+    /// </remarks>
+    private IReadOnlyList<SpecializationResponse> _specializations = [];
+
+    /// <summary>
+    /// Пункт «Любая услуга» / «Загрузка…»: к нему возвращается выбор, когда услуга не выбрана.
+    /// </summary>
+    /// <remarks>
+    /// Живёт вне <see cref="HairServiceGroups"/>: «Любая услуга» — отсутствие выбора, а не
+    /// услуга какой-то специализации, и в сгруппированном списке ей не место.
+    /// </remarks>
+    private SearchCatalogOption _anyHairServiceOption = SearchCatalogOption.Any(AnyServiceText);
+
+    /// <summary>
     /// Фильтры последней неудачной попытки: цикл повторов обязан повторить именно этот запрос.
     /// </summary>
     /// <remarks>
@@ -288,9 +316,15 @@ public sealed partial class SearchViewModel : ObservableObject
     public ObservableCollection<SearchCatalogOption> Specializations { get; } = [];
 
     /// <summary>
-    /// Услуги справочника для фильтра: «Любая услуга» первой, дальше порядок сервера.
+    /// Услуги справочника для фильтра, сгруппированные по специализациям.
     /// </summary>
-    public ObservableCollection<SearchCatalogOption> HairServices { get; } = [];
+    /// <remarks>
+    /// Группы собирает <see cref="SearchServiceGroups.Build"/>: выбранная специализация сужает
+    /// список до её услуг, а услуги с неизвестной специализацией остаются в последней группе
+    /// «Прочие услуги». Пункта «Любая услуга» в списке нет — это отсутствие выбора
+    /// (<see cref="SelectedHairService"/>).
+    /// </remarks>
+    public ObservableCollection<SearchHairServiceGroup> HairServiceGroups { get; } = [];
 
     /// <summary>
     /// Языки общения для фильтра: «Любой язык» первым, дальше шесть языков API.
@@ -325,7 +359,30 @@ public sealed partial class SearchViewModel : ObservableObject
     /// Выбранная услуга справочника; пункт «Любая услуга» отправляет <c>null</c>.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HairServiceFieldText))]
     private SearchCatalogOption? _selectedHairService;
+
+    /// <summary>
+    /// Подпись поля «Услуга»: название выбранной услуги или «Любая услуга».
+    /// </summary>
+    /// <remarks>
+    /// Отдельное свойство нужно потому, что «Любая услуга» больше не строка
+    /// <see cref="HairServiceGroups"/>: поле показывает текст выбора, а не пункт сгруппированного
+    /// списка.
+    /// </remarks>
+    public string HairServiceFieldText => SelectedHairService?.DisplayText ?? AnyServiceText;
+
+    /// <summary>
+    /// Ставит выбранную услугу, пришедшую с экрана выбора услуги.
+    /// </summary>
+    /// <remarks>
+    /// Экран выбора показывает сгруппированный список и возвращает выбранную строку; отдельного
+    /// <c>Picker</c> здесь нет, поэтому выбор приходит из code-behind страницы, а не командой.
+    /// <c>null</c> означает «Любая услуга» — отсутствие фильтра.
+    /// </remarks>
+    /// <param name="service">Выбранная услуга; <c>null</c> — «Любая услуга».</param>
+    public void SelectHairService(SearchCatalogOption? service) =>
+        SelectedHairService = service ?? _anyHairServiceOption;
 
     /// <summary>
     /// Выбранная дата в календаре; <c>null</c> — «Любая дата», фильтр не задан.
@@ -477,8 +534,14 @@ public sealed partial class SearchViewModel : ObservableObject
     /// <summary>
     /// Виден ли селект услуги: пока справочник не готов — да, пустой — нет.
     /// </summary>
+    /// <remarks>
+    /// Проверяется весь загруженный справочник, а не собранные группы, как в вебе
+    /// (<c>showHairServices</c>): выбранная специализация может сузить список до нуля услуг,
+    /// но поле «Услуга» остаётся на месте и показывает «Любая услуга» — форма не прыгает,
+    /// а состояние выбора не становится недоступным.
+    /// </remarks>
     public bool ShowHairServicePicker =>
-        HairServices.Count > 1 || IsCatalogsLoading || HasCatalogsError;
+        _hairServices.Count > 0 || IsCatalogsLoading || HasCatalogsError;
 
     /// <summary>
     /// Нужно ли показать пустое состояние: не грузим, ошибки нет, список пуст.
@@ -1360,8 +1423,15 @@ public sealed partial class SearchViewModel : ObservableObject
     /// <summary>
     /// Раскладывает загруженные специализации, ставя «любой» пункт первым.
     /// </summary>
+    /// <remarks>
+    /// Справочник сохраняется целиком: он задаёт заголовки и порядок групп услуг. Группы
+    /// пересобираются здесь же, потому что специализации могли прийти после услуг — порядок
+    /// ответов у параллельных запросов не определён.
+    /// </remarks>
     private void ApplySpecializations(IReadOnlyList<SpecializationResponse> specializations)
     {
+        _specializations = specializations;
+
         Specializations.Clear();
         Specializations.Add(SearchCatalogOption.Any(AnySpecializationText));
 
@@ -1371,22 +1441,52 @@ public sealed partial class SearchViewModel : ObservableObject
         }
 
         SelectedSpecialization = Specializations[0];
+
+        RebuildHairServiceGroups();
     }
 
     /// <summary>
-    /// Раскладывает загруженные услуги, ставя «любой» пункт первым.
+    /// Раскладывает загруженные услуги по специализациям и сбрасывает выбор на «Любую услугу».
     /// </summary>
+    /// <remarks>
+    /// Загрузка справочника — это новый каталог: выбранная услуга могла в нём исчезнуть, как и
+    /// её специализация, поэтому выбор возвращается к «Любой услуге». Пункт «Любая услуга»
+    /// создаётся заново уже с настоящим текстом: до ответа на его месте стояло «Загрузка…».
+    /// </remarks>
     private void ApplyHairServices(IReadOnlyList<HairServiceResponse> hairServices)
     {
-        HairServices.Clear();
-        HairServices.Add(SearchCatalogOption.Any(AnyServiceText));
+        _hairServices = hairServices;
 
-        foreach (var service in hairServices)
+        RebuildHairServiceGroups();
+
+        _anyHairServiceOption = SearchCatalogOption.Any(AnyServiceText);
+        SelectedHairService = _anyHairServiceOption;
+    }
+
+    /// <summary>
+    /// Пересобирает группы услуг под текущую специализацию.
+    /// </summary>
+    /// <remarks>
+    /// Раскладку делает чистая <see cref="SearchServiceGroups.Build"/>: она не меняет
+    /// загруженные справочники, поэтому смена специализации — это повторная раскладка того же
+    /// ответа API, без запроса в сеть.
+    /// </remarks>
+    private void RebuildHairServiceGroups()
+    {
+        var groups = SearchServiceGroups.Build(
+            _hairServices,
+            _specializations,
+            SelectedSpecialization?.Id,
+            Loc.T("Прочие услуги"));
+
+        HairServiceGroups.Clear();
+
+        foreach (var group in groups)
         {
-            HairServices.Add(SearchCatalogOption.From(service.Id, service.Name));
+            HairServiceGroups.Add(group);
         }
 
-        SelectedHairService = HairServices[0];
+        OnPropertyChanged(nameof(ShowHairServicePicker));
     }
 
     /// <summary>
@@ -1412,12 +1512,18 @@ public sealed partial class SearchViewModel : ObservableObject
     /// <summary>
     /// Показывает заглушку селекта услуг.
     /// </summary>
+    /// <remarks>
+    /// Группы очищаются: до ответа показывать нечего, а «Любая услуга» остаётся выбранной —
+    /// она вне групп и не даёт фильтру услуги уйти в запрос.
+    /// </remarks>
     private void ShowHairServicePlaceholder()
     {
-        HairServices.Clear();
-        HairServices.Add(SearchCatalogOption.Any(
-            IsCatalogsLoading ? LoadingText : AnyServiceText));
-        SelectedHairService = HairServices[0];
+        HairServiceGroups.Clear();
+        _anyHairServiceOption = SearchCatalogOption.Any(
+            IsCatalogsLoading ? LoadingText : AnyServiceText);
+        SelectedHairService = _anyHairServiceOption;
+
+        OnPropertyChanged(nameof(ShowHairServicePicker));
     }
 
     /// <summary>
@@ -1519,6 +1625,29 @@ public sealed partial class SearchViewModel : ObservableObject
     }
 
     partial void OnIsCatalogsLoadingChanged(bool value) => NotifyCatalogOptionsChanged();
+
+    /// <summary>
+    /// Смена специализации сужает группы услуг и сбрасывает ставшую чужой услугу.
+    /// </summary>
+    /// <remarks>
+    /// Поведение веба (<c>handleSpecializationChange</c> в
+    /// <c>frontend/src/components/home/search-form.tsx</c>): у услуги ровно одна специализация,
+    /// поэтому после смены специализации выбранная услуга может из списка выпасть. Такой выбор
+    /// сбрасывается на «Любую услугу», иначе на сервер ушла бы противоречивая пара фильтров.
+    /// Возврат к «Любой специализации» ничего не сбрасывает: прежний выбор снова допустим.
+    /// </remarks>
+    /// <param name="value">Новый пункт фильтра специализаций; <c>null</c> — «любая».</param>
+    partial void OnSelectedSpecializationChanged(SearchCatalogOption? value)
+    {
+        RebuildHairServiceGroups();
+
+        if (value?.Id is { } specializationId
+            && SelectedHairService?.SpecializationId is { } serviceSpecializationId
+            && serviceSpecializationId != specializationId)
+        {
+            SelectedHairService = _anyHairServiceOption;
+        }
+    }
 
     /// <summary>
     /// Каждый символ города запускает подсказки; паузу и отмену держит секция.
