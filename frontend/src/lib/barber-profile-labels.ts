@@ -24,16 +24,6 @@ export const SERVICE_CATEGORY_LABELS: Record<ServiceCategory, string> = {
   Other: 'Другое',
 }
 
-/** Порядок групп специализаций в селектах: от стрижки к «Другому». */
-export const SERVICE_CATEGORY_ORDER: readonly ServiceCategory[] = [
-  'Haircut',
-  'Beard',
-  'Coloring',
-  'Styling',
-  'HairTreatment',
-  'Other',
-]
-
 export type Language = 'Ru' | 'En' | 'De' | 'Kg' | 'Tj' | 'Uz'
 
 /** Язык общения: значение — самоназвание, чтобы носитель узнал язык без перевода. */

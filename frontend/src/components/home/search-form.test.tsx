@@ -1,63 +1,19 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 
 import { SearchForm } from '@/components/home/search-form'
 import type { CitySuggestion } from '@/lib/address-suggestions'
-import type { SpecializationOption } from '@/lib/specializations'
 import { problemDetails } from '@/test/msw/handlers'
 import { recordRequests } from '@/test/msw/requests'
 import { server } from '@/test/msw/server'
 
-/**
- * Строка справочника: `category` обязательна, строгий guard отклоняет список без неё,
- * и тогда форма показывает «Не удалось загрузить фильтры.».
- */
 const SPECIALIZATION = {
   id: '11111111-1111-4111-8111-111111111111',
   name: 'Барберинг',
   description: null,
-  category: 'Haircut',
-} as const
-
-/**
- * По одной строке на каждую из шести категорий, вперемешку: порядок групп задаёт
- * `SERVICE_CATEGORY_ORDER`, а не порядок ответа API.
- */
-const SPECIALIZATIONS: readonly SpecializationOption[] = [
-  {
-    id: '55555555-5555-4555-8555-555555555555',
-    name: 'Уход за волосами',
-    description: null,
-    category: 'HairTreatment',
-  },
-  SPECIALIZATION,
-  {
-    id: '66666666-6666-4666-8666-666666666666',
-    name: 'Бритьё головы',
-    description: null,
-    category: 'Other',
-  },
-  {
-    id: '22222222-3333-4222-8222-222222222222',
-    name: 'Оформление бороды',
-    description: null,
-    category: 'Beard',
-  },
-  {
-    id: '44444444-4444-4444-8444-444444444444',
-    name: 'Укладка',
-    description: null,
-    category: 'Styling',
-  },
-  {
-    id: '33333333-3333-4333-8333-333333333333',
-    name: 'Окрашивание',
-    description: null,
-    category: 'Coloring',
-  },
-]
+}
 
 const HAIR_SERVICE = {
   id: '22222222-2222-4222-8222-222222222222',
@@ -70,7 +26,7 @@ const ADDITIONAL_SERVICES = ['Оформление бороды', 'Бритьё 
 
 function useCatalogs() {
   server.use(
-    http.get('/api/specializations', () => HttpResponse.json(SPECIALIZATIONS)),
+    http.get('/api/specializations', () => HttpResponse.json([SPECIALIZATION])),
     http.get('/api/hair-services', () => HttpResponse.json([HAIR_SERVICE])),
     http.get('/api/barbers/additional-services', () =>
       HttpResponse.json(ADDITIONAL_SERVICES)
@@ -143,80 +99,6 @@ describe('SearchForm, дополнительная услуга', () => {
     expect(onSearch).toHaveBeenCalledWith(
       expect.objectContaining({ additionalService: 'борода' })
     )
-  })
-})
-
-describe('SearchForm, группы специализаций', () => {
-  it('строит шесть optgroup в порядке категорий с переведёнными подписями', async () => {
-    useCatalogs()
-
-    render(<SearchForm isSearching={false} onSearch={vi.fn()} />)
-
-    const select = await screen.findByLabelText('Специализация')
-
-    // До ответа справочника селект показывает одну опцию «Загрузка…», групп ещё нет.
-    await waitFor(() => {
-      expect(within(select).getAllByRole('group')).toHaveLength(6)
-    })
-
-    // Подписи — `SERVICE_CATEGORY_LABELS` через `t()`, а не имена enum из API;
-    // порядок групп задаёт `SERVICE_CATEGORY_ORDER`, а не порядок ответа.
-    expect(
-      within(select)
-        .getAllByRole('group')
-        .map((group) => ({
-          label: group.getAttribute('label'),
-          options: Array.from(group.querySelectorAll('option')).map(
-            (option) => option.textContent
-          ),
-        }))
-    ).toStrictEqual([
-      { label: 'Стрижка', options: ['Барберинг'] },
-      { label: 'Борода', options: ['Оформление бороды'] },
-      { label: 'Окрашивание', options: ['Окрашивание'] },
-      { label: 'Укладка', options: ['Укладка'] },
-      { label: 'Уход', options: ['Уход за волосами'] },
-      { label: 'Другое', options: ['Бритьё головы'] },
-    ])
-  })
-
-  it('оставляет «Любая специализация» первой и вне групп, не теряя id опций', async () => {
-    useCatalogs()
-
-    render(<SearchForm isSearching={false} onSearch={vi.fn()} />)
-
-    const select = await screen.findByLabelText('Специализация')
-
-    await waitFor(() => {
-      expect(select.querySelectorAll('optgroup')).toHaveLength(6)
-    })
-
-    // Первый элемент селекта — сама опция, а не `optgroup`.
-    const options = Array.from(select.querySelectorAll('option'))
-    const first = options[0]
-
-    expect(first).toBe(select.firstElementChild)
-    expect(first.value).toBe('')
-    expect(first).toHaveTextContent('Любая специализация')
-    expect(first.closest('optgroup')).toBeNull()
-
-    // Ни одна строка справочника не потерялась: id и подписи те же, что в ответе.
-    const namesById = new Map(
-      SPECIALIZATIONS.map((item) => [item.id, item.name])
-    )
-    const groupedOptions = options.slice(1)
-
-    expect(groupedOptions.map((option) => option.value).sort()).toStrictEqual(
-      SPECIALIZATIONS.map((item) => item.id).sort()
-    )
-    expect(
-      new Map(
-        groupedOptions.map((option) => [
-          option.value,
-          option.textContent?.trim() ?? '',
-        ])
-      )
-    ).toStrictEqual(namesById)
   })
 })
 

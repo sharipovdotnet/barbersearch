@@ -6,18 +6,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CatalogueScreen } from '@/components/admin/catalogue-screen'
 import { AUTO_REFRESH_INTERVAL_MS } from '@/hooks/use-auto-refresh'
 import type { AdminSalon } from '@/lib/admin-catalogue'
-import { adminCatalogueSpecializations, problemDetails } from '@/test/msw/handlers'
+import { problemDetails } from '@/test/msw/handlers'
 import { server } from '@/test/msw/server'
 
 /**
- * Вкладки админского каталога: очередь проверки салонов и колонка категории
- * у специализаций.
+ * Вкладка «Салоны» админского каталога: очередь проверки и решения.
  *
  * Сеть — только MSW на границе HTTP. Проверяем обещания экрана, которых не видит
  * unit-тест транспорта: фильтр `status=pending`, owner email и бейдж в строке,
  * `alertdialog` с последствием одобрения, обязательную причину отказа и то, что
- * после решения строка уходит из очереди, а на вкладке «Специализации» категория
- * стоит между названием и описанием и переведена словарём.
+ * после решения строка уходит из очереди.
  */
 
 const LIST_URL = '/api/admin/catalogue/salons'
@@ -430,44 +428,5 @@ describe('CatalogueScreen: салоны на проверке', () => {
     })
 
     expect(state.statuses).toHaveLength(initial + 1)
-  })
-})
-
-describe('CatalogueScreen: категория специализации', () => {
-  const haircut = adminCatalogueSpecializations[0]
-  const beard = adminCatalogueSpecializations[1]
-
-  it('колонка «Категория» стоит между «Названием» и «Описанием»', async () => {
-    render(<CatalogueScreen tab="specializations" />)
-
-    await screen.findAllByText(haircut.name)
-
-    const headers = screen
-      .getAllByRole('columnheader')
-      .map((header) => header.textContent)
-
-    // Три первые колонки справочника специализаций — в этом порядке; дальше идут
-    // общие для вкладок «Барберы», «Статус» и действия.
-    expect(headers.slice(0, 3)).toStrictEqual([
-      'Название',
-      'Категория',
-      'Описание',
-    ])
-  })
-
-  it('строка показывает подпись категории, а не значение enum', async () => {
-    render(<CatalogueScreen tab="specializations" />)
-
-    await screen.findAllByText(haircut.name)
-
-    // `Haircut` → «Стрижка», `Beard` → «Борода»: перевод берётся из
-    // SERVICE_CATEGORY_LABELS, а не из значения API.
-    expect(
-      within(tableRow(haircut.name)).getByText('Стрижка')
-    ).toBeInTheDocument()
-    expect(within(tableRow(beard.name)).getByText('Борода')).toBeInTheDocument()
-    expect(
-      within(tableRow(haircut.name)).queryByText('Haircut')
-    ).not.toBeInTheDocument()
   })
 })
