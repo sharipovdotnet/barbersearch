@@ -23,6 +23,20 @@ const BEARD_SPECIALIZATION = {
   category: 'Beard',
 }
 
+const STYLING_SPECIALIZATION = {
+  id: '88888888-8888-4888-8888-888888888888',
+  name: 'Укладка',
+  description: null,
+  category: 'Styling',
+}
+
+const OTHER_SPECIALIZATION = {
+  id: '99999999-9999-4999-8999-999999999999',
+  name: 'Афрокудри',
+  description: null,
+  category: 'Other',
+}
+
 const HAIR_SERVICE = {
   id: '22222222-2222-4222-8222-222222222222',
   name: 'Стрижка',
@@ -82,6 +96,27 @@ function useGroupedCatalogs() {
         HAIR_SERVICE_WITHOUT_SPECIALIZATION,
       ])
     ),
+    http.get('/api/barbers/additional-services', () =>
+      HttpResponse.json(ADDITIONAL_SERVICES)
+    )
+  )
+}
+
+/**
+ * Справочники для группировки специализаций: категории приходят вперемешку,
+ * поэтому группы обязаны выстроиться по каталогу, а не по ответу API.
+ */
+function useGroupedSpecializationCatalogs() {
+  server.use(
+    http.get('/api/specializations', () =>
+      HttpResponse.json([
+        OTHER_SPECIALIZATION,
+        BEARD_SPECIALIZATION,
+        SPECIALIZATION,
+        STYLING_SPECIALIZATION,
+      ])
+    ),
+    http.get('/api/hair-services', () => HttpResponse.json([HAIR_SERVICE])),
     http.get('/api/barbers/additional-services', () =>
       HttpResponse.json(ADDITIONAL_SERVICES)
     )
@@ -406,6 +441,87 @@ describe('SearchForm, группировка услуг', () => {
     expect(onSearch).toHaveBeenCalledWith(
       expect.objectContaining({
         hairServiceId: HAIR_SERVICE_WITHOUT_SPECIALIZATION.id,
+      })
+    )
+  })
+})
+
+/**
+ * Специализации сгруппированы по категориям: заголовок `optgroup` — название
+ * категории в каталожном порядке, «Любая специализация» стоит вне групп,
+ * а выбранное значение — по-прежнему id специализации.
+ */
+describe('SearchForm, группировка специализаций', () => {
+  it('раскладывает специализации по <optgroup>: группы по каталогу, строки в порядке API', async () => {
+    useGroupedSpecializationCatalogs()
+
+    render(<SearchForm isSearching={false} onSearch={vi.fn()} />)
+
+    const select = screen.getByLabelText('Специализация')
+
+    await waitFor(() => {
+      expect(within(select).getAllByRole('group')).toHaveLength(4)
+    })
+
+    const groups = within(select).getAllByRole('group')
+
+    // Категории идут как в каталоге, хотя API вернул их вперемешку.
+    // Coloring и HairTreatment на входе нет — пустых групп тоже нет.
+    expect(groups.map((group) => group.getAttribute('label'))).toStrictEqual([
+      'Стрижка',
+      'Борода',
+      'Укладка',
+      'Другое',
+    ])
+
+    const labelsIn = (label: string): (string | null)[] =>
+      within(within(select).getByRole('group', { name: label }))
+        .getAllByRole('option')
+        .map((option) => option.textContent)
+
+    expect(labelsIn('Стрижка')).toStrictEqual(['Барберинг'])
+    expect(labelsIn('Борода')).toStrictEqual(['Борода'])
+    expect(labelsIn('Укладка')).toStrictEqual(['Укладка'])
+    expect(labelsIn('Другое')).toStrictEqual(['Афрокудри'])
+
+    const options = within(select).getAllByRole('option')
+
+    // Первый пункт — «Любая специализация», и он не входит ни в одну группу.
+    expect(options[0]).toHaveTextContent('Любая специализация')
+    expect(options[0].closest('optgroup')).toBeNull()
+    expect(options.map((option) => option.getAttribute('value'))).toStrictEqual([
+      '',
+      SPECIALIZATION.id,
+      BEARD_SPECIALIZATION.id,
+      STYLING_SPECIALIZATION.id,
+      OTHER_SPECIALIZATION.id,
+    ])
+  })
+
+  it('выбор специализации из группы отправляет её id и не теряет title', async () => {
+    useGroupedSpecializationCatalogs()
+
+    const onSearch = vi.fn()
+
+    render(<SearchForm isSearching={false} onSearch={onSearch} />)
+
+    const select = screen.getByLabelText('Специализация')
+
+    await waitFor(() => {
+      expect(within(select).getAllByRole('group')).toHaveLength(4)
+    })
+
+    await userEvent.selectOptions(select, STYLING_SPECIALIZATION.id)
+
+    expect(select).toHaveValue(STYLING_SPECIALIZATION.id)
+    expect(select).toHaveAttribute('title', 'Укладка')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Найти' }))
+
+    expect(onSearch).toHaveBeenCalledTimes(1)
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        specializationId: STYLING_SPECIALIZATION.id,
       })
     )
   })
