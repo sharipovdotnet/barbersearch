@@ -131,7 +131,7 @@ describe('SearchForm, подсказки города', () => {
 
     render(<SearchForm isSearching={false} onSearch={onSearch} />)
 
-    const input = screen.getByLabelText('Город салона')
+    const input = screen.getByLabelText('Город')
 
     await userEvent.type(input, 'Екат')
 
@@ -159,7 +159,7 @@ describe('SearchForm, подсказки города', () => {
 
     render(<SearchForm isSearching={false} onSearch={onSearch} />)
 
-    const input = screen.getByLabelText('Город салона')
+    const input = screen.getByLabelText('Город')
 
     await userEvent.type(input, 'Ек')
     await screen.findByRole('option', { name: 'г. Екатеринбург' })
@@ -205,7 +205,7 @@ describe('SearchForm, подсказки города', () => {
 
     render(<SearchForm isSearching={false} onSearch={onSearch} />)
 
-    const input = screen.getByLabelText('Город салона')
+    const input = screen.getByLabelText('Город')
 
     await userEvent.type(input, 'Канзас-Сити')
 

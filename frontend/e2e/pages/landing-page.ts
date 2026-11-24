@@ -17,7 +17,9 @@ export class LandingPage {
   }
 
   get cityInput(): Locator {
-    return this.page.getByLabel('Город салона')
+    // `exact: true` обязателен: подпись списка подсказок — «Подсказки города»,
+    // и без точного совпадения локатор находит и поле, и список.
+    return this.page.getByLabel('Город', { exact: true })
   }
 
   get submit(): Locator {
