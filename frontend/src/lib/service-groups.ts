@@ -1,4 +1,3 @@
-import { SERVICE_CATEGORY_ORDER } from '@/lib/barber-profile-labels'
 import type { HairServiceOption } from '@/lib/hair-services'
 import type { SpecializationOption } from '@/lib/specializations'
 
@@ -17,10 +16,10 @@ export type HairServiceGroup = {
 /**
  * Раскладывает плоский справочник услуг по специализациям.
  *
- * Порядок групп задаёт `SERVICE_CATEGORY_ORDER`: сначала категория специализации
- * (от стрижки к «Другому»), затем порядок API внутри категории (по имени). Так
- * селект читается сверху вниз одинаково на всех экранах, независимо от порядка
- * ответа. Пустые группы не возвращаются.
+ * Порядок групп — по алфавиту названий специализаций (русская локаль), при
+ * совпадении имён — по `id`: так порядок не зависит ни от категории, ни от
+ * порядка ответа API, и селект читается сверху вниз одинаково на всех экранах.
+ * Пустые группы не возвращаются.
  *
  * Услуги, чья специализация не пришла в публичном списке (например, её выключили
  * между двумя запросами), не теряются: они собираются в одну последнюю группу с
@@ -50,19 +49,20 @@ export function groupHairServices(
     }
   }
 
+  // Сортируем копию: входной массив специализаций принадлежит вызывающему коду.
+  const sortedSpecializations = [...specializations].sort((left, right) => {
+    const byName = left.name.localeCompare(right.name, 'ru')
+
+    return byName !== 0 ? byName : left.id.localeCompare(right.id)
+  })
+
   const groups: HairServiceGroup[] = []
 
-  for (const category of SERVICE_CATEGORY_ORDER) {
-    for (const specialization of specializations) {
-      if (specialization.category !== category) {
-        continue
-      }
+  for (const specialization of sortedSpecializations) {
+    const group = bySpecialization.get(specialization.id)
 
-      const group = bySpecialization.get(specialization.id)
-
-      if (group) {
-        groups.push({ specialization, services: group })
-      }
+    if (group) {
+      groups.push({ specialization, services: group })
     }
   }
 

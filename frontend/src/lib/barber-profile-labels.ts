@@ -14,16 +14,6 @@ export type ServiceCategory =
   | 'HairTreatment'
   | 'Other'
 
-/** Порядок групп в селектах: от стрижки к «Другому». */
-export const SERVICE_CATEGORY_ORDER: readonly ServiceCategory[] = [
-  'Haircut',
-  'Beard',
-  'Coloring',
-  'Styling',
-  'HairTreatment',
-  'Other',
-]
-
 /** Категория услуги: `Haircut` → «Стрижка». */
 export const SERVICE_CATEGORY_LABELS: Record<ServiceCategory, string> = {
   Haircut: 'Стрижка',

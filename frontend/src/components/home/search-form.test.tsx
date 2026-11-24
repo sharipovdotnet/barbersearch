@@ -289,7 +289,7 @@ describe('SearchForm, подсказки города', () => {
  * по-прежнему id услуги, а «Любая услуга» стоит вне групп.
  */
 describe('SearchForm, группировка услуг', () => {
-  it('раскладывает услуги по <optgroup>, сохраняя порядок групп и строк', async () => {
+  it('раскладывает услуги по <optgroup>: группы по алфавиту, строки в порядке API', async () => {
     useGroupedCatalogs()
 
     render(<SearchForm isSearching={false} onSearch={vi.fn()} />)
@@ -302,6 +302,7 @@ describe('SearchForm, группировка услуг', () => {
 
     const groups = within(select).getAllByRole('group')
 
+    // Группы идут по алфавиту названий специализаций, «Прочие услуги» — последней.
     expect(groups.map((group) => group.getAttribute('label'))).toStrictEqual([
       'Барберинг',
       'Борода',

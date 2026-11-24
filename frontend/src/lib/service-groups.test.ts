@@ -6,9 +6,9 @@ import { groupHairServices } from '@/lib/service-groups'
 import type { SpecializationOption } from '@/lib/specializations'
 
 /**
- * Чистая группировка услуг: порядок групп — по категории специализации, внутри
- * категории — порядок API, внутри группы — порядок услуг API, незнакомые
- * специализации — одной хвостовой группой.
+ * Чистая группировка услуг: порядок групп — по алфавиту названий специализаций,
+ * внутри группы — порядок услуг API, незнакомые специализации — одной хвостовой
+ * группой.
  */
 
 function specialization(
@@ -35,26 +35,29 @@ function service(
 }
 
 describe('groupHairServices', () => {
-  it('ставит группы в порядке SERVICE_CATEGORY_ORDER, а не в порядке входа', () => {
+  it('ставит группы по алфавиту названий, а не по категории специализации', () => {
+    // Входной порядок совпадает со старым порядком категорий (Haircut, Beard,
+    // Other), поэтому алфавитный результат («Афро», «Борода», «Стрижка») от него
+    // отличается и ловит возврат к категорийной сортировке.
     const specializations = [
-      specialization('other', 'Бритьё головы', 'Other'),
+      specialization('haircut', 'Стрижка', 'Haircut'),
       specialization('beard', 'Борода', 'Beard'),
-      specialization('haircut', 'Барберинг', 'Haircut'),
+      specialization('other', 'Афро', 'Other'),
     ]
     const services = [
-      service('other-service', 'Бритьё головы', 'other', 'Other'),
+      service('haircut-service', 'Классическая стрижка', 'haircut', 'Haircut'),
       service('beard-service', 'Оформление бороды', 'beard', 'Beard'),
-      service('haircut-service', 'Стрижка', 'haircut', 'Haircut'),
+      service('other-service', 'Афрокудри', 'other', 'Other'),
     ]
 
     const groups = groupHairServices(services, specializations)
 
     expect(
       groups.map((group) => group.specialization?.id)
-    ).toStrictEqual(['haircut', 'beard', 'other'])
+    ).toStrictEqual(['other', 'beard', 'haircut'])
   })
 
-  it('внутри категории сохраняет порядок специализаций из API', () => {
+  it('сортирует специализации по названию, а не по порядку API', () => {
     const specializations = [
       specialization('haircut-2', 'Фейд', 'Haircut'),
       specialization('haircut-1', 'Барберинг', 'Haircut'),
@@ -66,9 +69,10 @@ describe('groupHairServices', () => {
 
     const groups = groupHairServices(services, specializations)
 
+    // API вернул «Фейд» раньше «Барберинга», но алфавит сильнее порядка ответа.
     expect(
       groups.map((group) => group.specialization?.id)
-    ).toStrictEqual(['haircut-2', 'haircut-1'])
+    ).toStrictEqual(['haircut-1', 'haircut-2'])
   })
 
   it('сохраняет порядок услуг внутри группы и пропускает пустые группы', () => {
