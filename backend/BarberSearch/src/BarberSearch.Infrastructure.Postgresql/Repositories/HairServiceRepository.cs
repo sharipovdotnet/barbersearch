@@ -53,7 +53,6 @@ public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairSe
                 x.Id,
                 x.Name,
                 x.Category,
-                x.SpecializationId,
                 x.DefaultDurationMinutes,
                 x.Description,
                 x.IsActive,
@@ -85,19 +84,11 @@ public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairSe
     }
 
     public async Task<Result<IReadOnlyList<HairService>, Failure>> GetActiveAsync(
-        Guid? specializationId = null,
         CancellationToken cancellationToken = default)
     {
-        var query = Context.HairServices
+        var hairServices = await Context.HairServices
             .AsNoTracking()
-            .Where(x => x.IsActive);
-
-        if (specializationId is { } target)
-        {
-            query = query.Where(x => x.SpecializationId == target);
-        }
-
-        var hairServices = await query
+            .Where(x => x.IsActive)
             .OrderBy(x => x.Category)
             .ThenBy(x => x.Name)
             .ToListAsync(cancellationToken);
@@ -157,27 +148,6 @@ public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairSe
             .ToListAsync(cancellationToken);
 
         return hairServices;
-    }
-
-    public async Task<Result<int, Failure>> CountActiveBarberServicesWithoutSpecializationAsync(
-        Guid hairServiceId,
-        Guid specializationId,
-        CancellationToken cancellationToken = default)
-    {
-        // Считаем включённые прайс-строки, у профиля которых нет целевой специализации.
-        // Профиль не фильтруется по is_active: выключенный профиль можно включить обратно,
-        // и тогда правило «услуга только из своих направлений» снова стало бы ложью.
-        var count = await Context.BarberServices
-            .AsNoTracking()
-            .CountAsync(
-                link => link.HairServiceId == hairServiceId
-                    && link.IsActive
-                    && !Context.BarberSpecializations.Any(linkSpecialization =>
-                        linkSpecialization.BarberProfileId == link.BarberProfileId
-                        && linkSpecialization.SpecializationId == specializationId),
-                cancellationToken);
-
-        return count;
     }
 
     public async Task<Result<bool, Failure>> ExistsAsync(

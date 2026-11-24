@@ -38,21 +38,17 @@ public class HairServicesController : ApiController
     /// Анонимное действие: классовый <c>[Authorize(AdminOnly)]</c> перекрыт
     /// <c>[AllowAnonymous]</c>. Лимит — <c>reads</c> 120 запросов в минуту на адрес клиента.
     /// Ответ — голый JSON-массив без пагинации; порядок — категория, затем имя.
-    /// <paramref name="specializationId"/> — двухшаговый выбор: клиент сначала берёт
-    /// направление, затем запрашивает только его услуги.
     /// </remarks>
-    /// <param name="specializationId">Направление или <c>null</c> для всего справочника.</param>
     /// <param name="handler">Обработчик запроса.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
     [AllowAnonymous]
     [EnableRateLimiting(RateLimitSettings.ReadsPolicyName)]
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<HairServiceResponse>>> GetAll(
-        [FromQuery] Guid? specializationId,
         [FromServices] IQueryHandler<IReadOnlyList<HairServiceResponse>, GetHairServicesQuery> handler,
         CancellationToken cancellationToken)
         => ToActionResult(await handler.Handle(
-            new GetHairServicesQuery(specializationId),
+            new GetHairServicesQuery(),
             cancellationToken));
 
     /// <summary>
@@ -67,7 +63,6 @@ public class HairServicesController : ApiController
             new CreateHairServiceCommand(
                 request.Name,
                 request.Category,
-                request.SpecializationId,
                 request.DefaultDurationMinutes,
                 request.Description),
             cancellationToken));
@@ -75,10 +70,6 @@ public class HairServicesController : ApiController
     /// <summary>
     /// Меняет услугу каталога. Категория не меняется — это правило Application.
     /// </summary>
-    /// <remarks>
-    /// Направление менять можно, но только пока услугу не предлагает барбер без новой
-    /// специализации: такой перевод отвечает <c>409</c>.
-    /// </remarks>
     [HttpPut("{hairServiceId:guid}")]
     public async Task<ActionResult> Update(
         Guid hairServiceId,
@@ -90,8 +81,7 @@ public class HairServicesController : ApiController
                 hairServiceId,
                 request.Name,
                 request.Description,
-                request.DefaultDurationMinutes,
-                request.SpecializationId),
+                request.DefaultDurationMinutes),
             cancellationToken));
 
     /// <summary>

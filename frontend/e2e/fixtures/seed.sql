@@ -401,31 +401,14 @@ ON CONFLICT (id) DO UPDATE SET
     reviewed_by_user_id = NULL,
     updated_at = now();
 
--- Специализации (направления) фикстур. Услуга обязана принадлежать направлению,
--- поэтому строки вставляются до услуг. Обе выключены: активная строка попала бы
--- в публичный справочник и сдвинула бы фильтры и счётчики витринных спеков.
-INSERT INTO specializations
-    (id, name, description, is_active, created_at, updated_at)
-VALUES
-    ('9e600000-0000-4000-8000-000000000001', 'E2E Фейд',
-     'Выключенная специализация E2E-фикстур', false, now(), now()),
-    ('9e600000-0000-4000-8000-000000000002', 'E2E Борода',
-     'Выключенная специализация E2E-фикстур', false, now(), now())
-ON CONFLICT (id) DO UPDATE SET
-    name = EXCLUDED.name,
-    description = EXCLUDED.description,
-    is_active = EXCLUDED.is_active,
-    updated_at = now();
-
 INSERT INTO hair_services
-    (id, name, description, category, specialization_id, default_duration_minutes,
+    (id, name, description, category, default_duration_minutes,
      is_active, created_at, updated_at)
 VALUES
-    ('9e500000-0000-4000-8000-000000000001', 'E2E Стрижка', 'Услуга E2E-фикстур', 1,
-     '9e600000-0000-4000-8000-000000000001', 30, true, now(), now())
+    ('9e500000-0000-4000-8000-000000000001', 'E2E Стрижка', 'Услуга E2E-фикстур', 1, 30,
+     true, now(), now())
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
-    specialization_id = EXCLUDED.specialization_id,
     is_active = EXCLUDED.is_active,
     updated_at = now();
 
@@ -440,18 +423,31 @@ ON CONFLICT (id) DO UPDATE SET
 -- `usageCount` = 0 у выключенных строк) и `admin-catalogue-mutations.spec.ts`
 -- (выключение/включение, переименование, правка контактов).
 INSERT INTO hair_services
-    (id, name, description, category, specialization_id, default_duration_minutes,
+    (id, name, description, category, default_duration_minutes,
      is_active, created_at, updated_at)
 VALUES
     ('9e500000-0000-4000-8000-000000000002', 'E2E Борода',
-     'Выключенная услуга E2E-фикстур', 2,
-     '9e600000-0000-4000-8000-000000000002', 45, false, now(), now())
+     'Выключенная услуга E2E-фикстур', 2, 45, false, now(), now())
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     description = EXCLUDED.description,
     category = EXCLUDED.category,
-    specialization_id = EXCLUDED.specialization_id,
     default_duration_minutes = EXCLUDED.default_duration_minutes,
+    is_active = EXCLUDED.is_active,
+    updated_at = now();
+
+-- Специализации: публичный справочник фикстур пуст, поэтому здесь только выключенные
+-- строки — на витрине их нет, а админский каталог видит.
+INSERT INTO specializations
+    (id, name, description, is_active, created_at, updated_at)
+VALUES
+    ('9e600000-0000-4000-8000-000000000001', 'E2E Фейд',
+     'Выключенная специализация E2E-фикстур', false, now(), now()),
+    ('9e600000-0000-4000-8000-000000000002', 'E2E Борода',
+     'Выключенная специализация E2E-фикстур', false, now(), now())
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
     is_active = EXCLUDED.is_active,
     updated_at = now();
 

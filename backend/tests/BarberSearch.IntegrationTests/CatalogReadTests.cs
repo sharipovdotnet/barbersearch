@@ -40,24 +40,20 @@ public sealed class CatalogReadTests
         var alphaHaircut = await data.CreateHairServiceAsync(
             "Alpha Haircut",
             ServiceCategory.Haircut,
-            defaultDurationMinutes: 45,
-            specializationId: alphaSpecialization.Id);
+            defaultDurationMinutes: 45);
         var betaHaircut = await data.CreateHairServiceAsync(
             "Beta Haircut",
             ServiceCategory.Haircut,
-            defaultDurationMinutes: 30,
-            specializationId: alphaSpecialization.Id);
+            defaultDurationMinutes: 30);
         var beard = await data.CreateHairServiceAsync(
             "Beard Trim",
             ServiceCategory.Beard,
-            defaultDurationMinutes: 30,
-            specializationId: zetaSpecialization.Id);
+            defaultDurationMinutes: 30);
         await data.CreateHairServiceAsync(
             "Hidden Haircut",
             ServiceCategory.Haircut,
             defaultDurationMinutes: 30,
-            isActive: false,
-            specializationId: alphaSpecialization.Id);
+            isActive: false);
 
         using var specializations = JsonDocument.Parse(
             await ReadBodyAsync(app.Client, "api/specializations"));
@@ -83,19 +79,8 @@ public sealed class CatalogReadTests
         var first = hairServiceRows[0];
         Assert.Equal("Alpha Haircut", first.GetProperty("name").GetString());
         Assert.Equal("Haircut", first.GetProperty("category").GetString());
-        Assert.Equal(alphaSpecialization.Id, first.GetProperty("specializationId").GetGuid());
         Assert.Equal(45, first.GetProperty("defaultDurationMinutes").GetInt32());
         Assert.Equal("About Alpha Haircut", first.GetProperty("description").GetString());
-
-        // Двухшаговый выбор витрины: фильтр по направлению отдаёт только его услуги.
-        using var beardServices = JsonDocument.Parse(
-            await ReadBodyAsync(
-                app.Client,
-                $"api/hair-services?specializationId={zetaSpecialization.Id}"));
-        Assert.Equal(
-            new[] { beard.Id },
-            beardServices.RootElement.EnumerateArray()
-                .Select(row => row.GetProperty("id").GetGuid()));
     }
 
     private static async Task<string> ReadBodyAsync(HttpClient client, string url)

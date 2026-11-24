@@ -135,8 +135,7 @@ public sealed class SearchFiltersTests
         var hairService = await data.CreateHairServiceAsync(
             "Комбо-услуга",
             ServiceCategory.Beard,
-            defaultDurationMinutes: 30,
-            specializationId: specialization.Id);
+            defaultDurationMinutes: 30);
         await data.AttachHairServiceAsync(profile.Id, hairService.Id);
 
         var moscow = Uri.EscapeDataString("Москва");
@@ -172,23 +171,6 @@ public sealed class SearchFiltersTests
                 $"api/barbers?city={moscow}&language=Ru"
                 + $"&specializationId={specialization.Id}"
                 + $"&hairServiceId={hairService.Id}"));
-
-        // Услуга принадлежит ровно одному направлению: несогласованная пара — 400,
-        // иначе клиент получил бы пустую страницу и не понял, что фильтры противоречат.
-        var otherSpecialization = await data.CreateSpecializationAsync("Другое направление");
-        var otherService = await data.CreateHairServiceAsync(
-            "Другая услуга",
-            ServiceCategory.Haircut,
-            defaultDurationMinutes: 30,
-            specializationId: otherSpecialization.Id);
-
-        using var mismatch = await app.Client.GetAsync(
-            $"api/barbers?specializationId={specialization.Id}"
-            + $"&hairServiceId={otherService.Id}");
-        Assert.Equal(HttpStatusCode.BadRequest, mismatch.StatusCode);
-        Assert.Contains(
-            "barberSearch.filter.mismatch",
-            await mismatch.Content.ReadAsStringAsync());
     }
 
     private static string AdditionalServiceUrl(string term)

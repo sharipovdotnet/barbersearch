@@ -42,14 +42,7 @@ public interface IHairServiceRepository
     /// Все активные услуги справочника — для выпадающих списков и фильтров.
     /// Справочник небольшой, постраничная выдача ему не нужна. Читается без отслеживания.
     /// </summary>
-    /// <param name="specializationId">
-    /// Направление (специализация) или <c>null</c> для всего справочника. Двухшаговый выбор
-    /// на витрине: сначала направление, затем только его услуги.
-    /// </param>
-    /// <param name="cancellationToken">Токен отмены.</param>
-    Task<Result<IReadOnlyList<HairService>, Failure>> GetActiveAsync(
-        Guid? specializationId = null,
-        CancellationToken cancellationToken = default);
+    Task<Result<IReadOnlyList<HairService>, Failure>> GetActiveAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Активные услуги категории. Читается без отслеживания.
@@ -65,23 +58,6 @@ public interface IHairServiceRepository
         int page,
         int pageSize,
         bool onlyActive = true,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Сколько активных прайс-строк предлагают услугу профилям без указанной специализации.
-    /// </summary>
-    /// <remarks>
-    /// Проверка смены направления услуги: если счётчик больше нуля, перевод отклоняется
-    /// конфликтом. Учитываются только включённые связи <c>barber_services</c>; профиль
-    /// без требуемой специализации — это и есть нарушение правила «барбер предлагает
-    /// только услуги своих направлений».
-    /// </remarks>
-    /// <param name="hairServiceId">Услуга справочника.</param>
-    /// <param name="specializationId">Новое направление услуги.</param>
-    /// <param name="cancellationToken">Токен отмены.</param>
-    Task<Result<int, Failure>> CountActiveBarberServicesWithoutSpecializationAsync(
-        Guid hairServiceId,
-        Guid specializationId,
         CancellationToken cancellationToken = default);
 
     /// <summary>

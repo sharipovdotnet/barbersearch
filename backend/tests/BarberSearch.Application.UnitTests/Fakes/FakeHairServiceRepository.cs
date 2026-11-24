@@ -1,4 +1,4 @@
-using BarberSearch.Application.Common;
+﻿using BarberSearch.Application.Common;
 using BarberSearch.Application.HairServices;
 using BarberSearch.Contracts.HairServices.Admin;
 using BarberSearch.Domain.HairServices;
@@ -35,9 +35,6 @@ public sealed class FakeHairServiceRepository : IHairServiceRepository
     /// <summary>Поиск после разбора обработчиком: <c>null</c>, если фильтра нет.</summary>
     public string? LastSearch { get; private set; }
 
-    /// <summary>Направление, переданное в <see cref="GetActiveAsync"/>; <c>null</c> — без фильтра.</summary>
-    public Guid? LastSpecializationId { get; private set; }
-
     public void AddExisting(Guid id) => _existingIds.Add(id);
 
     public void AddActive(HairService hairService) => _active.Add(hairService);
@@ -50,22 +47,14 @@ public sealed class FakeHairServiceRepository : IHairServiceRepository
         => Task.FromResult<Result<bool, Failure>>(_existingIds.Contains(id));
 
     public Task<Result<IReadOnlyList<HairService>, Failure>> GetActiveAsync(
-        Guid? specializationId = null,
         CancellationToken cancellationToken = default)
     {
-        LastSpecializationId = specializationId;
-
         if (GetActiveFailure is { } failure)
         {
             return Task.FromResult<Result<IReadOnlyList<HairService>, Failure>>(failure);
         }
 
-        IReadOnlyList<HairService> rows = specializationId is { } target
-            ? _active.Where(service => service.SpecializationId == target).ToList()
-            : _active;
-
-        return Task.FromResult(
-            Result.Success<IReadOnlyList<HairService>, Failure>(rows));
+        return Task.FromResult<Result<IReadOnlyList<HairService>, Failure>>(_active);
     }
 
     public Task<Result<IReadOnlyList<AdminHairServiceResponse>, Failure>> GetAdminListAsync(
@@ -110,21 +99,6 @@ public sealed class FakeHairServiceRepository : IHairServiceRepository
 
     public Task<Result<HairService, Failure>> GetByIdAsync(
         Guid id,
-        CancellationToken cancellationToken = default)
-    {
-        var service = _active.FirstOrDefault(x => x.Id == id);
-
-        return service is null
-            ? Task.FromResult<Result<HairService, Failure>>(new Failure(Error.NotFound(
-                "hairService.notFound",
-                $"Hair service '{id}' was not found.",
-                id)))
-            : Task.FromResult<Result<HairService, Failure>>(service);
-    }
-
-    public Task<Result<int, Failure>> CountActiveBarberServicesWithoutSpecializationAsync(
-        Guid hairServiceId,
-        Guid specializationId,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
 

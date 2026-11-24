@@ -40,12 +40,6 @@ public static class DomainMessages
     public const string SPECIALIZATION_NAME_REQUIRED = "Specialization name cannot be empty.";
 
     /// <summary>
-    /// У услуги каталога не задано направление (специализация).
-    /// </summary>
-    public const string HAIR_SERVICE_SPECIALIZATION_REQUIRED =
-        "Hair service specialization cannot be empty.";
-
-    /// <summary>
     /// Конец интервала не позже его начала.
     /// </summary>
     public const string END_TIME_NOT_AFTER_START = "End time must be after start time.";

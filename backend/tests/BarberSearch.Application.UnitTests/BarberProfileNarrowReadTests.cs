@@ -16,7 +16,6 @@ using BarberSearch.Contracts.BarberProfiles.FindBarberProfileSalon;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfile;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.BarberProfiles.Enums;
-using BarberSearch.Domain.HairServices;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -167,17 +166,9 @@ public class BarberProfileNarrowReadTests
     public async Task AddService_LoadsOnlyServices()
     {
         var (profile, repository, ownerId) = CreateOwner();
-        var specializationId = Guid.CreateVersion7();
-        Assert.True(profile.AddSpecialization(specializationId).IsSuccess);
-
-        var hairService = HairService.Create(
-            "Cut",
-            ServiceCategory.Haircut,
-            specializationId,
-            30).Value;
-
+        var hairServiceId = Guid.CreateVersion7();
         var hairServices = new FakeHairServiceRepository();
-        hairServices.AddActive(hairService);
+        hairServices.AddExisting(hairServiceId);
         var handler = new AddBarberProfileServiceHandler(
             repository,
             hairServices,
@@ -186,12 +177,12 @@ public class BarberProfileNarrowReadTests
             new FakeCurrentUser(ownerId));
 
         var result = await handler.Handle(
-            new AddBarberProfileServiceCommand(profile.Id, hairService.Id, 1500m, 30),
+            new AddBarberProfileServiceCommand(profile.Id, hairServiceId, 1500m, 30),
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(["services"], repository.LoadCalls);
-        Assert.Contains(profile.Services, service => service.HairServiceId == hairService.Id);
+        Assert.Contains(profile.Services, service => service.HairServiceId == hairServiceId);
     }
 
     [Fact]
