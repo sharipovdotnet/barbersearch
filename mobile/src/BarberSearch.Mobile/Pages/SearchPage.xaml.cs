@@ -27,6 +27,11 @@ public partial class SearchPage : ContentPage
     private IDisposable? _visibility;
 
     /// <summary>
+    /// Идёт переход на экран выбора услуги: второй тап не должен открыть его ещё раз.
+    /// </summary>
+    private bool _isNavigating;
+
+    /// <summary>
     /// Создаёт вкладку поиска.
     /// </summary>
     /// <param name="viewModel">Состояние экрана.</param>
@@ -97,6 +102,38 @@ public partial class SearchPage : ContentPage
 
         _viewModel.UseCitySuggestionCommand.Execute(suggestion);
         CityEntry.Unfocus();
+    }
+
+    /// <summary>
+    /// Открывает экран выбора услуги.
+    /// </summary>
+    /// <remarks>
+    /// Выбор услуги — отдельный экран, ему передаётся та же ViewModel, чтобы выбранная
+    /// строка сразу применилась к фильтру. Пока переход идёт, повторный тап игнорируется.
+    /// </remarks>
+    /// <param name="sender">Жест тапа по полю услуги.</param>
+    /// <param name="e">Пустые аргументы жеста.</param>
+    private async void OnHairServiceFieldTapped(object? sender, TappedEventArgs e)
+    {
+        // Пока справочник не готов, поле показывает «Загрузка…»/«Любая услуга»: открывать
+        // пустой список незачем, даже если жест всё же дошёл до отключённого Border.
+        if (_isNavigating || !_viewModel.IsCatalogsEnabled)
+        {
+            return;
+        }
+
+        _isNavigating = true;
+
+        try
+        {
+            await Shell.Current.GoToAsync(
+                HairServiceSelectPage.Route,
+                new Dictionary<string, object> { ["owner"] = _viewModel });
+        }
+        finally
+        {
+            _isNavigating = false;
+        }
     }
 
     /// <summary>

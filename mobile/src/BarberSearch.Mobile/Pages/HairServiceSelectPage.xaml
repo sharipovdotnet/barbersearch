@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="BarberSearch.Mobile.Pages.HairServiceSelectPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:loc="clr-namespace:BarberSearch.Mobile.Localization"
+    xmlns:vm="clr-namespace:BarberSearch.Mobile.Core.ViewModels;assembly=BarberSearch.Mobile.Core"
+    x:DataType="vm:SearchViewModel"
+    Shell.TabBarIsVisible="False"
+    Title="{loc:Translate Key='Услуга'}">
+
+    <!--
+        Услуга выбирается отдельным экраном, а не системным Picker: в MAUI у Picker нет
+        optgroup, поэтому заголовки специализаций живут здесь. «Любая услуга» стоит вне
+        групп — как первый пункт селекта веба: это отсутствие фильтра, а не услуга.
+    -->
+    <Grid Padding="16" RowDefinitions="Auto,*" RowSpacing="8">
+
+        <Border
+            Grid.Row="0"
+            MinimumHeightRequest="44"
+            Padding="12"
+            Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+            StrokeShape="RoundRectangle 10">
+            <Border.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnAnyServiceTapped" />
+            </Border.GestureRecognizers>
+            <Label
+                FontSize="16"
+                Text="{loc:Translate Key='Любая услуга'}"
+                VerticalOptions="Center" />
+        </Border>
+
+        <CollectionView
+            Grid.Row="1"
+            IsGrouped="True"
+            ItemsSource="{Binding HairServiceGroups}"
+            SelectionMode="None">
+
+            <CollectionView.GroupHeaderTemplate>
+                <DataTemplate x:DataType="vm:SearchHairServiceGroup">
+                    <Label
+                        Margin="0,12,0,8"
+                        FontFamily="GeistSemiBold"
+                        FontSize="16"
+                        Text="{Binding Title}" />
+                </DataTemplate>
+            </CollectionView.GroupHeaderTemplate>
+
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="vm:SearchCatalogOption">
+                    <Border
+                        Margin="0,0,0,8"
+                        MinimumHeightRequest="44"
+                        Padding="12"
+                        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                        StrokeShape="RoundRectangle 10">
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnServiceTapped" />
+                        </Border.GestureRecognizers>
+                        <Label
+                            FontSize="16"
+                            LineBreakMode="WordWrap"
+                            Text="{Binding DisplayText}"
+                            VerticalOptions="Center" />
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+
+</ContentPage>

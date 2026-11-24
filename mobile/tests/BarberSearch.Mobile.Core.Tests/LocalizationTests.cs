@@ -20,9 +20,19 @@ public sealed class LocalizationTests
 
         Assert.Equal("Search", Loc.T("Поиск"));
         Assert.Equal("No bookings yet", Loc.T("Пока ни одной записи"));
+        Assert.Equal("Other services", Loc.T("Прочие услуги"));
         Assert.Equal(
             "Booking for 15 November at 18:30 cancelled.",
             Loc.T("Запись на {0} отменена.", "15 November at 18:30"));
+    }
+
+    [Fact]
+    public void HairServiceGroupTexts_English_UseWebWording()
+    {
+        using var _ = UseLocale(Locale.En);
+
+        Assert.Equal("Any service", Loc.T("Любая услуга"));
+        Assert.Equal("Other services", Loc.T("Прочие услуги"));
     }
 
     [Fact]
