@@ -10,9 +10,7 @@ namespace BarberSearch.Application.Specializations.GetSpecializations;
 /// </summary>
 /// <remarks>
 /// Порядок задаёт репозиторий (по имени) — обработчик его сохраняет, чтобы фильтр
-/// на витрине не переставлял строки между запросами. Категория направления не хранится
-/// в БД: она выводится из категорий активных услуг тем же резолвером, которым пользуется
-/// админский справочник.
+/// на витрине не переставлял строки между запросами.
 /// </remarks>
 public sealed class GetSpecializationsHandler
     : IQueryHandler<IReadOnlyList<SpecializationResponse>, GetSpecializationsQuery>
@@ -41,28 +39,11 @@ public sealed class GetSpecializationsHandler
             return result.Error;
         }
 
-        var specializations = result.Value;
-        if (specializations.Count == 0)
-        {
-            return Array.Empty<SpecializationResponse>();
-        }
-
-        var ids = specializations.Select(specialization => specialization.Id).ToList();
-
-        var counts = await _repository.CountActiveServicesByCategoryAsync(ids, cancellationToken);
-        if (counts.IsFailure)
-        {
-            return counts.Error;
-        }
-
-        var categories = SpecializationCategoryResolver.ResolveAll(ids, counts.Value);
-
-        return specializations
+        return result.Value
             .Select(specialization => new SpecializationResponse(
                 specialization.Id,
                 specialization.Name,
-                specialization.Description,
-                categories[specialization.Id]))
+                specialization.Description))
             .ToList();
     }
 }

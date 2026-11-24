@@ -1,5 +1,3 @@
-using BarberSearch.Domain.HairServices;
-
 namespace BarberSearch.Contracts.Specializations.Admin;
 
 /// <summary>
@@ -20,16 +18,9 @@ namespace BarberSearch.Contracts.Specializations.Admin;
 /// «профиль активен и подтверждён». Выключенная строка остаётся на карточках барберов,
 /// поэтому счётчик не обнуляется вместе с флагом.
 /// </param>
-/// <param name="Category">
-/// Категория направления — категория большинства активных услуг; ничья решается меньшим
-/// числовым значением <see cref="ServiceCategory"/>, отсутствие активных услуг даёт
-/// <see cref="ServiceCategory.Other"/>. У выключенной строки категория считается так же:
-/// флаг прячет направление, а не его услуги.
-/// </param>
 public record AdminSpecializationResponse(
     Guid Id,
     string Name,
     string? Description,
     bool IsActive,
-    int UsageCount,
-    ServiceCategory Category);
+    int UsageCount);

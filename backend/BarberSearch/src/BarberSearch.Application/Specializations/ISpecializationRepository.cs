@@ -43,21 +43,6 @@ public interface ISpecializationRepository
     Task<Result<IReadOnlyList<Specialization>, Failure>> GetActiveAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Счётчики активных услуг по категориям для указанных направлений — одним групповым
-    /// запросом на весь список.
-    /// </summary>
-    /// <remarks>
-    /// Одна строка на пару «направление, категория»; выключенные услуги не учитываются.
-    /// Категория направления выводится из счётчиков общим резолвером
-    /// <see cref="SpecializationCategoryResolver"/>, а не вторым запросом на каждую строку.
-    /// </remarks>
-    /// <param name="specializationIds">Направления списка; пустая коллекция — пустой результат.</param>
-    /// <param name="cancellationToken">Токен отмены.</param>
-    Task<Result<IReadOnlyList<ServiceCategoryCount>, Failure>> CountActiveServicesByCategoryAsync(
-        IReadOnlyCollection<Guid> specializationIds,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Специализация по названию — защита от дублей при наполнении справочника.
     /// Сравнение без учёта регистра. Читается без отслеживания.
     /// </summary>
