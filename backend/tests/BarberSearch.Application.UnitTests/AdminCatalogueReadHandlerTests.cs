@@ -231,31 +231,6 @@ public class AdminCatalogueReadHandlerTests
     }
 
     [Fact]
-    public async Task Specialization_rows_keep_the_derived_category()
-    {
-        var id = Guid.NewGuid();
-        var repository = new FakeSpecializationRepository();
-        repository.AddAdminRow(new AdminSpecializationResponse(
-            id,
-            "Blond",
-            "Осветление",
-            IsActive: false,
-            UsageCount: 4,
-            Category: ServiceCategory.Coloring));
-        var handler = new GetAdminSpecializationsHandler(repository);
-
-        var result = await handler.Handle(
-            new GetAdminSpecializationsQuery("all", null),
-            CancellationToken.None);
-
-        // Категория выключенной строки считается так же: флаг прячет направление,
-        // а не его услуги.
-        var row = Assert.Single(result.Value);
-        Assert.Equal(ServiceCategory.Coloring, row.Category);
-        Assert.False(row.IsActive);
-    }
-
-    [Fact]
     public async Task Repository_failure_is_propagated_from_every_endpoint()
     {
         var failure = new Failure(Error.Validation("catalogue.test", "Boom."));

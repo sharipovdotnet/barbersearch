@@ -1685,17 +1685,6 @@ Suggested order:
     администратор перепривязывает их вручную. M:N (услуга в нескольких направлениях) —
     отдельный срез, если направлений-профессий окажется мало.
 
-14. **The direction category is derived from its services** — **decided and implemented
-    2026-11-24.** `specializations` не получает колонку `category`, и отдельного поля `group`
-    нет вовсе: категория направления — это агрегат по его услугам (`HairService.Category`),
-    и справочник отдаёт её вычисленной при чтении. Правило: побеждает категория большинства
-    **активных** услуг; ничья решается меньшим числовым значением `ServiceCategory`
-    (`Haircut = 1` … `Other = 99`); нет активных услуг — `Other`. Правило живёт в одном месте
-    (`SpecializationCategoryResolver`), счётчики читаются одним запросом
-    `GROUP BY specialization_id, category` на весь список, поэтому публичный и админский
-    справочники не дублируют ни запрос, ни сортировку. Служебное направление «Общие услуги»
-    не выделяется: его категория считается по тому же правилу.
-
 ---
 
 ## 13. Working rules for this repo
@@ -2973,8 +2962,7 @@ Read endpoints (added 2026-10-19):
   `all` (default), `active` or `hidden` — `all` by default is the point of the screen, not a
   convenience; `search` is `ILIKE` over the name (salons — name and city) with `%`, `_` and `\`
   escaped, trimmed, and capped at 100 characters. `AdminHairServiceResponse` (with
-  `specializationId` since 2026-11-23), `AdminSpecializationResponse` (with `category` since
-  2026-11-24) and `AdminSalonResponse`
+  `specializationId` since 2026-11-23), `AdminSpecializationResponse` and `AdminSalonResponse`
   carry every edit field plus `isActive` and
   `usageCount` — the number of **active and verified** barber profiles using the row
   (`DISTINCT barber_profile_id` over `barber_services`/`barber_specializations`/`barber_salons`,
@@ -3228,12 +3216,8 @@ Read endpoints (added 2026-10-19):
 - **Public catalogues (2026-10-31, issue-29; specialization link — 2026-11-23).**
   `GET api/specializations` and `GET api/hair-services` are anonymous, `reads`-limited lists of
   active rows — a bare JSON array without pagination (`200 []` for an empty catalogue), ordered by
-  name and by category+name respectively. Contracts: `SpecializationResponse(Id, Name, Description,
-  Category)` and `HairServiceResponse(Id, Name, Category, SpecializationId, DefaultDurationMinutes, Description)`;
-  `Category` of a direction is not stored: it is the category of the majority of its active
-  services, ties go to the lower enum value and no active services means `Other` (§12.14), computed
-  for the whole list by one grouped query. Enums are serialised as strings, so the JSON carries
-  `"category": "Coloring"`, never a number;
+  name and by category+name respectively. Contracts: `SpecializationResponse(Id, Name, Description)`
+  and `HairServiceResponse(Id, Name, Category, SpecializationId, DefaultDurationMinutes, Description)`;
   the handlers read through `GetActiveAsync` and map, no repository filtering in the controller.
   `GET api/hair-services?specializationId=` narrows the list to one direction (the two-step
   «direction → service» picker); an unknown id simply returns `[]`, `Guid.Empty` means no filter.

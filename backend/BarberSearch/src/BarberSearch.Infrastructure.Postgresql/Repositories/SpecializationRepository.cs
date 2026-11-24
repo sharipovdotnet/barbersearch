@@ -47,74 +47,20 @@ public sealed class SpecializationRepository : RepositoryBase<Specialization>, I
         var rows = await query
             .OrderBy(x => x.Name)
             .ThenBy(x => x.Id)
-            .Select(x => new
-            {
+            .Select(x => new AdminSpecializationResponse(
                 x.Id,
                 x.Name,
                 x.Description,
                 x.IsActive,
-                UsageCount = Context.BarberSpecializations.Count(link =>
+                Context.BarberSpecializations.Count(link =>
                     link.SpecializationId == x.Id
                     && Context.BarberProfiles.Any(profile =>
                         profile.Id == link.BarberProfileId
                         && profile.IsActive
-                        && profile.IsVerified))
-            })
+                        && profile.IsVerified))))
             .ToListAsync(cancellationToken);
 
-        var ids = rows.Select(row => row.Id).ToList();
-
-        // Второй запрос групповой, а не по строке списка: категория каждого направления
-        // выводится из счётчиков общим резолвером (без N+1).
-        var counts = await CountActiveServicesByCategoryAsync(ids, cancellationToken);
-        if (counts.IsFailure)
-        {
-            return counts.Error;
-        }
-
-        var categories = SpecializationCategoryResolver.ResolveAll(ids, counts.Value);
-
-        return rows
-            .Select(row => new AdminSpecializationResponse(
-                row.Id,
-                row.Name,
-                row.Description,
-                row.IsActive,
-                row.UsageCount,
-                categories[row.Id]))
-            .ToList();
-    }
-
-    public async Task<Result<IReadOnlyList<ServiceCategoryCount>, Failure>> CountActiveServicesByCategoryAsync(
-        IReadOnlyCollection<Guid> specializationIds,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(specializationIds);
-
-        if (specializationIds.Count == 0)
-        {
-            return Array.Empty<ServiceCategoryCount>();
-        }
-
-        var ids = specializationIds as Guid[] ?? specializationIds.ToArray();
-
-        // Один GROUP BY на весь список: счётчики активных услуг по парам
-        // «направление, категория». Сортировка здесь не нужна — ничью разрешает резолвер.
-        var rows = await Context.HairServices
-            .AsNoTracking()
-            .Where(service => service.IsActive && ids.Contains(service.SpecializationId))
-            .GroupBy(service => new { service.SpecializationId, service.Category })
-            .Select(group => new
-            {
-                group.Key.SpecializationId,
-                group.Key.Category,
-                Count = group.Count()
-            })
-            .ToListAsync(cancellationToken);
-
-        return rows
-            .Select(row => new ServiceCategoryCount(row.SpecializationId, row.Category, row.Count))
-            .ToList();
+        return rows;
     }
 
     public async Task<Result<Specialization, Failure>> GetByIdAsync(
