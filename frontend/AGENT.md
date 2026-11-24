@@ -623,6 +623,14 @@ green; `npm run build` — 2692 modules, entry `index-*.js` 390.80 kB (gzip 128.
 `npm run test:e2e` was **not** rerun (the owner keeps `frontend/e2e/**` for a separate agent); the
 catalogue labels the E2E layer needs are listed in §13 «Admin catalogue».
 
+**Verification snapshot, 2026-11-24 (grouped specialization filter).**
+`npm run lint` — 0 warnings / 0 errors (547 files, 116 rules); `npm test` — 1659 tests in 151 files,
+green; `npm run build` — 2694 modules, entry `index-*.js` 391.98 kB (gzip 128.55 kB), CSS
+`index-*.css` 91.27 kB (gzip 15.57 kB); `npm run check:i18n -- --strict` — 1791 `t()` strings,
+2112 translations, 0 missing, 0 conflicts, 0 visible Russian strings in JSX (419 outside `t()`).
+`npm run test:e2e` was **not** rerun (the owner keeps `frontend/e2e/**` for a separate agent); the
+change is a native `optgroup` inside the unchanged select.
+
 ### 5.1 API proxy
 
 `vite.config.ts` proxies `/api` to `VITE_API_PROXY_TARGET`, default `http://localhost:5243`

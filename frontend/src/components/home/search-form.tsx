@@ -15,10 +15,12 @@ import {
 import type { BarberSearchFilters } from '@/lib/barber-search'
 import {
   LANGUAGE_LABELS,
+  SERVICE_CATEGORY_LABELS,
   type Language,
 } from '@/lib/barber-profile-labels'
 import { scrollToSection } from '@/lib/router'
 import { groupHairServices } from '@/lib/service-groups'
+import { groupSpecializations } from '@/lib/specialization-groups'
 import { cn } from '@/lib/utils'
 
 type SearchFormProps = {
@@ -255,6 +257,17 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
     options: group.services,
   }))
 
+  // Специализации группируются по категориям в каталожном порядке: так список
+  // совпадает с каталогом, а не с алфавитом ответа API. «Любая специализация»
+  // остаётся вне групп — это отсутствие выбора, а не категория.
+  const specializationGroups = groupSpecializations(
+    catalogs.specializations
+  ).map((group) => ({
+    id: group.category,
+    label: t(SERVICE_CATEGORY_LABELS[group.category]),
+    options: group.specializations,
+  }))
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     scrollToSection('barbers')
@@ -344,7 +357,7 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
             emptyLabel={
               isLoading ? t('Загрузка…') : t('Любая специализация')
             }
-            options={catalogs.specializations}
+            groups={specializationGroups}
             className="lg:col-span-4 lg:row-start-2"
             onChange={setSpecializationId}
           />
