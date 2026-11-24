@@ -627,7 +627,8 @@ export const isSalonBarberList = isArrayOf(isSalonBarber)
  *
  * `defaultDurationMinutes` обязателен: диалог добавления услуги в прайс берёт его
  * как стартовое значение, поэтому ответ без поля — битый контракт, а не «почти
- * подходящая» строка.
+ * подходящая» строка. `specializationId` тоже обязателен и непуст: по нему
+ * селект раскладывает услуги по специализациям.
  */
 export function isHairServiceOption(value: unknown): value is HairServiceOption {
   return (
@@ -635,7 +636,8 @@ export function isHairServiceOption(value: unknown): value is HairServiceOption 
     isNonEmptyString(value.id) &&
     isString(value.name) &&
     isServiceCategory(value.category) &&
-    isNumber(value.defaultDurationMinutes)
+    isNumber(value.defaultDurationMinutes) &&
+    isNonEmptyString(value.specializationId)
   )
 }
 

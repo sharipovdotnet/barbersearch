@@ -15,6 +15,8 @@ export type HairServiceOption = {
   name: string
   category: ServiceCategory
   defaultDurationMinutes: number
+  /** Специализация, к которой относится услуга; по ней услуги группируются в селектах. */
+  specializationId: string
 }
 
 /** Активные услуги в порядке сервера (категория, затем имя). */

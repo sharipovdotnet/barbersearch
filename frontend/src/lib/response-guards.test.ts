@@ -452,12 +452,13 @@ describe('guard-ы уведомлений', () => {
   })
 })
 
-describe('isHairServiceOption, длительность по умолчанию', () => {
+describe('isHairServiceOption, длительность и специализация', () => {
   const SERVICE = {
     id: '22222222-2222-4222-8222-222222222222',
     name: 'Стрижка',
     category: 'Haircut',
     defaultDurationMinutes: 45,
+    specializationId: '33333333-3333-4333-8333-333333333333',
   }
 
   it('принимает строку с длительностью и лишними полями', () => {
@@ -470,6 +471,17 @@ describe('isHairServiceOption, длительность по умолчанию'
     expect(defaultDurationMinutes).toBe(45)
     expect(isHairServiceOption(withoutDuration)).toBe(false)
     expect(isHairServiceOption({ ...SERVICE, defaultDurationMinutes: '45' })).toBe(
+      false
+    )
+  })
+
+  it('требует непустую ссылку на специализацию', () => {
+    const { specializationId, ...withoutSpecialization } = SERVICE
+
+    expect(specializationId).toBe(SERVICE.specializationId)
+    expect(isHairServiceOption(withoutSpecialization)).toBe(false)
+    expect(isHairServiceOption({ ...SERVICE, specializationId: '' })).toBe(false)
+    expect(isHairServiceOption({ ...SERVICE, specializationId: null })).toBe(
       false
     )
   })
