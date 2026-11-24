@@ -20,51 +20,61 @@ import {
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
-import { ApiError } from '@/lib/api'
 import {
   createHairService,
   describeAdminCatalogueError,
   updateHairService,
   type AdminHairService,
+  type AdminSpecialization,
 } from '@/lib/admin-catalogue'
-import {
-  SERVICE_CATEGORY_LABELS,
-  type ServiceCategory,
-} from '@/lib/barber-profile-labels'
-
-const CATEGORIES = Object.keys(SERVICE_CATEGORY_LABELS) as ServiceCategory[]
+import { ApiError } from '@/lib/api'
+import { SERVICE_CATEGORY_LABELS } from '@/lib/barber-profile-labels'
 
 /** Границы домена: `Constants.MIN/MAX_DURATION_MINUTES`. */
 const MIN_DURATION = 1
 const MAX_DURATION = 1440
 
+/** Состояние справочника специализаций, загружаемого при открытии диалога. */
+type SpecializationsStatus = 'loading' | 'ready' | 'error'
+
 type FormErrors = {
   name?: string
+  specializationId?: string
   defaultDurationMinutes?: string
 }
 
 /**
  * Создание и правка услуги справочника.
  *
- * Категория выбирается только при создании: домен не даёт её поменять, потому что цена
- * и длительность предложений барберов привязаны к услуге. Длительность проверяется здесь
- * до запроса, но окончательное слово за доменом — его коды показываются у поля.
+ * Категория больше не выбирается: услуга ссылается на специализацию, а категория —
+ * её производное. Список специализаций грузит экран каталога лениво, при открытии
+ * диалога, и отдаёт его сюда вместе со статусом. Пока справочник пуст, форма
+ * не отправляется: подсказка ведёт администратора во вкладку «Специализации».
+ * Специализацию можно менять и при правке — домен это разрешает.
  */
 export function HairServiceDialog({
   mode,
   service,
+  specializations,
+  specializationsStatus,
+  specializationsError,
+  onReloadSpecializations,
   onClose,
   onSaved,
 }: {
   mode: 'create' | 'edit'
   service: AdminHairService | null
+  specializations: AdminSpecialization[]
+  specializationsStatus: SpecializationsStatus
+  specializationsError: string | null
+  onReloadSpecializations: () => void
   onClose: () => void
   onSaved: (message: string) => void
 }) {
   const { t } = useI18n()
   const [name, setName] = useState(service?.name ?? '')
-  const [category, setCategory] = useState<ServiceCategory>(
-    service?.category ?? 'Haircut'
+  const [specializationId, setSpecializationId] = useState(
+    service?.specializationId ?? ''
   )
   const [duration, setDuration] = useState(
     String(service?.defaultDurationMinutes ?? 30)
@@ -73,6 +83,27 @@ export function HairServiceDialog({
   const [errors, setErrors] = useState<FormErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [isPending, setIsPending] = useState(false)
+
+  // Пока справочник грузится, пустой выбор показывается первым доступным:
+  // эффект, синхронизирующий состояние с пропсами, здесь не нужен.
+  const effectiveSpecializationId =
+    specializationId || specializations[0]?.id || ''
+  const selectedSpecialization = specializations.find(
+    (option) => option.id === effectiveSpecializationId
+  )
+  // Строка может исчезнуть из ответа (например, справочник перечитали): показываем
+  // текущую специализацию услуги отдельным вариантом, чтобы селект не был пустым.
+  const isCurrentMissing =
+    service !== null
+    && !specializations.some((option) => option.id === service.specializationId)
+  const isEmptyCatalogue =
+    specializationsStatus === 'ready'
+    && specializations.length === 0
+    && !isCurrentMissing
+  const canSubmit =
+    specializationsStatus === 'ready'
+    && (specializations.length > 0 || isCurrentMissing)
+  const derivedCategory = selectedSpecialization?.category ?? service?.category
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -83,6 +114,10 @@ export function HairServiceDialog({
 
     if (trimmedName === '') {
       nextErrors.name = t('Введите название услуги.')
+    }
+
+    if (effectiveSpecializationId === '') {
+      nextErrors.specializationId = t('Выберите специализацию для услуги.')
     }
 
     if (
@@ -109,11 +144,12 @@ export function HairServiceDialog({
       name: trimmedName,
       description: description.trim() === '' ? null : description.trim(),
       defaultDurationMinutes: minutes,
+      specializationId: effectiveSpecializationId,
     }
 
     try {
       if (mode === 'create') {
-        await createHairService({ ...payload, category })
+        await createHairService(payload)
         onSaved(t('Услуга создана'))
       } else if (service) {
         await updateHairService(service.id, payload)
@@ -121,17 +157,31 @@ export function HairServiceDialog({
       }
     } catch (cause) {
       if (cause instanceof ApiError) {
+        const serverErrors: FormErrors = {}
+
         if (cause.hasCode('hairService.name')) {
-          setErrors({ name: t('Проверьте название услуги.') })
+          serverErrors.name = t('Проверьте название услуги.')
+        }
+
+        if (cause.hasCode('hairService.specializationId')) {
+          serverErrors.specializationId = t('Выберите специализацию для услуги.')
+        }
+
+        if (cause.hasCode('hairService.specialization.notFound')) {
+          serverErrors.specializationId = t(
+            'Специализация не найдена — обновите список.'
+          )
         }
 
         if (cause.hasCode('hairService.defaultDurationMinutes')) {
-          setErrors({
-            defaultDurationMinutes: t('От {min} до {max} минут.', {
-              min: MIN_DURATION,
-              max: MAX_DURATION,
-            }),
-          })
+          serverErrors.defaultDurationMinutes = t(
+            'От {min} до {max} минут.',
+            { min: MIN_DURATION, max: MAX_DURATION }
+          )
+        }
+
+        if (Object.keys(serverErrors).length > 0) {
+          setErrors(serverErrors)
         }
       }
 
@@ -198,46 +248,101 @@ export function HairServiceDialog({
               </FieldError>
             </Field>
 
-            {mode === 'create' ? (
-              <Field>
-                <FieldLabel htmlFor="catalogue-service-category">
-                  {t('Категория')}
-                </FieldLabel>
-                <select
-                  id="catalogue-service-category"
-                  name="category"
-                  value={category}
-                  disabled={isPending}
-                  onChange={(event) =>
-                    setCategory(event.target.value as ServiceCategory)
-                  }
-                  className="h-11 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:h-8"
-                >
-                  {CATEGORIES.map((value) => (
-                    <option key={value} value={value}>
-                      {t(SERVICE_CATEGORY_LABELS[value])}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            ) : (
-              <Field>
-                <FieldLabel htmlFor="catalogue-service-category-readonly">
-                  {t('Категория')}
-                </FieldLabel>
-                <Input
-                  id="catalogue-service-category-readonly"
-                  value={
-                    service ? t(SERVICE_CATEGORY_LABELS[service.category]) : ''
-                  }
-                  readOnly
-                  disabled
-                />
-                <FieldDescription>
-                  {t('Категория не меняется после создания.')}
+            <Field data-invalid={Boolean(errors.specializationId)}>
+              <FieldLabel htmlFor="catalogue-service-specialization">
+                {t('Специализация')}
+              </FieldLabel>
+              <select
+                id="catalogue-service-specialization"
+                name="specializationId"
+                value={effectiveSpecializationId}
+                disabled={isPending || !canSubmit}
+                aria-invalid={Boolean(errors.specializationId)}
+                aria-describedby={
+                  errors.specializationId
+                    ? 'catalogue-service-specialization-error'
+                    : canSubmit
+                      ? 'catalogue-service-specialization-hint'
+                      : undefined
+                }
+                onChange={(event) => {
+                  setSpecializationId(event.target.value)
+                  setErrors((current) => ({
+                    ...current,
+                    specializationId: undefined,
+                  }))
+                  setFormError(null)
+                }}
+                className="h-11 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:h-8"
+              >
+                {specializationsStatus === 'loading' && (
+                  <option value="">
+                    {t('Загружаем специализации…')}
+                  </option>
+                )}
+                {isEmptyCatalogue && (
+                  <option value="">
+                    {t('Справочник специализаций пуст.')}
+                  </option>
+                )}
+                {specializations.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.isActive
+                      ? option.name
+                      : t('{name} (выключена)', { name: option.name })}
+                  </option>
+                ))}
+                {isCurrentMissing && service && (
+                  <option value={service.specializationId}>
+                    {service.specializationName}
+                  </option>
+                )}
+              </select>
+              <FieldError id="catalogue-service-specialization-error">
+                {errors.specializationId}
+              </FieldError>
+
+              {specializationsStatus === 'loading' && (
+                <FieldDescription id="catalogue-service-specialization-hint">
+                  {t('Загружаем специализации…')}
                 </FieldDescription>
-              </Field>
-            )}
+              )}
+
+              {specializationsStatus === 'error' && (
+                <div className="flex flex-col items-start gap-2">
+                  <FieldError>
+                    {specializationsError
+                      ?? t('Не удалось загрузить специализации. Попробуйте ещё раз.')}
+                  </FieldError>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-11 sm:h-8"
+                    disabled={isPending}
+                    onClick={onReloadSpecializations}
+                  >
+                    {t('Повторить')}
+                  </Button>
+                </div>
+              )}
+
+              {isEmptyCatalogue && (
+                <FieldDescription id="catalogue-service-specialization-hint">
+                  {t(
+                    'В справочнике нет специализаций. Создайте специализацию во вкладке «Специализации», чтобы добавить услугу.'
+                  )}
+                </FieldDescription>
+              )}
+
+              {specializationsStatus === 'ready' && derivedCategory && (
+                <FieldDescription id="catalogue-service-specialization-hint">
+                  {t('Категория определяется специализацией: {category}', {
+                    category: t(SERVICE_CATEGORY_LABELS[derivedCategory]),
+                  })}
+                </FieldDescription>
+              )}
+            </Field>
 
             <Field data-invalid={Boolean(errors.defaultDurationMinutes)}>
               <FieldLabel htmlFor="catalogue-service-duration">
@@ -306,7 +411,7 @@ export function HairServiceDialog({
             <Button
               type="submit"
               className="h-11 sm:h-8"
-              disabled={isPending}
+              disabled={isPending || !canSubmit}
               aria-busy={isPending}
             >
               {isPending && (

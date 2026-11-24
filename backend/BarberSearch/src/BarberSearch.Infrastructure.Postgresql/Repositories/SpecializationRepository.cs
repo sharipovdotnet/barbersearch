@@ -43,7 +43,8 @@ public sealed class SpecializationRepository : RepositoryBase<Specialization>, I
         }
 
         // Выключенная строка остаётся на карточках барберов, поэтому счётчик считает связи
-        // с активными подтверждёнными профилями, а не «видимые» строки.
+        // с активными подтверждёнными профилями, а не «видимые» строки. Категория —
+        // свойство самой специализации: у услуги своего поля категории нет.
         var rows = await query
             .OrderBy(x => x.Name)
             .ThenBy(x => x.Id)
@@ -57,7 +58,8 @@ public sealed class SpecializationRepository : RepositoryBase<Specialization>, I
                     && Context.BarberProfiles.Any(profile =>
                         profile.Id == link.BarberProfileId
                         && profile.IsActive
-                        && profile.IsVerified))))
+                        && profile.IsVerified)),
+                x.Category))
             .ToListAsync(cancellationToken);
 
         return rows;

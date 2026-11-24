@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using BarberSearch.Contracts.Bookings.AddBookingBarberNote;
 using BarberSearch.Contracts.Bookings.CreateBooking;
 using BarberSearch.Contracts.Common;
@@ -36,6 +37,15 @@ namespace BarberSearch.IntegrationTests;
 public sealed class AdminAuditCoverageTests
 {
     private const string ENDPOINT = "api/admin/audit";
+
+    /// <summary>
+    /// API принимает перечисления только строками (<c>allowIntegerValues: false</c>),
+    /// поэтому запрос с категорией специализации сериализуется этим конвертером.
+    /// </summary>
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
 
     private readonly PostgresFixture _database;
 
@@ -147,7 +157,9 @@ public sealed class AdminAuditCoverageTests
                    $"api/specializations/{specialization.Id}",
                    new RenameSpecializationRequest(
                        "Coverage Fade 2",
-                       $"About {specialization.Name}")))
+                       specialization.Category,
+                       $"About {specialization.Name}"),
+                   JsonOptions))
         {
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }
@@ -324,7 +336,9 @@ public sealed class AdminAuditCoverageTests
                    $"api/specializations/{specialization.Id}",
                    new RenameSpecializationRequest(
                        "Filter Fade 2",
-                       $"About {specialization.Name}")))
+                       specialization.Category,
+                       $"About {specialization.Name}"),
+                   JsonOptions))
         {
             Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         }

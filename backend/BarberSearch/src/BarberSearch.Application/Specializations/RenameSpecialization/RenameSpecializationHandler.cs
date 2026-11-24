@@ -28,6 +28,7 @@ public class RenameSpecializationHandler : ICommandHandler<RenameSpecializationC
     /// Новое имя уникально без учёта регистра и пробелов. Смена только регистра
     /// переименованием не считается — иначе запись конфликтовала бы сама с собой.
     /// Окончательная защита — уникальный индекс <c>ux_specializations_name</c>.
+    /// Категория меняется свободно и пишется тем же сохранением, что и имя.
     /// </remarks>
     public async Task<UnitResult<Failure>> Handle(
         RenameSpecializationCommand command,
@@ -77,6 +78,12 @@ public class RenameSpecializationHandler : ICommandHandler<RenameSpecializationC
         if (updated.IsFailure)
         {
             return updated.Error;
+        }
+
+        var categoryChanged = specialization.ChangeCategory(command.Category);
+        if (categoryChanged.IsFailure)
+        {
+            return categoryChanged.Error;
         }
 
         var saved = await _repository.UpdateAsync(specialization, cancellationToken);

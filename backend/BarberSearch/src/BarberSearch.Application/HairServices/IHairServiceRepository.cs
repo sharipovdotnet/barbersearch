@@ -13,20 +13,20 @@ public interface IHairServiceRepository
 {
     /// <summary>
     /// Админский справочник услуг: полный список, включая выключенные строки, с фильтром
-    /// статуса и поиском по названию.
+    /// статуса и поиском по названию услуги или её специализации.
     /// </summary>
     /// <remarks>
-    /// Читается без отслеживания; порядок — категория, название, идентификатор. Поиск
-    /// идёт через <c>ILIKE</c> с экранированием <c>%</c>, <c>_</c> и <c>\</c>, поэтому символы
-    /// шаблона остаются литералами. Страниц нет: справочник маленький и отдаётся целиком,
+    /// Читается без отслеживания; порядок — категория специализации, название, идентификатор.
+    /// Поиск идёт через <c>ILIKE</c> с экранированием <c>%</c>, <c>_</c> и <c>\</c>, поэтому
+    /// символы шаблона остаются литералами. Страниц нет: справочник маленький и отдаётся целиком,
     /// а созданная строка должна быть видна сразу.
     /// </remarks>
     /// <param name="status">Фильтр статуса строки.</param>
-    /// <param name="search">Поиск по названию; <c>null</c> — без фильтра.</param>
+    /// <param name="search">Поиск по названию услуги или специализации; <c>null</c> — без фильтра.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
     /// <returns>
     /// Строки справочника; <c>usageCount</c> — число активных подтверждённых профилей,
-    /// у которых есть включённая связь с услугой.
+    /// у которых есть включённая связь с услугой; категория — из специализации услуги.
     /// </returns>
     Task<Result<IReadOnlyList<AdminHairServiceResponse>, Failure>> GetAdminListAsync(
         AdminCatalogueStatus status,
@@ -40,21 +40,25 @@ public interface IHairServiceRepository
 
     /// <summary>
     /// Все активные услуги справочника — для выпадающих списков и фильтров.
-    /// Справочник небольшой, постраничная выдача ему не нужна. Читается без отслеживания.
+    /// Справочник небольшой, постраничная выдача ему не нужна. Читается без отслеживания;
+    /// категория приходит из специализации услуги (join <c>specializations</c>).
     /// </summary>
-    Task<Result<IReadOnlyList<HairService>, Failure>> GetActiveAsync(CancellationToken cancellationToken = default);
+    Task<Result<IReadOnlyList<HairServiceCatalogRow>, Failure>> GetActiveAsync(
+        CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Активные услуги категории. Читается без отслеживания.
+    /// Активные услуги категории. Категории у услуги нет, поэтому фильтр идёт по категории
+    /// её специализации. Читается без отслеживания.
     /// </summary>
-    Task<Result<IReadOnlyList<HairService>, Failure>> GetByCategoryAsync(
+    Task<Result<IReadOnlyList<HairServiceCatalogRow>, Failure>> GetByCategoryAsync(
         ServiceCategory category,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Страница услуг: по категории, затем по названию. Читается без отслеживания.
+    /// Страница услуг: по категории специализации, затем по названию.
+    /// Читается без отслеживания.
     /// </summary>
-    Task<Result<IReadOnlyList<HairService>, Failure>> GetPagedAsync(
+    Task<Result<IReadOnlyList<HairServiceCatalogRow>, Failure>> GetPagedAsync(
         int page,
         int pageSize,
         bool onlyActive = true,

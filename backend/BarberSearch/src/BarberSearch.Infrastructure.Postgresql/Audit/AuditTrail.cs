@@ -215,26 +215,29 @@ public sealed class AuditTrail
                     nameof(Salon.ModerationStatus)
                 ]),
 
-            // Услуга каталога: Update меняет имя, описание и длительность, а категория
-            // задаётся только при создании — она нужна в values, а не в changes.
+            // Услуга каталога: Update меняет имя, описание, длительность и специализацию.
+            // Своего поля категории у услуги больше нет — категория выводится из
+            // специализации и меняется вместе со сменой specialization_id.
             // Переименование audit'ится как updated с name from/to.
             [typeof(HairService)] = new(
                 "hair_service",
                 [
                     nameof(HairService.Name),
                     nameof(HairService.Description),
-                    nameof(HairService.Category),
+                    nameof(HairService.SpecializationId),
                     nameof(HairService.DefaultDurationMinutes),
                     nameof(HairService.IsActive)
                 ]),
 
-            // Специализация: Rename меняет имя и описание, активация — isActive.
-            // Переименование аудируется как updated с name from/to.
+            // Специализация: Rename меняет имя и описание, ChangeCategory — категорию,
+            // активация — isActive. Категория в allowlist: услуги получают её из
+            // специализации, поэтому перенос направления меняет категорию всех его услуг.
             [typeof(Specialization)] = new(
                 "specialization",
                 [
                     nameof(Specialization.Name),
                     nameof(Specialization.Description),
+                    nameof(Specialization.Category),
                     nameof(Specialization.IsActive)
                 ]),
 

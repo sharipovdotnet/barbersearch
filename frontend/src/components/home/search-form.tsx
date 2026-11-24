@@ -18,6 +18,7 @@ import {
   type Language,
 } from '@/lib/barber-profile-labels'
 import { scrollToSection } from '@/lib/router'
+import { groupHairServices } from '@/lib/service-groups'
 import { cn } from '@/lib/utils'
 
 type SearchFormProps = {
@@ -97,35 +98,58 @@ function FieldLabel({
   )
 }
 
-type SelectFieldProps = {
+type SelectOption = { id: string; name: string }
+
+type SelectGroup = {
+  /** Ключ `optgroup`: подпись группы не уникальна, специализацию могут назвать как угодно. */
+  id: string
+  label: string
+  options: readonly SelectOption[]
+}
+
+type SelectFieldBaseProps = {
   id: string
   name: string
   label: string
   value: string
   /** Пункт «без фильтра»: «Любой язык», «Загрузка…» и т. п. */
   emptyLabel: string
-  options: readonly { id: string; name: string }[]
   disabled?: boolean
   className?: string
   onChange: (value: string) => void
 }
 
-function SelectField({
-  id,
-  name,
-  label,
-  value,
-  emptyLabel,
-  options,
-  disabled,
-  className,
-  onChange,
-}: SelectFieldProps) {
+/**
+ * Плоский список и группы — взаимоисключающие варианты одного селекта:
+ * `options` рендерится без `optgroup`, `groups` — с ними. Объединение не даёт
+ * передать оба сразу или не передать ни одного.
+ */
+type SelectFieldProps = SelectFieldBaseProps &
+  (
+    | { options: readonly SelectOption[]; groups?: never }
+    | { groups: readonly SelectGroup[]; options?: never }
+  )
+
+function SelectField(props: SelectFieldProps) {
+  const {
+    id,
+    name,
+    label,
+    value,
+    emptyLabel,
+    disabled,
+    className,
+    onChange,
+  } = props
+  const allOptions =
+    props.options ?? props.groups?.flatMap((group) => group.options) ?? []
+
   // Нативное поле не умеет многоточие: длинное название обрежется краем. `title`
   // даёт полное значение при наведении — дешёвая страховка, а не замена списку;
-  // у пустого фильтра подсказка не нужна, там и так «Любой язык».
+  // у пустого фильтра подсказка не нужна, там и так «Любой язык». Подпись ищем и
+  // среди групп: иначе у сгруппированного селекта подсказка осталась бы пустой.
   const selectedLabel =
-    options.find((option) => option.id === value)?.name ?? emptyLabel
+    allOptions.find((option) => option.id === value)?.name ?? emptyLabel
 
   return (
     <FieldShell className={className}>
@@ -141,11 +165,21 @@ function SelectField({
           onChange={(event) => onChange(event.target.value)}
         >
           <option value="">{emptyLabel}</option>
-          {options.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.name}
-            </option>
-          ))}
+          {props.options
+            ? props.options.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))
+            : props.groups?.map((group) => (
+                <optgroup key={group.id} label={group.label}>
+                  {group.options.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
         </select>
         <ChevronDown
           aria-hidden
@@ -206,6 +240,20 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
   const showSpecializations =
     !isReady || catalogs.specializations.length > 0
   const showHairServices = !isReady || catalogs.hairServices.length > 0
+
+  // Услуг в справочнике много, и плоский список не подсказывает, к какой
+  // специализации относится строка: группы по специализациям легче просмотреть.
+  // «Любая услуга» остаётся вне групп — это отсутствие выбора, а не услуга.
+  const hairServiceGroups = groupHairServices(
+    catalogs.hairServices,
+    catalogs.specializations
+  ).map((group) => ({
+    // У хвостовой группы нет id специализации: даём ей постоянный служебный
+    // ключ, чтобы ключи `optgroup` оставались уникальными при любых названиях.
+    id: group.specialization?.id ?? 'hair-services-without-specialization',
+    label: group.specialization?.name ?? t('Прочие услуги'),
+    options: group.services,
+  }))
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -310,7 +358,7 @@ export function SearchForm({ isSearching, onSearch }: SearchFormProps) {
             value={hairServiceId}
             disabled={!isReady}
             emptyLabel={isLoading ? t('Загрузка…') : t('Любая услуга')}
-            options={catalogs.hairServices}
+            groups={hairServiceGroups}
             className="lg:col-span-4 lg:row-start-2"
             onChange={setHairServiceId}
           />

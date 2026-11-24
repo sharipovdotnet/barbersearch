@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import {
   Field,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -25,12 +26,20 @@ import {
   renameSpecialization,
   type AdminSpecialization,
 } from '@/lib/admin-catalogue'
+import { ApiError } from '@/lib/api'
+import {
+  SERVICE_CATEGORY_LABELS,
+  type ServiceCategory,
+} from '@/lib/barber-profile-labels'
+
+const CATEGORIES = Object.keys(SERVICE_CATEGORY_LABELS) as ServiceCategory[]
 
 /**
  * Создание и правка специализации.
  *
  * Имя уникально без учёта регистра: повтор возвращает `409`, и диалог показывает это
- * у формы, а не техническим текстом сервера.
+ * у формы, а не техническим текстом сервера. Категория обязательна и при создании,
+ * и при правке: она задаёт фильтр витрины и категорию услуг специализации.
  */
 export function SpecializationDialog({
   mode,
@@ -45,10 +54,16 @@ export function SpecializationDialog({
 }) {
   const { t } = useI18n()
   const [name, setName] = useState(specialization?.name ?? '')
+  const [category, setCategory] = useState<ServiceCategory>(
+    specialization?.category ?? 'Haircut'
+  )
   const [description, setDescription] = useState(
     specialization?.description ?? ''
   )
   const [nameError, setNameError] = useState<string | undefined>(undefined)
+  const [categoryError, setCategoryError] = useState<string | undefined>(
+    undefined
+  )
   const [formError, setFormError] = useState<string | null>(null)
   const [isPending, setIsPending] = useState(false)
 
@@ -63,11 +78,13 @@ export function SpecializationDialog({
     }
 
     setNameError(undefined)
+    setCategoryError(undefined)
     setFormError(null)
     setIsPending(true)
 
     const payload = {
       name: trimmedName,
+      category,
       description: description.trim() === '' ? null : description.trim(),
     }
 
@@ -80,6 +97,14 @@ export function SpecializationDialog({
         onSaved(t('Специализация переименована'))
       }
     } catch (cause) {
+      if (
+        cause instanceof ApiError
+        && (cause.hasCode('specialization.category')
+          || cause.hasCode('specialization.category.unknown'))
+      ) {
+        setCategoryError(t('Неизвестная категория. Выберите категорию из списка.'))
+      }
+
       setFormError(
         describeAdminCatalogueError(
           cause,
@@ -144,6 +169,44 @@ export function SpecializationDialog({
               />
               <FieldError id="catalogue-specialization-name-error">
                 {nameError}
+              </FieldError>
+            </Field>
+
+            <Field data-invalid={Boolean(categoryError)}>
+              <FieldLabel htmlFor="catalogue-specialization-category">
+                {t('Категория')}
+              </FieldLabel>
+              <select
+                id="catalogue-specialization-category"
+                name="category"
+                value={category}
+                disabled={isPending}
+                aria-invalid={Boolean(categoryError)}
+                aria-describedby={
+                  categoryError
+                    ? 'catalogue-specialization-category-hint catalogue-specialization-category-error'
+                    : 'catalogue-specialization-category-hint'
+                }
+                onChange={(event) => {
+                  setCategory(event.target.value as ServiceCategory)
+                  setCategoryError(undefined)
+                  setFormError(null)
+                }}
+                className="h-11 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:h-8"
+              >
+                {CATEGORIES.map((value) => (
+                  <option key={value} value={value}>
+                    {t(SERVICE_CATEGORY_LABELS[value])}
+                  </option>
+                ))}
+              </select>
+              <FieldDescription id="catalogue-specialization-category-hint">
+                {t(
+                  'Категория специализации определяет фильтр витрины и категорию её услуг.'
+                )}
+              </FieldDescription>
+              <FieldError id="catalogue-specialization-category-error">
+                {categoryError}
               </FieldError>
             </Field>
 

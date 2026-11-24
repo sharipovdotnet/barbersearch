@@ -104,7 +104,8 @@ export const ADMIN_CATALOGUE_EMPTY: Record<CatalogueTab, string> = {
 }
 
 export const ADMIN_CATALOGUE_SEARCH_LABELS: Record<CatalogueTab, string> = {
-  services: 'Поиск по названию',
+  // У услуг поиск идёт по названию услуги и по названию её специализации.
+  services: 'Поиск по названию и специализации',
   specializations: 'Поиск по названию',
   salons: 'Поиск по названию и городу',
 }
@@ -125,11 +126,18 @@ export const ADMIN_CATALOGUE_SEARCH_MAX_LENGTH = 100
 export type AdminHairService = {
   id: string
   name: string
+  /**
+   * Категория не хранится у услуги: сервер вычисляет её из специализации.
+   * Остаётся производным полем для второй строки колонки и подсказки в диалоге.
+   */
   category: ServiceCategory
   defaultDurationMinutes: number
   description: string | null
   isActive: boolean
   usageCount: number
+  /** Специализация услуги: обязательная ссылка, которую можно сменить при правке. */
+  specializationId: string
+  specializationName: string
 }
 
 export type AdminSpecialization = {
@@ -138,6 +146,8 @@ export type AdminSpecialization = {
   description: string | null
   isActive: boolean
   usageCount: number
+  /** Ровно одна категория: определяет фильтр витрины и категорию услуг. */
+  category: ServiceCategory
 }
 
 export type AdminSalon = {
@@ -222,15 +232,22 @@ export async function fetchAdminSalons(options: ListOptions): Promise<AdminSalon
 
 export type HairServiceInput = {
   name: string
-  category: ServiceCategory
+  specializationId: string
   defaultDurationMinutes: number
   description: string | null
 }
 
+/**
+ * Правка услуги: специализацию можно сменить.
+ *
+ * Прежний запрет смены категории не переносим — категория теперь производная
+ * от специализации, и услуга следует за ней.
+ */
 export type HairServiceUpdateInput = {
   name: string
   description: string | null
   defaultDurationMinutes: number
+  specializationId: string
 }
 
 export async function createHairService(
@@ -264,6 +281,8 @@ export async function setHairServiceActive(
 
 export type SpecializationInput = {
   name: string
+  /** Обязательная категория: и при создании, и при правке сервер её принимает. */
+  category: ServiceCategory
   description: string | null
 }
 
@@ -368,6 +387,23 @@ export function describeAdminCatalogueError(
 
   if (cause.status === 403 || cause.hasCode('auth.forbidden')) {
     return t('Раздел доступен только администратору.')
+  }
+
+  // Ссылка на специализацию проверяется доменом до общего 404: у несуществующей
+  // строки справочника ответ бывает и 400, и 404, но текст один и тот же.
+  if (cause.hasCode('hairService.specializationId')) {
+    return t('Выберите специализацию для услуги.')
+  }
+
+  if (cause.hasCode('hairService.specialization.notFound')) {
+    return t('Специализация не найдена — обновите список.')
+  }
+
+  if (
+    cause.hasCode('specialization.category')
+    || cause.hasCode('specialization.category.unknown')
+  ) {
+    return t('Неизвестная категория. Выберите категорию из списка.')
   }
 
   if (cause.status === 404) {

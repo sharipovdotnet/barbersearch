@@ -6,16 +6,20 @@
 # Строка «услуга барбера» (barber_services.id): её принимает только создание брони.
 # Значение приходит в barberServiceId карточки или ответа слотов.
 @barberServiceId = 00000000-0000-0000-0000-000000000000
+# Специализация справочника (specializations.id): услуга принадлежит ровно одной,
+# её категория и есть категория услуги.
+@specializationId = 00000000-0000-0000-0000-000000000000
 
 # Все запросы ниже требуют Bearer-токен: FallbackPolicy закрывает всё, кроме api/auth/*.
 # Каталог (specializations, hair-services, salons) и POST api/users — только admin.
 
-# Справочник: специализация. Повтор с другим регистром вернёт 409.
+# Справочник: специализация. Категория обязательна, повтор имени с другим регистром — 409.
 POST {{host}}/api/specializations
 Content-Type: application/json
 
 {
   "name": "Fade",
+  "category": "Haircut",
   "description": "Fades and tapers"
 }
 
@@ -37,12 +41,13 @@ Content-Type: application/json
 ###
 
 # Каталог услуг: цена и длительность конкретного барбера задаются отдельно.
+# Категории в теле нет: услуга принадлежит специализации, а её категория — категория специализации.
 POST {{host}}/api/hair-services
 Content-Type: application/json
 
 {
   "name": "Men's haircut",
-  "category": "Haircut",
+  "specializationId": "{{specializationId}}",
   "defaultDurationMinutes": 30,
   "description": "Scissors or clipper"
 }

@@ -1,5 +1,6 @@
 using BarberSearch.Domain;
 using BarberSearch.Domain.HairServices;
+using BarberSearch.Domain.Specializations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -8,6 +9,11 @@ namespace BarberSearch.Infrastructure.Postgresql.Configurations;
 /// <summary>
 /// Конфигурация таблицы <c>hair_services</c> — справочника услуг платформы.
 /// </summary>
+/// <remarks>
+/// Категории у услуги нет: она берётся из категории специализации. Ссылка на
+/// <c>specializations</c> обязательна, внешний ключ — <c>Restrict</c>: справочник
+/// деактивируется, а не удаляется, и услуга не должна остаться без категории.
+/// </remarks>
 public class HairServiceConfiguration : IEntityTypeConfiguration<HairService>
 {
     public void Configure(EntityTypeBuilder<HairService> builder)
@@ -17,9 +23,6 @@ public class HairServiceConfiguration : IEntityTypeConfiguration<HairService>
             table.HasCheckConstraint(
                 "ck_hair_services_name",
                 "char_length(btrim(name)) > 0");
-            table.HasCheckConstraint(
-                "ck_hair_services_category",
-                CheckConstraintSql.EnumIn<ServiceCategory>("category"));
             table.HasCheckConstraint(
                 "ck_hair_services_default_duration_minutes",
                 FormattableString.Invariant(
@@ -37,11 +40,23 @@ public class HairServiceConfiguration : IEntityTypeConfiguration<HairService>
 
         builder.Property(x => x.Name).HasColumnName("name").IsRequired();
         builder.Property(x => x.Description).HasColumnName("description");
-        builder.Property(x => x.Category).HasColumnName("category").HasConversion<int>();
+
+        // Это граница другого агрегата: навигации на Specialization нет, только идентификатор.
+        builder.Property(x => x.SpecializationId).HasColumnName("specialization_id");
+
+        // FK без навигации: новая строка hair_services не может ссылаться на несуществующую
+        // специализацию, а услуга без специализации не имеет категории.
+        builder.HasOne<Specialization>()
+            .WithMany()
+            .HasForeignKey(x => x.SpecializationId)
+            .HasConstraintName("fk_hair_services_specializations_specialization_id")
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.Property(x => x.DefaultDurationMinutes).HasColumnName("default_duration_minutes");
         builder.Property(x => x.IsActive).HasColumnName("is_active");
 
-        builder.HasIndex(x => new { x.Category, x.IsActive })
-            .HasDatabaseName("ix_hair_services_category_is_active");
+        // Витрина и админский справочник группируют услуги по специализации.
+        builder.HasIndex(x => x.SpecializationId)
+            .HasDatabaseName("ix_hair_services_specialization_id");
     }
 }

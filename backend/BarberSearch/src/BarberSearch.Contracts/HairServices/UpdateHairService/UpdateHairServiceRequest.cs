@@ -4,11 +4,16 @@ namespace BarberSearch.Contracts.HairServices.UpdateHairService;
 /// Данные запроса на изменение услуги каталога.
 /// </summary>
 /// <remarks>
-/// Категории здесь нет: она не меняется, потому что цена и длительность конкретных
-/// барберов привязаны к услуге, а перевод услуги в другую категорию менял бы смысл
-/// уже сделанных предложений.
+/// Специализацию можно менять: категория услуги вычисляется из неё, поэтому прежний
+/// запрет «категория после создания не меняется» сюда не переносится. Существование
+/// <see cref="SpecializationId"/> проверяет Application до сохранения.
 /// </remarks>
+/// <param name="Name">Название услуги.</param>
+/// <param name="Description">Описание; <c>null</c>, если его нет.</param>
+/// <param name="DefaultDurationMinutes">Длительность по умолчанию, минуты.</param>
+/// <param name="SpecializationId">Специализация, к которой относится услуга.</param>
 public record UpdateHairServiceRequest(
     string Name,
     string? Description,
-    int DefaultDurationMinutes);
+    int DefaultDurationMinutes,
+    Guid SpecializationId);

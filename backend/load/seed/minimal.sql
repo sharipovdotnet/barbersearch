@@ -1,8 +1,9 @@
 -- Minimal database for the booking-idempotency CI check.
 --
--- One active salon, one hair service, one barber profile with one active service
--- and a seven-day working schedule. No 1.2M-row seed and no manifest.sql: the
--- identifiers are fixed, so the CI script can build the harness context itself.
+-- One active salon, one specialization, one hair service of that specialization,
+-- one barber profile with one active service and a seven-day working schedule.
+-- No 1.2M-row seed and no manifest.sql: the identifiers are fixed, so the CI script
+-- can build the harness context itself.
 --
 -- Usage (on a freshly migrated, isolated database):
 --   psql -h 127.0.0.1 -p 5432 -U postgres -d barbersearch_load_ci \
@@ -24,12 +25,20 @@ VALUES
      52.52, 13.405, '+490000000001', 'https://ci.local', true, now(), now())
 ON CONFLICT (id) DO NOTHING;
 
+INSERT INTO specializations
+    (id, name, description, is_active, category, created_at, updated_at)
+VALUES
+    ('88888888-8888-8888-8888-888888888888',
+     'CI Стрижка', 'CI catalog specialization', true, 1, now(), now())
+ON CONFLICT (id) DO NOTHING;
+
 INSERT INTO hair_services
-    (id, name, description, category, default_duration_minutes,
+    (id, name, description, specialization_id, default_duration_minutes,
      is_active, created_at, updated_at)
 VALUES
     ('22222222-2222-2222-2222-222222222222',
-     'CI Haircut', 'CI catalog service', 1, 30, true, now(), now())
+     'CI Haircut', 'CI catalog service',
+     '88888888-8888-8888-8888-888888888888', 30, true, now(), now())
 ON CONFLICT (id) DO NOTHING;
 
 -- Owner of the profile. The password hash is deliberately unusable: the CI

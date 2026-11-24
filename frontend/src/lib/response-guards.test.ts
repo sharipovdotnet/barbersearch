@@ -8,8 +8,10 @@ import {
   isAdminBarber,
   isAdminBarberRow,
   isAdminBooking,
+  isAdminHairServiceRow,
   isAdminPortfolioPhoto,
   isAdminSalonRow,
+  isAdminSpecializationRow,
   isAdminSummary,
   isAdminUser,
   isAdminUserRow,
@@ -31,6 +33,7 @@ import {
   isPortfolioPhoto,
   isSalonDirectoryItem,
   isScheduleConflicts,
+  isSpecializationOption,
   isTelegramLink,
   isUnreadNotificationsPayload,
 } from '@/lib/response-guards'
@@ -449,12 +452,13 @@ describe('guard-ы уведомлений', () => {
   })
 })
 
-describe('isHairServiceOption, длительность по умолчанию', () => {
+describe('isHairServiceOption, длительность и специализация', () => {
   const SERVICE = {
     id: '22222222-2222-4222-8222-222222222222',
     name: 'Стрижка',
     category: 'Haircut',
     defaultDurationMinutes: 45,
+    specializationId: '33333333-3333-4333-8333-333333333333',
   }
 
   it('принимает строку с длительностью и лишними полями', () => {
@@ -469,6 +473,97 @@ describe('isHairServiceOption, длительность по умолчанию'
     expect(isHairServiceOption({ ...SERVICE, defaultDurationMinutes: '45' })).toBe(
       false
     )
+  })
+
+  it('требует непустую ссылку на специализацию', () => {
+    const { specializationId, ...withoutSpecialization } = SERVICE
+
+    expect(specializationId).toBe(SERVICE.specializationId)
+    expect(isHairServiceOption(withoutSpecialization)).toBe(false)
+    expect(isHairServiceOption({ ...SERVICE, specializationId: '' })).toBe(false)
+    expect(isHairServiceOption({ ...SERVICE, specializationId: null })).toBe(
+      false
+    )
+  })
+})
+
+describe('каталог: специализация услуги и категория специализации', () => {
+  const SERVICE = {
+    id: '33333333-3333-4333-8333-333333333333',
+    name: 'Фейд',
+    category: 'Haircut',
+    defaultDurationMinutes: 45,
+    description: null,
+    isActive: true,
+    usageCount: 2,
+    specializationId: '44444444-4444-4444-8444-444444444444',
+    specializationName: 'Барберинг',
+  }
+
+  const SPECIALIZATION = {
+    id: '44444444-4444-4444-8444-444444444444',
+    name: 'Барберинг',
+    description: null,
+    isActive: true,
+    usageCount: 2,
+    category: 'Haircut',
+  }
+
+  it('принимает услугу со ссылкой на специализацию и её названием', () => {
+    expect(isAdminHairServiceRow(SERVICE)).toBe(true)
+    expect(
+      isAdminHairServiceRow({ ...SERVICE, internalNote: 'лишнее' })
+    ).toBe(true)
+  })
+
+  it('отвергает услугу без специализации: диалогу нечего выбрать', () => {
+    const { specializationId: _id, ...withoutId } = SERVICE
+    const { specializationName: _name, ...withoutName } = SERVICE
+
+    expect(_id).toBe(SERVICE.specializationId)
+    expect(_name).toBe(SERVICE.specializationName)
+    expect(isAdminHairServiceRow(withoutId)).toBe(false)
+    expect(isAdminHairServiceRow(withoutName)).toBe(false)
+    expect(isAdminHairServiceRow({ ...SERVICE, specializationId: '' })).toBe(
+      false
+    )
+  })
+
+  it('принимает специализацию с категорией и отвергает без неё', () => {
+    const { category: _category, ...withoutCategory } = SPECIALIZATION
+
+    expect(_category).toBe('Haircut')
+    expect(isAdminSpecializationRow(SPECIALIZATION)).toBe(true)
+    expect(isAdminSpecializationRow(withoutCategory)).toBe(false)
+    expect(
+      isAdminSpecializationRow({ ...SPECIALIZATION, category: 'Massage' })
+    ).toBe(false)
+  })
+
+  it('публичная специализация тоже требует известную категорию', () => {
+    expect(
+      isSpecializationOption({
+        id: SPECIALIZATION.id,
+        name: SPECIALIZATION.name,
+        description: null,
+        category: 'Beard',
+      })
+    ).toBe(true)
+    expect(
+      isSpecializationOption({
+        id: SPECIALIZATION.id,
+        name: SPECIALIZATION.name,
+        description: null,
+      })
+    ).toBe(false)
+    expect(
+      isSpecializationOption({
+        id: SPECIALIZATION.id,
+        name: SPECIALIZATION.name,
+        description: null,
+        category: 'Massage',
+      })
+    ).toBe(false)
   })
 })
 

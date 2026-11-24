@@ -21,10 +21,12 @@ namespace BarberSearch.Web.Controllers;
 /// Специализации — справочник тегов барбера.
 /// </summary>
 /// <remarks>
-/// Имя уникально без учёта регистра: повтор возвращает 409 (проверка в обработчике
-/// плюс уникальный индекс <c>ux_specializations_name</c>). Каталог — админский справочник:
-/// создание, переименование и активация доступны только администратору. Публичное
-/// чтение одно — список активных строк для фильтра витрины (анонимно, без пагинации).
+/// У специализации ровно одна категория услуг: категория услуги каталога берётся
+/// из категории её специализации. Имя уникально без учёта регистра: повтор возвращает
+/// 409 (проверка в обработчике плюс уникальный индекс <c>ux_specializations_name</c>).
+/// Каталог — админский справочник: создание, переименование, смена категории и активация
+/// доступны только администратору. Публичное чтение одно — список активных строк
+/// для фильтра витрины (анонимно, без пагинации).
 /// </remarks>
 [ApiController]
 [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
@@ -60,11 +62,11 @@ public class SpecializationsController : ApiController
         [FromServices] ICommandHandler<Guid, CreateSpecializationCommand> handler,
         CancellationToken cancellationToken)
         => ToCreatedResult(await handler.Handle(
-            new CreateSpecializationCommand(request.Name, request.Description),
+            new CreateSpecializationCommand(request.Name, request.Category, request.Description),
             cancellationToken));
 
     /// <summary>
-    /// Переименовывает специализацию и меняет её описание.
+    /// Переименовывает специализацию, меняет её описание и категорию.
     /// </summary>
     [HttpPut("{specializationId:guid}")]
     public async Task<ActionResult> Rename(
@@ -73,7 +75,11 @@ public class SpecializationsController : ApiController
         [FromServices] ICommandHandler<RenameSpecializationCommand> handler,
         CancellationToken cancellationToken)
         => ToActionResult(await handler.Handle(
-            new RenameSpecializationCommand(specializationId, request.Name, request.Description),
+            new RenameSpecializationCommand(
+                specializationId,
+                request.Name,
+                request.Category,
+                request.Description),
             cancellationToken));
 
     /// <summary>

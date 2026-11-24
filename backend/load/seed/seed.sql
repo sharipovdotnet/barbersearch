@@ -72,12 +72,38 @@ JOIN (VALUES
 WHERE NOT EXISTS (SELECT 1 FROM load_seed_state WHERE key = 'reference-salons')
 ON CONFLICT DO NOTHING;
 
+-- Специализации идут раньше услуг: у услуги обязательный FK на специализацию,
+-- а категория теперь хранится только у специализации.
+INSERT INTO specializations (id, name, description, is_active, category, created_at, updated_at)
+SELECT md5('specialization:' || v.k)::uuid,
+       v.name,
+       'Load-test specialization',
+       true,
+       v.category,
+       now() - interval '1 year',
+       now() - interval '1 year'
+FROM (VALUES
+    (1,  'Barbering',       1),
+    (2,  'Hair Coloring',   3),
+    (3,  'Mens Grooming',   2),
+    (4,  'Beard Design',    2),
+    (5,  'Hair Treatment',  5),
+    (6,  'Bridal Styling',  4),
+    (7,  'Kids Haircut',    1),
+    (8,  'Curly Hair',      1),
+    (9,  'Hair Extensions', 99),
+    (10, 'Scalp Care',      5)
+) AS v(k, name, category)
+WHERE NOT EXISTS (SELECT 1 FROM load_seed_state WHERE key = 'reference-specializations')
+ON CONFLICT DO NOTHING;
+
 INSERT INTO hair_services
-    (id, name, description, category, default_duration_minutes, is_active, created_at, updated_at)
-SELECT md5('hair-service:' || k)::uuid,
+    (id, name, description, specialization_id, default_duration_minutes,
+     is_active, created_at, updated_at)
+SELECT md5('hair-service:' || v.k)::uuid,
        v.name,
        'Load-test catalog service',
-       v.category,
+       md5('specialization:' || m.specialization_key)::uuid,
        v.duration,
        true,
        now() - interval '1 year',
@@ -104,29 +130,15 @@ FROM (VALUES
     (19, 'Clipper Cut',         1, 30),
     (20, 'Head Shave',          2, 30)
 ) AS v(k, name, category, duration)
+JOIN (VALUES
+    (1, 1),
+    (2, 4),
+    (3, 2),
+    (4, 6),
+    (5, 5)
+) AS m(category, specialization_key)
+  ON m.category = v.category
 WHERE NOT EXISTS (SELECT 1 FROM load_seed_state WHERE key = 'reference-hair-services')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO specializations (id, name, description, is_active, created_at, updated_at)
-SELECT md5('specialization:' || k)::uuid,
-       v.name,
-       'Load-test specialization',
-       true,
-       now() - interval '1 year',
-       now() - interval '1 year'
-FROM (VALUES
-    (1,  'Barbering'),
-    (2,  'Hair Coloring'),
-    (3,  'Mens Grooming'),
-    (4,  'Beard Design'),
-    (5,  'Hair Treatment'),
-    (6,  'Bridal Styling'),
-    (7,  'Kids Haircut'),
-    (8,  'Curly Hair'),
-    (9,  'Hair Extensions'),
-    (10, 'Scalp Care')
-) AS v(k, name)
-WHERE NOT EXISTS (SELECT 1 FROM load_seed_state WHERE key = 'reference-specializations')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO load_seed_state (key) VALUES ('reference-salons') ON CONFLICT DO NOTHING;

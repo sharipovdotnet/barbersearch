@@ -7,9 +7,12 @@ import { AdminCataloguePage } from '../pages/admin-catalogue-page'
  * `/admin/catalogue` — чтение: рейл, три вкладки, `?tab=` в URL, фильтр статуса,
  * поиск, `usageCount` и отсутствие пейджера.
  *
- * Фикстуры (`seed.sql`): активная услуга «E2E Стрижка» (её используют 13 профилей),
- * выключенная «E2E Борода», два выключенных салона/специализации. Выключенные строки
- * существуют только для этого экрана — публичные чтения их не отдают.
+ * Фикстуры (`seed.sql`): активная услуга «E2E Стрижка» со специализацией «E2E Фейд»
+ * (её используют 13 профилей), выключенная услуга «E2E Борода» со специализацией
+ * «E2E Борода», два выключенных салона и две выключенные специализации. Категория
+ * услуги больше не хранится у услуги: её вычисляет сервер из специализации, поэтому
+ * в таблице услуг колонка «Специализация», а в таблице специализаций — «Категория».
+ * Выключенные строки существуют только для этого экрана — публичные чтения их не отдают.
  */
 test.use({ storageState: storageStatePath('admin') })
 
@@ -53,6 +56,61 @@ test.describe('админка: каталог', () => {
     await expect(hidden).toContainText('0')
 
     await catalogue.expectNoPager()
+  })
+
+  test('строка услуги показывает специализацию, строка специализации — категорию', async ({
+    page,
+  }) => {
+    const catalogue = new AdminCataloguePage(page)
+
+    await catalogue.goto()
+    await catalogue.waitForRows()
+
+    // Ячейка специализации: название и второй muted-строкой категория специализации.
+    // «E2E Фейд» нет в названии услуги, поэтому это доказывает join, а не совпадение.
+    const active = catalogue.row(fixtures.catalogueLabels.activeHairService)
+    await expect(active).toContainText(fixtures.catalogueLabels.fadeSpecialization)
+    await expect(active.getByText('Стрижка', { exact: true })).toBeVisible()
+
+    const hidden = catalogue.row(fixtures.catalogueLabels.hiddenHairService)
+    await expect(hidden).toContainText(fixtures.catalogueLabels.beardSpecialization)
+    await expect(hidden.getByText('Борода', { exact: true })).toBeVisible()
+
+    await catalogue.selectTab('specializations')
+    await catalogue.waitForRows()
+
+    // «E2E Фейд» не содержит слова «Стрижка»: это отдельная ячейка колонки «Категория».
+    await expect(
+      catalogue
+        .row(fixtures.catalogueLabels.fadeSpecialization)
+        .getByText('Стрижка', { exact: true })
+    ).toBeVisible()
+  })
+
+  test('колонки: «Специализация» вместо «Категория» у услуг и «Категория» у специализаций', async ({
+    page,
+  }, testInfo) => {
+    // Заголовки есть только в табличной ветке: на телефоне колонки перестроены
+    // в карточки с `dt`/`dd`. Значения строк проверяет сценарий выше — он общий.
+    test.skip(
+      testInfo.project.name !== 'desktop-chromium',
+      'columnheader есть только в desktop-таблице'
+    )
+
+    const catalogue = new AdminCataloguePage(page)
+
+    await catalogue.goto()
+    await catalogue.waitForRows()
+
+    // Категория услуги производная: собственной колонки у неё больше нет.
+    await expect(catalogue.columnHeader('Специализация')).toHaveCount(1)
+    await expect(catalogue.columnHeader('Категория')).toHaveCount(0)
+
+    await catalogue.selectTab('specializations')
+    await catalogue.waitForRows()
+
+    await expect(catalogue.columnHeader('Категория')).toHaveCount(1)
+    await expect(catalogue.columnHeader('Специализация')).toHaveCount(0)
   })
 
   test('вкладка живёт в ?tab= и переживает перезагрузку', async ({ page }) => {
@@ -108,7 +166,9 @@ test.describe('админка: каталог', () => {
     await catalogue.expectNoPager()
   })
 
-  test('поиск сужает список по названию и по городу салона', async ({ page }) => {
+  test('поиск сужает список по названию услуги, специализации и городу салона', async ({
+    page,
+  }) => {
     const catalogue = new AdminCataloguePage(page)
 
     await catalogue.goto()
@@ -119,6 +179,18 @@ test.describe('админка: каталог', () => {
     await expect(
       catalogue.row(fixtures.catalogueLabels.hiddenHairService)
     ).toBeVisible()
+
+    // «Фейд» нет в названии услуги «E2E Стрижка»: строку находит join со
+    // специализацией — сервер ищет и по `hair_services.name`, и по `specializations.name`.
+    await catalogue.searchFor('Фейд')
+
+    await expect(
+      catalogue.row(fixtures.catalogueLabels.activeHairService)
+    ).toBeVisible()
+    await expect(catalogue.rows).toHaveCount(1)
+    await expect(
+      catalogue.row(fixtures.catalogueLabels.hiddenHairService)
+    ).toHaveCount(0)
 
     await catalogue.selectTab('salons')
     await catalogue.waitForRows()

@@ -1167,6 +1167,16 @@ public static class ApiErrorCodes
         public const string CategoryInvalid = "hairService.category.invalid";
 
         /// <summary>
+        /// Специализации, указанной при создании или правке услуги, нет в справочнике; <c>404</c>.
+        /// </summary>
+        /// <remarks>
+        /// Ссылка на чужой агрегат проверяется в Application до вставки — в стиле остальных
+        /// reference-проверок (<c>barberProfile.addService.hairServiceNotFound</c>).
+        /// Внешний ключ <c>fk_hair_services_specializations_specialization_id</c> — последняя линия.
+        /// </remarks>
+        public const string SpecializationNotFound = "hairService.specialization.notFound";
+
+        /// <summary>
         /// Номер страницы меньше единицы; <c>400</c>.
         /// </summary>
         public const string PagingPageInvalid = "hairService.paging.page";

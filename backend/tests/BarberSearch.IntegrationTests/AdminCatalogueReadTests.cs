@@ -124,12 +124,17 @@ public sealed class AdminCatalogueReadTests
         await using var app = await TestApp.StartAsync(_database);
         var data = new TestData(app);
 
-        var activeService = await data.CreateHairServiceAsync("Active Service");
-        var hiddenService = await data.CreateHairServiceAsync("Hidden Service", isActive: false);
         var activeSpecialization = await data.CreateSpecializationAsync("Active Specialization");
         var hiddenSpecialization = await data.CreateSpecializationAsync(
             "Hidden Specialization",
             isActive: false);
+        var activeService = await data.CreateHairServiceAsync(
+            "Active Service",
+            specializationId: activeSpecialization.Id);
+        var hiddenService = await data.CreateHairServiceAsync(
+            "Hidden Service",
+            isActive: false,
+            specializationId: activeSpecialization.Id);
         var activeSalon = await data.CreateSalonAsync("Active Salon");
         var hiddenSalon = await data.CreateSalonAsync("Hidden Salon", isActive: false);
 
@@ -222,6 +227,16 @@ public sealed class AdminCatalogueReadTests
             "Фейд_с_подчёркиванием",
             ServiceCategory.Beard);
 
+        // Название этой услуги поискового слова не содержит: строка находится
+        // по названию специализации — отдельного селекта-фильтра в справочнике нет.
+        var beardSpecialization = await data.CreateSpecializationAsync(
+            "Спец Борода",
+            category: ServiceCategory.Beard);
+        var bySpecialization = await data.CreateHairServiceAsync(
+            "Услуга без ключевого слова",
+            ServiceCategory.Beard,
+            specializationId: beardSpecialization.Id);
+
         await SignInAsAdminAsync(app);
 
         // «стрижка» находит «E2E Стрижка»: регистр не важен.
@@ -230,6 +245,13 @@ public sealed class AdminCatalogueReadTests
             Ids(await ReadRowsAsync(
                 app.Client,
                 $"{HAIR_SERVICES}?search={Uri.EscapeDataString("стрижка")}")));
+
+        // «борода» находит услугу по названию её специализации.
+        Assert.Equal(
+            [bySpecialization.Id],
+            Ids(await ReadRowsAsync(
+                app.Client,
+                $"{HAIR_SERVICES}?search={Uri.EscapeDataString("борода")}")));
 
         // «%» — литерал, а не «найти всё»: шаблон находит только строку с символом процента.
         var percentRows = await ReadRowsAsync(
@@ -282,11 +304,25 @@ public sealed class AdminCatalogueReadTests
         var data = new TestData(app);
 
         // Порядок вставки перемешан: проверяем именно сортировку ответа.
-        var beardZeta = await data.CreateHairServiceAsync("Zeta Beard", ServiceCategory.Beard);
+        var beardSpecialization = await data.CreateSpecializationAsync(
+            "Beard Specialization",
+            category: ServiceCategory.Beard);
+        var haircutSpecialization = await data.CreateSpecializationAsync(
+            "Haircut Specialization",
+            category: ServiceCategory.Haircut);
+
+        var beardZeta = await data.CreateHairServiceAsync(
+            "Zeta Beard",
+            ServiceCategory.Beard,
+            specializationId: beardSpecialization.Id);
         var haircutAlpha = await data.CreateHairServiceAsync(
             "Alpha Haircut",
-            ServiceCategory.Haircut);
-        var beardAlpha = await data.CreateHairServiceAsync("Alpha Beard", ServiceCategory.Beard);
+            ServiceCategory.Haircut,
+            specializationId: haircutSpecialization.Id);
+        var beardAlpha = await data.CreateHairServiceAsync(
+            "Alpha Beard",
+            ServiceCategory.Beard,
+            specializationId: beardSpecialization.Id);
 
         var zetaSpecialization = await data.CreateSpecializationAsync("Zeta Specialization");
         var alphaSpecialization = await data.CreateSpecializationAsync("Alpha Specialization");
@@ -297,11 +333,30 @@ public sealed class AdminCatalogueReadTests
 
         await SignInAsAdminAsync(app);
 
+        // Услуги сортируются по категории специализации, затем по названию.
         Assert.Equal(
             [haircutAlpha.Id, beardAlpha.Id, beardZeta.Id],
             Ids(await ReadRowsAsync(app.Client, HAIR_SERVICES)));
+
+        // Категория и специализация приходят из join'а со specializations.
+        var firstService = Row(
+            await ReadRowsAsync(app.Client, HAIR_SERVICES),
+            haircutAlpha.Id);
+        Assert.Equal("Haircut", firstService.GetProperty("category").GetString());
         Assert.Equal(
-            [alphaSpecialization.Id, zetaSpecialization.Id],
+            haircutSpecialization.Id,
+            firstService.GetProperty("specializationId").GetGuid());
+        Assert.Equal(
+            "Haircut Specialization",
+            firstService.GetProperty("specializationName").GetString());
+
+        Assert.Equal(
+            [
+                alphaSpecialization.Id,
+                beardSpecialization.Id,
+                haircutSpecialization.Id,
+                zetaSpecialization.Id
+            ],
             Ids(await ReadRowsAsync(app.Client, SPECIALIZATIONS)));
         Assert.Equal(
             [amsterdamAlpha.Id, berlinAlpha.Id, berlinZeta.Id],

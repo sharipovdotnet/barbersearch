@@ -14,6 +14,11 @@ namespace BarberSearch.Infrastructure.Postgresql.Repositories;
 /// <summary>
 /// Репозиторий агрегата <see cref="HairService"/> — справочника услуг.
 /// </summary>
+/// <remarks>
+/// Категория услуги живёт у специализации, поэтому все чтения справочника джойнят
+/// <c>specializations</c>: фильтр и сортировка по категории, а также ответы API
+/// получают её из одной строки, а не хранят копию у услуги.
+/// </remarks>
 public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairServiceRepository
 {
     public HairServiceRepository(ApplicationDbContext context, AuditTrail? auditTrail = null)
@@ -26,12 +31,16 @@ public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairSe
         string? search,
         CancellationToken cancellationToken = default)
     {
-        var query = Context.HairServices.AsNoTracking();
+        var query =
+            from hairService in Context.HairServices.AsNoTracking()
+            join specialization in Context.Specializations.AsNoTracking()
+                on hairService.SpecializationId equals specialization.Id
+            select new { HairService = hairService, Specialization = specialization };
 
         query = status switch
         {
-            AdminCatalogueStatus.Active => query.Where(x => x.IsActive),
-            AdminCatalogueStatus.Hidden => query.Where(x => !x.IsActive),
+            AdminCatalogueStatus.Active => query.Where(x => x.HairService.IsActive),
+            AdminCatalogueStatus.Hidden => query.Where(x => !x.HairService.IsActive),
             _ => query
         };
 
@@ -39,30 +48,36 @@ public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairSe
         {
             var pattern = LikePattern.Contains(search);
 
-            query = query.Where(x => EF.Functions.ILike(x.Name, pattern, "\\"));
+            // Поиск ищет и по услуге, и по специализации: отдельного селекта-фильтра
+            // по специализации в админском справочнике нет.
+            query = query.Where(x =>
+                EF.Functions.ILike(x.HairService.Name, pattern, "\\")
+                || EF.Functions.ILike(x.Specialization.Name, pattern, "\\"));
         }
 
         // usageCount — не «число связей», а число активных подтверждённых барберов: неактивный
         // или неподтверждённый профиль, а также выключенная связь услуги не считаются,
         // иначе подтверждение «N барберов» соврёт.
         var rows = await query
-            .OrderBy(x => x.Category)
-            .ThenBy(x => x.Name)
-            .ThenBy(x => x.Id)
+            .OrderBy(x => x.Specialization.Category)
+            .ThenBy(x => x.HairService.Name)
+            .ThenBy(x => x.HairService.Id)
             .Select(x => new AdminHairServiceResponse(
-                x.Id,
-                x.Name,
-                x.Category,
-                x.DefaultDurationMinutes,
-                x.Description,
-                x.IsActive,
+                x.HairService.Id,
+                x.HairService.Name,
+                x.Specialization.Category,
+                x.HairService.DefaultDurationMinutes,
+                x.HairService.Description,
+                x.HairService.IsActive,
                 Context.BarberServices.Count(link =>
-                    link.HairServiceId == x.Id
+                    link.HairServiceId == x.HairService.Id
                     && link.IsActive
                     && Context.BarberProfiles.Any(profile =>
                         profile.Id == link.BarberProfileId
                         && profile.IsActive
-                        && profile.IsVerified))))
+                        && profile.IsVerified)),
+                x.HairService.SpecializationId,
+                x.Specialization.Name))
             .ToListAsync(cancellationToken);
 
         return rows;
@@ -83,20 +98,22 @@ public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairSe
         return hairService;
     }
 
-    public async Task<Result<IReadOnlyList<HairService>, Failure>> GetActiveAsync(
+    public async Task<Result<IReadOnlyList<HairServiceCatalogRow>, Failure>> GetActiveAsync(
         CancellationToken cancellationToken = default)
     {
-        var hairServices = await Context.HairServices
-            .AsNoTracking()
-            .Where(x => x.IsActive)
-            .OrderBy(x => x.Category)
-            .ThenBy(x => x.Name)
+        var rows = await (
+                from hairService in Context.HairServices.AsNoTracking()
+                join specialization in Context.Specializations.AsNoTracking()
+                    on hairService.SpecializationId equals specialization.Id
+                where hairService.IsActive
+                orderby specialization.Category, hairService.Name
+                select new HairServiceCatalogRow(hairService, specialization.Category))
             .ToListAsync(cancellationToken);
 
-        return hairServices;
+        return rows;
     }
 
-    public async Task<Result<IReadOnlyList<HairService>, Failure>> GetByCategoryAsync(
+    public async Task<Result<IReadOnlyList<HairServiceCatalogRow>, Failure>> GetByCategoryAsync(
         ServiceCategory category,
         CancellationToken cancellationToken = default)
     {
@@ -108,16 +125,19 @@ public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairSe
                 nameof(category)));
         }
 
-        var hairServices = await Context.HairServices
-            .AsNoTracking()
-            .Where(x => x.IsActive && x.Category == category)
-            .OrderBy(x => x.Name)
+        var rows = await (
+                from hairService in Context.HairServices.AsNoTracking()
+                join specialization in Context.Specializations.AsNoTracking()
+                    on hairService.SpecializationId equals specialization.Id
+                where hairService.IsActive && specialization.Category == category
+                orderby hairService.Name
+                select new HairServiceCatalogRow(hairService, specialization.Category))
             .ToListAsync(cancellationToken);
 
-        return hairServices;
+        return rows;
     }
 
-    public async Task<Result<IReadOnlyList<HairService>, Failure>> GetPagedAsync(
+    public async Task<Result<IReadOnlyList<HairServiceCatalogRow>, Failure>> GetPagedAsync(
         int page,
         int pageSize,
         bool onlyActive = true,
@@ -132,22 +152,27 @@ public sealed class HairServiceRepository : RepositoryBase<HairService>, IHairSe
             return pagingError;
         }
 
-        var query = Context.HairServices.AsNoTracking();
+        var query =
+            from hairService in Context.HairServices.AsNoTracking()
+            join specialization in Context.Specializations.AsNoTracking()
+                on hairService.SpecializationId equals specialization.Id
+            select new { HairService = hairService, Specialization = specialization };
 
         if (onlyActive)
         {
-            query = query.Where(x => x.IsActive);
+            query = query.Where(x => x.HairService.IsActive);
         }
 
-        var hairServices = await query
-            .OrderBy(x => x.Category)
-            .ThenBy(x => x.Name)
-            .ThenBy(x => x.Id)
+        var rows = await query
+            .OrderBy(x => x.Specialization.Category)
+            .ThenBy(x => x.HairService.Name)
+            .ThenBy(x => x.HairService.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            .Select(x => new HairServiceCatalogRow(x.HairService, x.Specialization.Category))
             .ToListAsync(cancellationToken);
 
-        return hairServices;
+        return rows;
     }
 
     public async Task<Result<bool, Failure>> ExistsAsync(

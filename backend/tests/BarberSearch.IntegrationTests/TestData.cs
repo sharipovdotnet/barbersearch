@@ -105,12 +105,18 @@ internal sealed class TestData
             latitude: 52.5200,
             longitude: 13.4050));
 
+        // У услуги обязательна специализация: её категория и есть категория услуги.
+        var specialization = Require(Specialization.Create(
+            $"Haircut {displayName}",
+            ServiceCategory.Haircut));
+
         var hairService = Require(HairService.Create(
             name: $"Haircut {displayName}",
-            category: ServiceCategory.Haircut,
+            specializationId: specialization.Id,
             defaultDurationMinutes: 30));
 
         db.Salons.Add(salon);
+        db.Specializations.Add(specialization);
         db.HairServices.Add(hairService);
         await db.SaveChangesAsync();
 
@@ -515,11 +521,15 @@ internal sealed class TestData
     /// Создаёт строку справочника специализаций; <paramref name="isActive"/> = <c>false</c>
     /// нужен, чтобы проверить «только активные».
     /// </summary>
+    /// <param name="name">Название специализации.</param>
+    /// <param name="isActive">Видна ли строка в публичном справочнике.</param>
+    /// <param name="category">Категория услуг направления.</param>
     public async Task<Specialization> CreateSpecializationAsync(
         string name,
-        bool isActive = true)
+        bool isActive = true,
+        ServiceCategory category = ServiceCategory.Haircut)
     {
-        var specialization = Require(Specialization.Create(name, $"About {name}"));
+        var specialization = Require(Specialization.Create(name, category, $"About {name}"));
 
         if (!isActive)
         {
@@ -535,18 +545,65 @@ internal sealed class TestData
     }
 
     /// <summary>
+    /// Возвращает специализацию заданной категории: создаёт её, если в справочнике такой ещё нет.
+    /// </summary>
+    /// <remarks>
+    /// Нужна хелперам, которые создают услугу без явной специализации: у услуги
+    /// обязательна ссылка на специализацию, а категория теперь живёт только там.
+    /// </remarks>
+    /// <param name="category">Категория услуг направления.</param>
+    public async Task<Specialization> EnsureSpecializationAsync(ServiceCategory category)
+    {
+        var name = $"Категория {category}";
+
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var existing = await db.Specializations
+            .FirstOrDefaultAsync(specialization => specialization.Name == name);
+
+        if (existing is not null)
+        {
+            return existing;
+        }
+
+        var created = Require(Specialization.Create(
+            name,
+            category,
+            "Служебная специализация категории для тестов."));
+        db.Specializations.Add(created);
+        await db.SaveChangesAsync();
+
+        return created;
+    }
+
+    /// <summary>
     /// Создаёт строку справочника услуг; <paramref name="isActive"/> = <c>false</c> нужен,
     /// чтобы проверить «только активные».
     /// </summary>
+    /// <remarks>
+    /// Категории у услуги нет: она берётся из специализации. Если
+    /// <paramref name="specializationId"/> не задан, создаётся (или берётся) специализация
+    /// категории <paramref name="category"/>.
+    /// </remarks>
+    /// <param name="name">Название услуги.</param>
+    /// <param name="category">Категория специализации, если специализация не задана явно.</param>
+    /// <param name="defaultDurationMinutes">Длительность по умолчанию, минуты.</param>
+    /// <param name="isActive">Включена ли строка в публичный справочник.</param>
+    /// <param name="specializationId">Специализация услуги; <c>null</c> — по категории.</param>
     public async Task<HairService> CreateHairServiceAsync(
         string name,
         ServiceCategory category = ServiceCategory.Haircut,
         int defaultDurationMinutes = 30,
-        bool isActive = true)
+        bool isActive = true,
+        Guid? specializationId = null)
     {
+        var targetSpecializationId = specializationId
+            ?? (await EnsureSpecializationAsync(category)).Id;
+
         var hairService = Require(HairService.Create(
             name,
-            category,
+            targetSpecializationId,
             defaultDurationMinutes,
             $"About {name}"));
 

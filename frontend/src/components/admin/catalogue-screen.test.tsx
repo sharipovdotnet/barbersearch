@@ -6,7 +6,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CatalogueScreen } from '@/components/admin/catalogue-screen'
 import { AUTO_REFRESH_INTERVAL_MS } from '@/hooks/use-auto-refresh'
 import type { AdminSalon } from '@/lib/admin-catalogue'
-import { problemDetails } from '@/test/msw/handlers'
+import {
+  adminCatalogueHairService,
+  adminCatalogueSpecialization,
+  adminDisabledSpecialization,
+  problemDetails,
+} from '@/test/msw/handlers'
+import { countRequests } from '@/test/msw/requests'
 import { server } from '@/test/msw/server'
 
 /**
@@ -428,5 +434,109 @@ describe('CatalogueScreen: салоны на проверке', () => {
     })
 
     expect(state.statuses).toHaveLength(initial + 1)
+  })
+})
+
+describe('CatalogueScreen: услуги и специализации', () => {
+  it('вкладка услуг: колонка «Специализация» и поиск по специализации', async () => {
+    const captured: URLSearchParams[] = []
+    const user = userEvent.setup()
+
+    server.use(
+      http.get('/api/admin/catalogue/hair-services', ({ request }) => {
+        captured.push(new URL(request.url).searchParams)
+
+        return HttpResponse.json([adminCatalogueHairService])
+      })
+    )
+
+    render(<CatalogueScreen tab="services" />)
+    await screen.findAllByText(adminCatalogueHairService.name)
+
+    expect(
+      screen.getByRole('columnheader', { name: 'Специализация' })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('columnheader', { name: 'Категория' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getAllByText(adminCatalogueSpecialization.name).length
+    ).toBeGreaterThan(0)
+
+    const search = screen.getByPlaceholderText(
+      'Поиск по названию и специализации'
+    )
+
+    expect(search).toBeInTheDocument()
+
+    await user.type(search, adminCatalogueSpecialization.name)
+
+    await waitFor(
+      () => {
+        expect(
+          captured.some(
+            (params) => params.get('search') === adminCatalogueSpecialization.name
+          )
+        ).toBe(true)
+      },
+      { timeout: 2000 }
+    )
+  })
+
+  it('вкладка специализаций: колонка «Категория» показывает категорию строки', async () => {
+    server.use(
+      http.get('/api/admin/catalogue/specializations', () =>
+        HttpResponse.json([
+          adminCatalogueSpecialization,
+          adminDisabledSpecialization,
+        ])
+      )
+    )
+
+    render(<CatalogueScreen tab="specializations" />)
+    await screen.findAllByText(adminCatalogueSpecialization.name)
+
+    expect(
+      screen.getByRole('columnheader', { name: 'Категория' })
+    ).toBeInTheDocument()
+
+    const row = tableRow(adminCatalogueSpecialization.name)
+
+    expect(within(row).getByText('Стрижка')).toBeInTheDocument()
+    expect(
+      within(tableRow(adminDisabledSpecialization.name)).getByText('Борода')
+    ).toBeInTheDocument()
+  })
+
+  it('диалог услуги грузит специализации только при открытии и объясняет пустой справочник', async () => {
+    const specializationRequests = countRequests(
+      '/api/admin/catalogue/specializations'
+    )
+    const user = userEvent.setup()
+
+    server.use(
+      http.get('/api/admin/catalogue/specializations', () =>
+        HttpResponse.json([])
+      )
+    )
+
+    render(<CatalogueScreen tab="services" />)
+    await screen.findAllByText(adminCatalogueHairService.name)
+
+    // Справочник специализаций не запрашивается на монтировании вкладки.
+    expect(specializationRequests()).toBe(0)
+
+    await user.click(screen.getByRole('button', { name: 'Создать услугу' }))
+
+    const form = await screen.findByRole('dialog')
+
+    expect(
+      await within(form).findByText(/Создайте специализацию во вкладке «Специализации»/)
+    ).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(specializationRequests()).toBe(1)
+    })
+    expect(within(form).getByRole('button', { name: 'Создать' })).toBeDisabled()
   })
 })

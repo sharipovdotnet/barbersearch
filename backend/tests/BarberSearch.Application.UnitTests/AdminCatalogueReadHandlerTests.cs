@@ -155,9 +155,10 @@ public class AdminCatalogueReadHandlerTests
     }
 
     [Fact]
-    public async Task Hair_service_rows_keep_is_active_and_usage_count()
+    public async Task Hair_service_rows_keep_is_active_usage_count_and_specialization()
     {
         var id = Guid.NewGuid();
+        var specializationId = Guid.NewGuid();
         var repository = new FakeHairServiceRepository();
         repository.AddAdminRow(new AdminHairServiceResponse(
             id,
@@ -166,7 +167,9 @@ public class AdminCatalogueReadHandlerTests
             45,
             "Описание",
             IsActive: false,
-            UsageCount: 7));
+            UsageCount: 7,
+            SpecializationId: specializationId,
+            SpecializationName: "Борода"));
         var handler = new GetAdminHairServicesHandler(repository);
 
         var result = await handler.Handle(
@@ -181,6 +184,8 @@ public class AdminCatalogueReadHandlerTests
         Assert.Equal("Описание", row.Description);
         Assert.False(row.IsActive);
         Assert.Equal(7, row.UsageCount);
+        Assert.Equal(specializationId, row.SpecializationId);
+        Assert.Equal("Борода", row.SpecializationName);
     }
 
     [Fact]

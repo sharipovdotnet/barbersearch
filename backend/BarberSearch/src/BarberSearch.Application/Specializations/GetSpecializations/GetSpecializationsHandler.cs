@@ -43,7 +43,8 @@ public sealed class GetSpecializationsHandler
             .Select(specialization => new SpecializationResponse(
                 specialization.Id,
                 specialization.Name,
-                specialization.Description))
+                specialization.Description,
+                specialization.Category))
             .ToList();
     }
 }

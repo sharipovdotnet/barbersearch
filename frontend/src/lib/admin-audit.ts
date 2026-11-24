@@ -169,6 +169,9 @@ export const ADMIN_AUDIT_FIELD_LABELS: Record<string, string> = {
   price: 'Цена',
   durationMinutes: 'Длительность, мин',
   hairServiceId: 'Услуга каталога',
+  // Услуга каталога теперь ссылается на специализацию; категория специализации
+  // приходит тем же полем `category` и рендерится общей подписью выше.
+  specializationId: 'Специализация',
 }
 
 /**
@@ -230,9 +233,9 @@ export function formatAuditAction(action: string): string {
  * Значение поля diff'а для показа.
  *
  * `null` — прочерк (для создания и удаления это честно), boolean — «Да»/«Нет»,
- * `[redacted]` — «скрыто». Роль, грейд, статус брони, категория услуги и статусы
- * проверки получают русские подписи. Для `moderationStatus` подпись зависит от
- * типа сущности: `salon` — `SALON_MODERATION_LABELS`, `portfolio_photo` —
+ * `[redacted]` — «скрыто». Роль, грейд, статус брони, категория услуги и специализации
+ * и статусы проверки получают русские подписи. Для `moderationStatus` подпись зависит
+ * от типа сущности: `salon` — `SALON_MODERATION_LABELS`, `portfolio_photo` —
  * `PHOTO_MODERATION_LABELS`, остальные типы — прежнее поведение. Неизвестное
  * значение остаётся исходной строкой сервера. Никакой HTML не собирается.
  */

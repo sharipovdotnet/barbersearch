@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
@@ -13,6 +13,14 @@ const SPECIALIZATION = {
   id: '11111111-1111-4111-8111-111111111111',
   name: 'Барберинг',
   description: null,
+  category: 'Haircut',
+}
+
+const BEARD_SPECIALIZATION = {
+  id: '33333333-3333-4333-8333-333333333333',
+  name: 'Борода',
+  description: null,
+  category: 'Beard',
 }
 
 const HAIR_SERVICE = {
@@ -20,6 +28,32 @@ const HAIR_SERVICE = {
   name: 'Стрижка',
   category: 'Haircut',
   defaultDurationMinutes: 45,
+  specializationId: SPECIALIZATION.id,
+}
+
+const HAIR_SERVICE_FADE = {
+  id: '44444444-4444-4444-8444-444444444444',
+  name: 'Фейд',
+  category: 'Haircut',
+  defaultDurationMinutes: 45,
+  specializationId: SPECIALIZATION.id,
+}
+
+const HAIR_SERVICE_BEARD = {
+  id: '55555555-5555-4555-8555-555555555555',
+  name: 'Оформление бороды',
+  category: 'Beard',
+  defaultDurationMinutes: 30,
+  specializationId: BEARD_SPECIALIZATION.id,
+}
+
+/** Специализация этой услуги выключена и в публичный список не попала. */
+const HAIR_SERVICE_WITHOUT_SPECIALIZATION = {
+  id: '66666666-6666-4666-8666-666666666666',
+  name: 'Бритьё головы',
+  category: 'Other',
+  defaultDurationMinutes: 20,
+  specializationId: '77777777-7777-4777-8777-777777777777',
 }
 
 const ADDITIONAL_SERVICES = ['Оформление бороды', 'Бритьё головы']
@@ -28,6 +62,26 @@ function useCatalogs() {
   server.use(
     http.get('/api/specializations', () => HttpResponse.json([SPECIALIZATION])),
     http.get('/api/hair-services', () => HttpResponse.json([HAIR_SERVICE])),
+    http.get('/api/barbers/additional-services', () =>
+      HttpResponse.json(ADDITIONAL_SERVICES)
+    )
+  )
+}
+
+/** Справочники для проверки групп: две специализации и услуга без пары. */
+function useGroupedCatalogs() {
+  server.use(
+    http.get('/api/specializations', () =>
+      HttpResponse.json([SPECIALIZATION, BEARD_SPECIALIZATION])
+    ),
+    http.get('/api/hair-services', () =>
+      HttpResponse.json([
+        HAIR_SERVICE_FADE,
+        HAIR_SERVICE,
+        HAIR_SERVICE_BEARD,
+        HAIR_SERVICE_WITHOUT_SPECIALIZATION,
+      ])
+    ),
     http.get('/api/barbers/additional-services', () =>
       HttpResponse.json(ADDITIONAL_SERVICES)
     )
@@ -225,6 +279,134 @@ describe('SearchForm, подсказки города', () => {
 
     expect(onSearch).toHaveBeenCalledWith(
       expect.objectContaining({ city: 'Канзас-Сити' })
+    )
+  })
+})
+
+/**
+ * Услуги сгруппированы по специализациям: нативный `<optgroup>` легче
+ * просмотреть, чем плоский список из десятков строк. Выбранное значение —
+ * по-прежнему id услуги, а «Любая услуга» стоит вне групп.
+ */
+describe('SearchForm, группировка услуг', () => {
+  it('раскладывает услуги по <optgroup>: группы по алфавиту, строки в порядке API', async () => {
+    useGroupedCatalogs()
+
+    render(<SearchForm isSearching={false} onSearch={vi.fn()} />)
+
+    const select = screen.getByLabelText('Услуга')
+
+    await waitFor(() => {
+      expect(within(select).getAllByRole('group')).toHaveLength(3)
+    })
+
+    const groups = within(select).getAllByRole('group')
+
+    // Группы идут по алфавиту названий специализаций, «Прочие услуги» — последней.
+    expect(groups.map((group) => group.getAttribute('label'))).toStrictEqual([
+      'Барберинг',
+      'Борода',
+      'Прочие услуги',
+    ])
+
+    const labelsIn = (label: string): (string | null)[] =>
+      within(within(select).getByRole('group', { name: label }))
+        .getAllByRole('option')
+        .map((option) => option.textContent)
+
+    expect(labelsIn('Барберинг')).toStrictEqual(['Фейд', 'Стрижка'])
+    expect(labelsIn('Борода')).toStrictEqual(['Оформление бороды'])
+    expect(labelsIn('Прочие услуги')).toStrictEqual(['Бритьё головы'])
+
+    const options = within(select).getAllByRole('option')
+
+    // Первый пункт — «Любая услуга», и он не входит ни в одну группу.
+    expect(options[0]).toHaveTextContent('Любая услуга')
+    expect(options[0].closest('optgroup')).toBeNull()
+    expect(options.map((option) => option.getAttribute('value'))).toStrictEqual([
+      '',
+      HAIR_SERVICE_FADE.id,
+      HAIR_SERVICE.id,
+      HAIR_SERVICE_BEARD.id,
+      HAIR_SERVICE_WITHOUT_SPECIALIZATION.id,
+    ])
+  })
+
+  it('выбор услуги из группы отправляет её id и не теряет title', async () => {
+    useGroupedCatalogs()
+
+    const onSearch = vi.fn()
+
+    render(<SearchForm isSearching={false} onSearch={onSearch} />)
+
+    const select = screen.getByLabelText('Услуга')
+
+    await waitFor(() => {
+      expect(within(select).getAllByRole('group')).toHaveLength(3)
+    })
+
+    await userEvent.selectOptions(select, HAIR_SERVICE_BEARD.id)
+
+    expect(select).toHaveValue(HAIR_SERVICE_BEARD.id)
+    expect(select).toHaveAttribute('title', 'Оформление бороды')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Найти' }))
+
+    expect(onSearch).toHaveBeenCalledTimes(1)
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({ hairServiceId: HAIR_SERVICE_BEARD.id })
+    )
+  })
+
+  it('услуга без специализации попадает в хвостовую группу «Прочие услуги»', async () => {
+    server.use(
+      http.get('/api/specializations', () =>
+        HttpResponse.json([SPECIALIZATION])
+      ),
+      // Незнакомая услуга идёт первой: группа «Прочие услуги» всё равно последняя.
+      http.get('/api/hair-services', () =>
+        HttpResponse.json([
+          HAIR_SERVICE_WITHOUT_SPECIALIZATION,
+          HAIR_SERVICE,
+        ])
+      ),
+      http.get('/api/barbers/additional-services', () =>
+        HttpResponse.json(ADDITIONAL_SERVICES)
+      )
+    )
+
+    const onSearch = vi.fn()
+
+    render(<SearchForm isSearching={false} onSearch={onSearch} />)
+
+    const select = screen.getByLabelText('Услуга')
+
+    await waitFor(() => {
+      expect(within(select).getAllByRole('group')).toHaveLength(2)
+    })
+
+    const groups = within(select).getAllByRole('group')
+
+    expect(groups.map((group) => group.getAttribute('label'))).toStrictEqual([
+      'Барберинг',
+      'Прочие услуги',
+    ])
+    expect(
+      within(groups[1])
+        .getAllByRole('option')
+        .map((option) => option.textContent)
+    ).toStrictEqual(['Бритьё головы'])
+
+    await userEvent.selectOptions(
+      select,
+      HAIR_SERVICE_WITHOUT_SPECIALIZATION.id
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Найти' }))
+
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hairServiceId: HAIR_SERVICE_WITHOUT_SPECIALIZATION.id,
+      })
     )
   })
 })

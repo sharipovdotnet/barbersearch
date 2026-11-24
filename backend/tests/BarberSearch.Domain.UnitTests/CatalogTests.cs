@@ -323,19 +323,31 @@ public class SalonTests
 
 public class HairServiceTests
 {
+    private static readonly Guid SpecializationId = Guid.CreateVersion7();
+
     [Fact]
     public void Create_WithValidDuration_Succeeds()
     {
-        var result = HairService.Create("Haircut", ServiceCategory.Haircut, 45);
+        var result = HairService.Create("Haircut", SpecializationId, 45);
 
         Assert.True(result.IsSuccess);
         Assert.True(result.Value.IsActive);
+        Assert.Equal(SpecializationId, result.Value.SpecializationId);
+    }
+
+    [Fact]
+    public void Create_WithEmptySpecialization_Fails()
+    {
+        var result = HairService.Create("Haircut", Guid.Empty, 30);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("hairService.specializationId", result.Error.Errors[0].Code);
     }
 
     [Fact]
     public void Create_WithZeroDuration_Fails()
     {
-        var result = HairService.Create("Haircut", ServiceCategory.Haircut, 0);
+        var result = HairService.Create("Haircut", SpecializationId, 0);
 
         Assert.True(result.IsFailure);
         Assert.Equal("hairService.defaultDurationMinutes", result.Error.Errors[0].Code);
@@ -344,7 +356,7 @@ public class HairServiceTests
     [Fact]
     public void Create_WithNegativeDuration_Fails()
     {
-        var result = HairService.Create("Haircut", ServiceCategory.Haircut, -10);
+        var result = HairService.Create("Haircut", SpecializationId, -10);
 
         Assert.True(result.IsFailure);
     }
@@ -352,47 +364,61 @@ public class HairServiceTests
     [Fact]
     public void Create_WithTooLongDuration_Fails()
     {
-        var result = HairService.Create("Haircut", ServiceCategory.Haircut, 24 * 60 + 1);
+        var result = HairService.Create("Haircut", SpecializationId, 24 * 60 + 1);
 
         Assert.True(result.IsFailure);
     }
 
     [Fact]
-    public void Create_WithUnknownCategory_Fails()
+    public void Create_WithoutName_Fails()
     {
-        var result = HairService.Create("Haircut", (ServiceCategory)777, 30);
+        var result = HairService.Create("   ", SpecializationId, 30);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("hairService.category", result.Error.Errors[0].Code);
+        Assert.Equal("hairService.name", result.Error.Errors[0].Code);
     }
 
     [Fact]
     public void Update_WithZeroDuration_FailsAndKeepsOldValue()
     {
-        var service = HairService.Create("Haircut", ServiceCategory.Haircut, 30).Value;
+        var service = HairService.Create("Haircut", SpecializationId, 30).Value;
 
-        var result = service.Update("Haircut", null, 0);
+        var result = service.Update("Haircut", null, 0, SpecializationId);
 
         Assert.True(result.IsFailure);
         Assert.Equal(30, service.DefaultDurationMinutes);
     }
 
     [Fact]
+    public void Update_WithEmptySpecialization_FailsAndKeepsOldValue()
+    {
+        var service = HairService.Create("Haircut", SpecializationId, 30).Value;
+
+        var result = service.Update("Haircut", null, 30, Guid.Empty);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("hairService.specializationId", result.Error.Errors[0].Code);
+        Assert.Equal(SpecializationId, service.SpecializationId);
+    }
+
+    [Fact]
     public void Update_WithValidData_ChangesState()
     {
-        var service = HairService.Create("Haircut", ServiceCategory.Haircut, 30).Value;
+        var service = HairService.Create("Haircut", SpecializationId, 30).Value;
+        var otherSpecializationId = Guid.CreateVersion7();
 
-        var result = service.Update("Premium haircut", "Description", 60);
+        var result = service.Update("Premium haircut", "Description", 60, otherSpecializationId);
 
         Assert.True(result.IsSuccess);
         Assert.Equal("Premium haircut", service.Name);
         Assert.Equal(60, service.DefaultDurationMinutes);
+        Assert.Equal(otherSpecializationId, service.SpecializationId);
     }
 
     [Fact]
     public void DeactivateThenActivate_ChangesIsActive()
     {
-        var service = HairService.Create("Haircut", ServiceCategory.Haircut, 30).Value;
+        var service = HairService.Create("Haircut", SpecializationId, 30).Value;
 
         service.Deactivate();
         Assert.False(service.IsActive);
@@ -407,7 +433,7 @@ public class SpecializationTests
     [Fact]
     public void Create_WithEmptyName_Fails()
     {
-        var result = Specialization.Create("   ");
+        var result = Specialization.Create("   ", ServiceCategory.Haircut);
 
         Assert.True(result.IsFailure);
         Assert.Equal("specialization.name", result.Error.Errors[0].Code);
@@ -416,16 +442,26 @@ public class SpecializationTests
     [Fact]
     public void Create_WithValidName_Succeeds()
     {
-        var result = Specialization.Create("Fade master", "Loves fades");
+        var result = Specialization.Create("Fade master", ServiceCategory.Haircut, "Loves fades");
 
         Assert.True(result.IsSuccess);
         Assert.True(result.Value.IsActive);
+        Assert.Equal(ServiceCategory.Haircut, result.Value.Category);
+    }
+
+    [Fact]
+    public void Create_WithUnknownCategory_Fails()
+    {
+        var result = Specialization.Create("Fade master", (ServiceCategory)777);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("specialization.category", result.Error.Errors[0].Code);
     }
 
     [Fact]
     public void Rename_WithEmptyName_Fails()
     {
-        var specialization = Specialization.Create("Fade master").Value;
+        var specialization = Specialization.Create("Fade master", ServiceCategory.Haircut).Value;
 
         var result = specialization.Rename("  ", null);
 
@@ -436,7 +472,7 @@ public class SpecializationTests
     [Fact]
     public void Rename_WithValidName_ChangesState()
     {
-        var specialization = Specialization.Create("Fade master").Value;
+        var specialization = Specialization.Create("Fade master", ServiceCategory.Haircut).Value;
 
         var result = specialization.Rename("Beard master", "Beards");
 
@@ -446,9 +482,32 @@ public class SpecializationTests
     }
 
     [Fact]
+    public void ChangeCategory_ChangesState()
+    {
+        var specialization = Specialization.Create("Fade master", ServiceCategory.Haircut).Value;
+
+        var result = specialization.ChangeCategory(ServiceCategory.Beard);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(ServiceCategory.Beard, specialization.Category);
+    }
+
+    [Fact]
+    public void ChangeCategory_WithUnknownCategory_FailsAndKeepsOldValue()
+    {
+        var specialization = Specialization.Create("Fade master", ServiceCategory.Haircut).Value;
+
+        var result = specialization.ChangeCategory((ServiceCategory)777);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("specialization.category", result.Error.Errors[0].Code);
+        Assert.Equal(ServiceCategory.Haircut, specialization.Category);
+    }
+
+    [Fact]
     public void DeactivateThenActivate_ChangesIsActive()
     {
-        var specialization = Specialization.Create("Fade master").Value;
+        var specialization = Specialization.Create("Fade master", ServiceCategory.Haircut).Value;
 
         specialization.Deactivate();
         Assert.False(specialization.IsActive);

@@ -500,7 +500,12 @@ export const isBarberSearchPage = isPageOf(isBarberSearchItem)
  */
 export const isAdditionalServiceList = isArrayOf(isNonEmptyString)
 
-/** Строка публичного справочника специализаций; описание может отсутствовать. */
+/**
+ * Строка публичного справочника специализаций; описание может отсутствовать.
+ *
+ * Категория обязательна: она определяет категорию услуг этой специализации
+ * и фильтр витрины, поэтому ответ без неё — битый контракт.
+ */
 export function isSpecializationOption(
   value: unknown
 ): value is SpecializationOption {
@@ -508,7 +513,8 @@ export function isSpecializationOption(
     isRecord(value) &&
     isNonEmptyString(value.id) &&
     isString(value.name) &&
-    isNullableString(value.description)
+    isNullableString(value.description) &&
+    isServiceCategory(value.category)
   )
 }
 
@@ -621,7 +627,8 @@ export const isSalonBarberList = isArrayOf(isSalonBarber)
  *
  * `defaultDurationMinutes` обязателен: диалог добавления услуги в прайс берёт его
  * как стартовое значение, поэтому ответ без поля — битый контракт, а не «почти
- * подходящая» строка.
+ * подходящая» строка. `specializationId` тоже обязателен и непуст: по нему
+ * селект раскладывает услуги по специализациям.
  */
 export function isHairServiceOption(value: unknown): value is HairServiceOption {
   return (
@@ -629,7 +636,8 @@ export function isHairServiceOption(value: unknown): value is HairServiceOption 
     isNonEmptyString(value.id) &&
     isString(value.name) &&
     isServiceCategory(value.category) &&
-    isNumber(value.defaultDurationMinutes)
+    isNumber(value.defaultDurationMinutes) &&
+    isNonEmptyString(value.specializationId)
   )
 }
 
@@ -1092,7 +1100,13 @@ export function isAdminPortfolioPhoto(
 
 export const isAdminPortfolioPhotoPage = isPageOf(isAdminPortfolioPhoto)
 
-/** Строка админского справочника услуг: полный DTO формы и счётчик барберов. */
+/**
+ * Строка админского справочника услуг: полный DTO формы и счётчик барберов.
+ *
+ * `specializationId` и `specializationName` обязательны: диалог правки выбирает
+ * специализацию по id, а таблица показывает её название. `category` — производная
+ * от специализации и остаётся строкой вкладки.
+ */
 export function isAdminHairServiceRow(value: unknown): value is AdminHairService {
   return (
     isRecord(value) &&
@@ -1102,13 +1116,15 @@ export function isAdminHairServiceRow(value: unknown): value is AdminHairService
     isNumber(value.defaultDurationMinutes) &&
     isNullableString(value.description) &&
     isBoolean(value.isActive) &&
-    isNumber(value.usageCount)
+    isNumber(value.usageCount) &&
+    isNonEmptyString(value.specializationId) &&
+    isString(value.specializationName)
   )
 }
 
 export const isAdminHairServiceList = isArrayOf(isAdminHairServiceRow)
 
-/** Строка админского справочника специализаций. */
+/** Строка админского справочника специализаций: категория обязательна. */
 export function isAdminSpecializationRow(
   value: unknown
 ): value is AdminSpecialization {
@@ -1118,7 +1134,8 @@ export function isAdminSpecializationRow(
     isString(value.name) &&
     isNullableString(value.description) &&
     isBoolean(value.isActive) &&
-    isNumber(value.usageCount)
+    isNumber(value.usageCount) &&
+    isServiceCategory(value.category)
   )
 }
 

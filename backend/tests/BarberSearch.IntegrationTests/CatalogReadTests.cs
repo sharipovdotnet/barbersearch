@@ -12,6 +12,11 @@ namespace BarberSearch.IntegrationTests;
 /// Контракт — голый JSON-массив без пагинации: пустой справочник тоже <c>200</c>, но с <c>[]</c>.
 /// Клиент тестового хоста не аутентифицирован, поэтому успешный ответ сам доказывает
 /// анонимность действия (классовый <c>[Authorize]</c> дал бы 401).
+/// <para>
+/// Категория услуги выводится из категории её специализации: услуга и специализация
+/// создаются явно, чтобы порядок «категория, затем название» и поле <c>specializationId</c>
+/// проверялись на реальном join'е.
+/// </para>
 /// </remarks>
 [Collection(IntegrationCollection.Name)]
 public sealed class CatalogReadTests
@@ -33,27 +38,38 @@ public sealed class CatalogReadTests
         Assert.Equal("[]", await ReadBodyAsync(app.Client, "api/specializations"));
         Assert.Equal("[]", await ReadBodyAsync(app.Client, "api/hair-services"));
 
-        var alphaSpecialization = await data.CreateSpecializationAsync("Alpha Specialization");
-        var zetaSpecialization = await data.CreateSpecializationAsync("Zeta Specialization");
-        await data.CreateSpecializationAsync("Hidden Specialization", isActive: false);
+        var alphaSpecialization = await data.CreateSpecializationAsync(
+            "Alpha Specialization",
+            category: ServiceCategory.Haircut);
+        var zetaSpecialization = await data.CreateSpecializationAsync(
+            "Zeta Specialization",
+            category: ServiceCategory.Beard);
+        await data.CreateSpecializationAsync(
+            "Hidden Specialization",
+            isActive: false,
+            category: ServiceCategory.Haircut);
 
         var alphaHaircut = await data.CreateHairServiceAsync(
             "Alpha Haircut",
             ServiceCategory.Haircut,
-            defaultDurationMinutes: 45);
+            defaultDurationMinutes: 45,
+            specializationId: alphaSpecialization.Id);
         var betaHaircut = await data.CreateHairServiceAsync(
             "Beta Haircut",
             ServiceCategory.Haircut,
-            defaultDurationMinutes: 30);
+            defaultDurationMinutes: 30,
+            specializationId: alphaSpecialization.Id);
         var beard = await data.CreateHairServiceAsync(
             "Beard Trim",
             ServiceCategory.Beard,
-            defaultDurationMinutes: 30);
+            defaultDurationMinutes: 30,
+            specializationId: zetaSpecialization.Id);
         await data.CreateHairServiceAsync(
             "Hidden Haircut",
             ServiceCategory.Haircut,
             defaultDurationMinutes: 30,
-            isActive: false);
+            isActive: false,
+            specializationId: alphaSpecialization.Id);
 
         using var specializations = JsonDocument.Parse(
             await ReadBodyAsync(app.Client, "api/specializations"));
@@ -66,12 +82,14 @@ public sealed class CatalogReadTests
         Assert.Equal(
             "About Alpha Specialization",
             specializationRows[0].GetProperty("description").GetString());
+        Assert.Equal("Haircut", specializationRows[0].GetProperty("category").GetString());
+        Assert.Equal("Beard", specializationRows[1].GetProperty("category").GetString());
 
         using var hairServices = JsonDocument.Parse(
             await ReadBodyAsync(app.Client, "api/hair-services"));
         var hairServiceRows = hairServices.RootElement.EnumerateArray().ToList();
 
-        // Порядок репозитория: категория (Haircut = 1, Beard = 2), затем имя.
+        // Порядок репозитория: категория специализации (Haircut = 1, Beard = 2), затем имя.
         Assert.Equal(
             new[] { alphaHaircut.Id, betaHaircut.Id, beard.Id },
             hairServiceRows.Select(row => row.GetProperty("id").GetGuid()));
@@ -81,6 +99,17 @@ public sealed class CatalogReadTests
         Assert.Equal("Haircut", first.GetProperty("category").GetString());
         Assert.Equal(45, first.GetProperty("defaultDurationMinutes").GetInt32());
         Assert.Equal("About Alpha Haircut", first.GetProperty("description").GetString());
+        Assert.Equal(
+            alphaSpecialization.Id,
+            first.GetProperty("specializationId").GetGuid());
+
+        // У услуги другой специализации — другая категория: join, а не копия поля.
+        Assert.Equal(
+            "Beard",
+            hairServiceRows[2].GetProperty("category").GetString());
+        Assert.Equal(
+            zetaSpecialization.Id,
+            hairServiceRows[2].GetProperty("specializationId").GetGuid());
     }
 
     private static async Task<string> ReadBodyAsync(HttpClient client, string url)
