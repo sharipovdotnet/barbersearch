@@ -478,17 +478,6 @@ public static class ApiErrorCodes
         public const string ServiceNotFound = "barberProfile.service.notFound";
 
         /// <summary>
-        /// У барбера нет направления, которому принадлежит добавляемая услуга; <c>409</c>.
-        /// </summary>
-        /// <remarks>
-        /// Услуга каталога принадлежит ровно одному направлению. Барбер может предлагать
-        /// только услуги своих специализаций, иначе фильтр «специализация → услуга»
-        /// на витрине показывал бы пару, которой нет в прайсе.
-        /// </remarks>
-        public const string AddServiceSpecializationMismatch =
-            "barberProfile.addService.specializationMismatch";
-
-        /// <summary>
         /// Профиль не виден для выдачи слотов; <c>404</c>.
         /// </summary>
         public const string SlotsNotFound = "barberProfile.slots.notFound";
@@ -1178,11 +1167,6 @@ public static class ApiErrorCodes
         public const string CategoryInvalid = "hairService.category.invalid";
 
         /// <summary>
-        /// Направления, указанного при создании или правке услуги, нет в справочнике; <c>404</c>.
-        /// </summary>
-        public const string SpecializationNotFound = "hairService.specialization.notFound";
-
-        /// <summary>
         /// Номер страницы меньше единицы; <c>400</c>.
         /// </summary>
         public const string PagingPageInvalid = "hairService.paging.page";
@@ -1216,16 +1200,6 @@ public static class ApiErrorCodes
         /// Строку изменил или удалил параллельный запрос; <c>409</c>.
         /// </summary>
         public const string UpdateConcurrencyConflict = UpdatePrefix + ".concurrencyConflict";
-
-        /// <summary>
-        /// Услугу предлагает барбер без нового направления; <c>409</c>.
-        /// </summary>
-        /// <remarks>
-        /// Перевод услуги в другое направление отклоняется, пока активная связь
-        /// <c>barber_services</c> указывает на профиль, у которого нет новой специализации:
-        /// иначе витрина обещала бы услугу мастеру, который её не выполняет.
-        /// </remarks>
-        public const string UpdateSpecializationInUse = UpdatePrefix + ".specializationInUse";
     }
 
     /// <summary>
@@ -1419,16 +1393,6 @@ public static class ApiErrorCodes
         /// Поле в ответе — тот параметр, который нарушил правило.
         /// </remarks>
         public const string BarberSearchLocationInvalid = "barberSearch.location.invalid";
-
-        /// <summary>
-        /// Услуга в фильтре поиска не принадлежит указанной специализации; <c>400</c>.
-        /// </summary>
-        /// <remarks>
-        /// Услуга каталога принадлежит ровно одному направлению, поэтому пара
-        /// <c>specializationId</c> + <c>hairServiceId</c> проверяется на согласованность:
-        /// иначе запрос вернул бы пустую страницу вместо явной ошибки клиента.
-        /// </remarks>
-        public const string BarberSearchFilterMismatch = "barberSearch.filter.mismatch";
 
         /// <summary>
         /// У профиля барбера нет активного салона или указанный салон не активен; <c>404</c>.

@@ -158,13 +158,11 @@ public class AdminCatalogueReadHandlerTests
     public async Task Hair_service_rows_keep_is_active_and_usage_count()
     {
         var id = Guid.NewGuid();
-        var specializationId = Guid.NewGuid();
         var repository = new FakeHairServiceRepository();
         repository.AddAdminRow(new AdminHairServiceResponse(
             id,
             "Hidden Fade",
             ServiceCategory.Beard,
-            specializationId,
             45,
             "Описание",
             IsActive: false,
@@ -179,7 +177,6 @@ public class AdminCatalogueReadHandlerTests
         Assert.Equal(id, row.Id);
         Assert.Equal("Hidden Fade", row.Name);
         Assert.Equal(ServiceCategory.Beard, row.Category);
-        Assert.Equal(specializationId, row.SpecializationId);
         Assert.Equal(45, row.DefaultDurationMinutes);
         Assert.Equal("Описание", row.Description);
         Assert.False(row.IsActive);

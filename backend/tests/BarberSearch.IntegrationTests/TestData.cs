@@ -105,15 +105,9 @@ internal sealed class TestData
             latitude: 52.5200,
             longitude: 13.4050));
 
-        // Услуга каталога принадлежит направлению, а барбер может предлагать только услуги
-        // своих направлений. Сеяный барбер получает служебное направление, чтобы правило
-        // «услуга из специализации барбера» выполнялось и для данных, созданных в обход API.
-        var specialization = await GetOrCreateSeedSpecializationAsync(db);
-
         var hairService = Require(HairService.Create(
             name: $"Haircut {displayName}",
             category: ServiceCategory.Haircut,
-            specializationId: specialization.Id,
             defaultDurationMinutes: 30));
 
         db.Salons.Add(salon);
@@ -135,7 +129,6 @@ internal sealed class TestData
 
         Require(profile.Verify());
         Require(profile.AddSalon(salon.Id, isPrimary: true));
-        Require(profile.AddSpecialization(specialization.Id));
         Require(profile.AddService(hairService.Id, price: 45.00m, durationMinutes: 30));
 
         db.BarberProfiles.Add(profile);
@@ -545,28 +538,15 @@ internal sealed class TestData
     /// Создаёт строку справочника услуг; <paramref name="isActive"/> = <c>false</c> нужен,
     /// чтобы проверить «только активные».
     /// </summary>
-    /// <remarks>
-    /// Услуга обязана принадлежать направлению. Если тест не задал его явно, берётся
-    /// служебное направление <c>Seed Direction</c> — выключенное, чтобы оно не появлялось
-    /// в публичном списке специализаций и не ломало проверки порядка и состава.
-    /// </remarks>
     public async Task<HairService> CreateHairServiceAsync(
         string name,
         ServiceCategory category = ServiceCategory.Haircut,
         int defaultDurationMinutes = 30,
-        bool isActive = true,
-        Guid? specializationId = null)
+        bool isActive = true)
     {
-        await using var scope = _app.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-
-        var targetSpecializationId = specializationId
-            ?? (await GetOrCreateSeedSpecializationAsync(db)).Id;
-
         var hairService = Require(HairService.Create(
             name,
             category,
-            targetSpecializationId,
             defaultDurationMinutes,
             $"About {name}"));
 
@@ -575,40 +555,13 @@ internal sealed class TestData
             Require(hairService.Deactivate());
         }
 
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         db.HairServices.Add(hairService);
         await db.SaveChangesAsync();
 
         return hairService;
     }
-
-    /// <summary>
-    /// Служебное направление для сеяных услуг и барберов. Выключено намеренно:
-    /// публичный справочник специализаций отдаёт только активные строки, поэтому
-    /// техническая строка не попадает в витринные проверки.
-    /// </summary>
-    private static async Task<Specialization> GetOrCreateSeedSpecializationAsync(
-        ApplicationDbContext db)
-    {
-        var existing = await db.Specializations
-            .FirstOrDefaultAsync(x => x.Name == SEED_SPECIALIZATION_NAME);
-
-        if (existing is not null)
-        {
-            return existing;
-        }
-
-        var specialization = Require(Specialization.Create(
-            SEED_SPECIALIZATION_NAME,
-            "Служебное направление для интеграционных тестов."));
-        Require(specialization.Deactivate());
-
-        db.Specializations.Add(specialization);
-        await db.SaveChangesAsync();
-
-        return specialization;
-    }
-
-    private const string SEED_SPECIALIZATION_NAME = "Seed Direction";
 
     /// <summary>
     /// Создаёт строку справочника салонов; <paramref name="isActive"/> = <c>false</c> нужен,

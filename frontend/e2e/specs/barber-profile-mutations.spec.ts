@@ -2,7 +2,6 @@ import type {
   APIRequestContext,
   Browser,
   BrowserContext,
-  Page,
 } from '@playwright/test'
 
 import { expect, test } from '../fixtures/test'
@@ -25,19 +24,15 @@ import { BarberProfilePage } from '../pages/barber-profile-page'
  * `serial` обязателен: цена меняется у услуги, добавленной предыдущим тестом,
  * а скрытие и возврат — её же состояния.
  *
- * Специализации: с 2026-11-23 услуга каталога принадлежит направлению, и барбер
- * может добавить только услугу своего направления. Поэтому «E2E Фейд» один раз
- * привязывается к профилю через API в сцене добавления услуги, а не через UI:
- * публичный справочник фикстур пуст, и выключенной строки в селекте нет. Read-спека
- * запускается раньше мутационных и по-прежнему видит пустой список специализаций.
+ * Специализации здесь не мутируем: публичный справочник фикстур пуст, а любая
+ * активная строка сдвинула бы счётчики `admin-catalogue.spec.ts`. Они покрыты
+ * unit-тестами страницы.
  *
  * Журнал (#96): правка цены пишет `barber_service.updated`, поэтому сцена
  * сравнивает UI-журнал и `GET /api/admin/audit` и всегда возвращает цену
  * фикстуры — следующие тесты скрывают и возвращают ту же услугу.
  */
 const SERVICE_NAME = 'E2E Стрижка'
-const PROFILE_ID = '9e100000-0000-4000-8000-000000000015'
-const SERVICE_DIRECTION_ID = '9e600000-0000-4000-8000-000000000001'
 const FIXTURE_PRICE = '2000'
 const NEW_PRICE = '2100'
 const PRICE_ANNOUNCEMENT = 'Цена обновлена.'
@@ -69,11 +64,6 @@ test.describe('профиль барбера: мутации', () => {
     page,
   }) => {
     const profile = new BarberProfilePage(page)
-
-    // Услуга принадлежит направлению, а профиль обязан это направление иметь —
-    // иначе сервер отвечает 409. Специализацию привязываем через API: в фикстурах
-    // она выключена, и UI-селект публичного справочника её не предлагает.
-    await attachProfileDirection(page)
 
     await profile.goto()
     await profile.waitForReady()
@@ -423,28 +413,4 @@ async function restoreServicePrice(profile: BarberProfilePage): Promise<void> {
   await expect(profile.announcement(PRICE_ANNOUNCEMENT)).toBeVisible()
   await expect(profile.priceDialog).toBeHidden()
   await expect(row).toContainText(/2\s*000/)
-}
-
-/**
- * Привязывает к профилю направление услуги «E2E Стрижка» через API.
- *
- * Ошибка 204 — привязали; 409 — строка уже есть (повторный прогон без пересева).
- * Оба исхода допустимы: сцена проверяет добавление услуги, а не специализации.
- */
-async function attachProfileDirection(page: Page): Promise<void> {
-  const csrfResponse = await page.request.get('/api/auth/csrf')
-
-  expect(csrfResponse.status(), 'GET /api/auth/csrf').toBe(200)
-
-  const { token } = (await csrfResponse.json()) as { token: string }
-
-  const response = await page.request.post(
-    `/api/barber-profiles/${PROFILE_ID}/specializations/${SERVICE_DIRECTION_ID}`,
-    { headers: { 'X-CSRF-TOKEN': token } }
-  )
-
-  expect(
-    [204, 409],
-    `привязка направления: ${response.status()}`
-  ).toContain(response.status())
 }

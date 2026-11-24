@@ -8,7 +8,6 @@ using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.Common;
 using BarberSearch.Domain.HairServices;
 using BarberSearch.Domain.Salons;
-using BarberSearch.Domain.Specializations;
 using BarberSearch.Domain.Users;
 using BarberSearch.Infrastructure.Postgresql;
 using CSharpFunctionalExtensions;
@@ -143,16 +142,12 @@ public sealed class AdminBarberReadTests
             latitude: 52.5200,
             longitude: 13.4050));
 
-        var specialization = Require(Specialization.Create($"Direction {displayName}"));
-
         var hairService = Require(HairService.Create(
             name: $"Haircut {displayName}",
             category: ServiceCategory.Haircut,
-            specializationId: specialization.Id,
             defaultDurationMinutes: 30));
 
         db.Salons.Add(salon);
-        db.Specializations.Add(specialization);
         db.HairServices.Add(hairService);
         await db.SaveChangesAsync();
 
@@ -170,7 +165,6 @@ public sealed class AdminBarberReadTests
             latePolicy: null));
 
         Require(profile.AddSalon(salon.Id, isPrimary: true));
-        Require(profile.AddSpecialization(specialization.Id));
         Require(profile.AddService(hairService.Id, price: 45.00m, durationMinutes: 30));
         Require(profile.AddPhoto("https://example.com/portfolio/fade.jpg"));
 

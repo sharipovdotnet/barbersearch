@@ -24,32 +24,13 @@ VALUES
      52.52, 13.405, '+490000000001', 'https://ci.local', true, now(), now())
 ON CONFLICT (id) DO NOTHING;
 
--- Direction of the catalogue service. The service below must reference it: since
--- the specialization link a hair service belongs to exactly one direction.
-INSERT INTO specializations
-    (id, name, description, is_active, created_at, updated_at)
-VALUES
-    ('88888888-8888-8888-8888-888888888888',
-     'CI Direction', 'CI catalog direction', true, now(), now())
-ON CONFLICT (id) DO UPDATE SET
-    name = EXCLUDED.name,
-    is_active = EXCLUDED.is_active,
-    updated_at = now();
-
 INSERT INTO hair_services
-    (id, name, description, category, specialization_id, default_duration_minutes,
+    (id, name, description, category, default_duration_minutes,
      is_active, created_at, updated_at)
 VALUES
     ('22222222-2222-2222-2222-222222222222',
-     'CI Haircut', 'CI catalog service', 1,
-     '88888888-8888-8888-8888-888888888888', 30, true, now(), now())
-ON CONFLICT (id) DO UPDATE SET
-    name = EXCLUDED.name,
-    category = EXCLUDED.category,
-    specialization_id = EXCLUDED.specialization_id,
-    default_duration_minutes = EXCLUDED.default_duration_minutes,
-    is_active = EXCLUDED.is_active,
-    updated_at = now();
+     'CI Haircut', 'CI catalog service', 1, 30, true, now(), now())
+ON CONFLICT (id) DO NOTHING;
 
 -- Owner of the profile. The password hash is deliberately unusable: the CI
 -- check authenticates as the customer, not as this user.

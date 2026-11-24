@@ -14,7 +14,6 @@ namespace BarberSearch.Contracts.HairServices.Admin;
 /// <param name="Id">Идентификатор услуги справочника.</param>
 /// <param name="Name">Название услуги.</param>
 /// <param name="Category">Категория; после создания не меняется.</param>
-/// <param name="SpecializationId">Направление (специализация), которому принадлежит услуга.</param>
 /// <param name="DefaultDurationMinutes">Длительность по умолчанию, минуты.</param>
 /// <param name="Description">Описание; <c>null</c>, если его нет.</param>
 /// <param name="IsActive">Включена ли строка в публичные фильтры витрины.</param>
@@ -27,7 +26,6 @@ public record AdminHairServiceResponse(
     Guid Id,
     string Name,
     ServiceCategory Category,
-    Guid SpecializationId,
     int DefaultDurationMinutes,
     string? Description,
     bool IsActive,
