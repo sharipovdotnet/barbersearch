@@ -1201,6 +1201,57 @@ in Core owns both base addresses.
   `FirstSalonBecomesPrimary`/`PrimaryToggleText` and a radio-marker case; the suite goes from
   1665 to 1667 tests.
 
+- **«Добавить услугу» picks from a catalogue grouped by specialization, and the price belongs to
+  the choice.** The editor used to list the whole catalogue — 73 services in the dev stand over 16
+  specializations — as one flat run of rows with the specialization only implied by a category
+  badge, and the two fields it exists for sat below that list: choosing a service scrolled you away
+  from the form you were about to fill, and nothing on screen said which row you had just tapped
+  besides a «Выбрано:» box further down. The catalogue now comes in groups
+  (`BarberServiceCatalogGroups.Build` → `BarberServiceCatalogGroup`, a heading plus its rows, as
+  in the cabinet's price list and the «Услуга» filter), and the price/duration card stands above
+  the catalogue: it is hidden until a service is chosen, then names the choice («Выбрано:», the
+  service, «Стрижка · 45 мин») and carries the two fields and the submit button. The page scrolls
+  itself back to that card after a tap, so the fields are where the eyes land, not at the end of a
+  long list; the card's button is «Добавить» in add mode and «Сохранить» in edit mode
+  (`SaveButtonText`), and edit mode keeps the card open from the start because its service is
+  fixed.
+  The order of the groups is the one thing that departs from the web on purpose. `groupHairServices`
+  sorts specializations alphabetically, which scatters the directions: «Барбер», «Барбер-бородист»,
+  «Барбер-колорист», «Барбер-стилист», «Блонд-мастер» … The phone sorts them by the catalogue
+  category (`SearchSpecializationGroups.CategoryOrder`: haircut, beard, coloring, styling,
+  treatment, other) and only then by name in the Russian collation, with the id as the final
+  tie-breaker. A master reads the list top-down the way the catalogue itself is ordered, finds the
+  haircuts first, and never sees one direction split across the list; inside a group the API order
+  is kept, exactly as in the web's `optgroup` and in the «Услуга» filter. A service whose
+  specialization is missing from the public catalogue — deactivated between two reads, or an empty
+  id — is not lost: it lands in the trailing «Прочие услуги» / «Other services» group, with its own
+  category on the row.
+  The two catalogue reads (`GET api/hair-services` and `GET api/specializations`) go out together,
+  as in the web's `Promise.all`, because the flat service list carries no specialization name; a
+  failed read shows the same reason and the same «Повторить», and the retry asks for both, unlike
+  the search filters where each catalogue feeds a filter of its own and a retry re-reads only the
+  one that failed.
+  Selection is answered three ways instead of one. The row itself carries `IsSelected`
+  (`BarberServiceCatalogItem`), which paints a 2 pt `Primary` frame, the `PrimarySoft` tint and a
+  lucide «check» in a filled circle — the mark ships as `check_light.svg`/`check_dark.svg` for the
+  same reason the salon buttons ship `plus_light`/`plus_dark`, a baked SVG cannot follow
+  `PrimaryForeground` across themes. The tapped row also scales to 0.97 and back
+  (`ScaleToAsync`, 60 + 120 ms), so the tap answers even when the choice does not change, and the
+  card slides in with a 180 ms fade and an 8 pt rise on the first selection. All three live in
+  `BarberServiceEditorPage.xaml.cs`; the ViewModel keeps only the state (`IsFormVisible`,
+  `SaveButtonText`, the `IsSelected` flags), so the grouping and the form rules stay testable
+  without a phone. The error rows of that card are driven by explicit `HasPriceError`,
+  `HasDurationError`, `HasFormError` and `HasCatalogError` flags instead of the
+  `DataTrigger Value="{x:Null}"` the older forms use: on the phone such a trigger never fired for a
+  null value, so the three empty error labels kept their line height and spread the card apart by
+  a third of its height, and a catalogue that had loaded fine still showed a stray «Повторить».
+  Tests add 11 cases (1726 total): the pure grouping (catalogue order over
+  alphabetical, the name order inside a category, the id tie-breaker, the API order inside a group,
+  the unknown-specialization tail, an unknown category last, an empty catalogue), and the editor's
+  grouped load with both reads, the catalogue order over the API one, the «Прочие услуги» tail, the
+  highlight moving with the choice, the revealed card and «Добавить»/«Сохранить» wording, and the
+  edit-mode card that opens without a catalogue read.
+
 ## 6. What the backend still lacks
 
 The mobile MVP is blocked by two backend changes (`backend/`) that do not exist yet:

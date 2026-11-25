@@ -376,12 +376,14 @@ internal static class BarberCabinetData
     /// <param name="id">Идентификатор.</param>
     /// <param name="name">Название.</param>
     /// <param name="description">Описание.</param>
+    /// <param name="category">Категория направления: по ней группы услуг идут в каталожном порядке.</param>
     /// <returns>Строка справочника специализаций.</returns>
     public static SpecializationResponse Specialization(
         Guid? id = null,
         string name = "Фейд",
-        string? description = null) =>
-        new(id ?? SpecializationId, name, description);
+        string? description = null,
+        ServiceCategory category = ServiceCategory.Other) =>
+        new(id ?? SpecializationId, name, description, category);
 
     /// <summary>
     /// Специализация в карточке мастера.
@@ -985,12 +987,26 @@ internal sealed class FakeBarberProfileApi : IBarberProfileApi
 internal sealed class FakeBarberSearchApi : IBarberSearchApi
 {
     public Func<CancellationToken, Task<IReadOnlyList<SpecializationResponse>>> Specializations { get; set; } =
-        static _ => Task.FromResult<IReadOnlyList<SpecializationResponse>>([BarberCabinetData.Specialization()]);
+        static _ => Task.FromResult<IReadOnlyList<SpecializationResponse>>([
+            BarberCabinetData.Specialization(
+                BarberCabinetFixtures.ServiceSpecializationId,
+                "Фейд",
+                category: ServiceCategory.Haircut),
+            BarberCabinetData.Specialization(
+                BarberCabinetData.SecondSpecializationId,
+                "Борода",
+                category: ServiceCategory.Beard),
+        ]);
 
     public Func<CancellationToken, Task<IReadOnlyList<HairServiceResponse>>> HairServices { get; set; } =
         static _ => Task.FromResult<IReadOnlyList<HairServiceResponse>>([
             BarberCabinetData.HairService(),
-            BarberCabinetData.HairService(BarberCabinetData.SecondHairServiceId, "Борода", 45, ServiceCategory.Beard),
+            BarberCabinetData.HairService(
+                BarberCabinetData.SecondHairServiceId,
+                "Борода",
+                45,
+                ServiceCategory.Beard,
+                BarberCabinetData.SecondSpecializationId),
         ]);
 
     public Func<string?, string?, CancellationToken, Task<IReadOnlyList<SalonDirectoryItemResponse>>> Salons { get; set; } =

@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Net;
 using BarberSearch.Contracts.BarberProfiles.AddBarberProfileService;
 using BarberSearch.Contracts.BarberProfiles.UpdateBarberProfileService;
-using BarberSearch.Contracts.HairServices.GetHairServices;
 using BarberSearch.Mobile.Core.Api;
 using BarberSearch.Mobile.Core.Api.Barber;
 using BarberSearch.Mobile.Core.Formatting;
@@ -23,6 +22,14 @@ namespace BarberSearch.Mobile.Core.ViewModels.Barber;
 /// по <c>HairServiceId</c>: повторное добавление сервер отверг бы кодом дубликата.
 /// Специализация выбранной услуги, которой у мастера ещё нет, добавляется автоматически:
 /// отдельной кнопки «Добавить специализацию» в разделе «Профиль» больше нет.
+/// </para>
+/// <para>
+/// Выдача показывается группами по специализациям
+/// (<see cref="BarberServiceCatalogGroups.Build"/>), а не плоским списком: мастер ищет услугу
+/// своего направления, и заголовок группы называет это направление один раз. Выбор строки
+/// подсвечивает её саму (<see cref="BarberServiceCatalogItem.IsSelected"/>) и раскрывает карточку
+/// цены и длительности вверху экрана: поля стоят рядом с выбором, а не в конце прокрученного
+/// справочника.
 /// </para>
 /// <para>
 /// Цена ограничена двумя знаками после запятой и суммой 99 999 999,99, длительность —
@@ -57,7 +64,7 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
     /// Создаёт редактор услуги.
     /// </summary>
     /// <param name="profileApi">Добавление и правка услуги.</param>
-    /// <param name="searchApi">Публичный справочник услуг.</param>
+    /// <param name="searchApi">Публичные справочники услуг и специализаций.</param>
     public BarberServiceEditorViewModel(
         IBarberProfileApi profileApi,
         IBarberSearchApi searchApi)
@@ -153,14 +160,58 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
     private string? _formError;
 
     /// <summary>
-    /// Доступные услуги справочника.
+    /// Доступные услуги справочника, разложенные по специализациям.
     /// </summary>
-    public ObservableCollection<BarberServiceCatalogItem> Catalog { get; } = [];
+    /// <remarks>
+    /// Список групп, а не плоская выдача: заголовок специализации называет направление один раз,
+    /// и мастер ищет услугу в своём разделе, а не в общем перечне десятков строк.
+    /// </remarks>
+    public ObservableCollection<BarberServiceCatalogGroup> CatalogGroups { get; } = [];
 
     /// <summary>
     /// Кнопка сохранения доступна.
     /// </summary>
     public bool CanSave => !IsSaving;
+
+    /// <summary>
+    /// Форма цены и длительности видна: в правке — всегда, в добавлении — после выбора услуги.
+    /// </summary>
+    /// <remarks>
+    /// В добавлении пустая форма из двух полей стояла бы над списком и просила цену у услуги,
+    /// которой ещё нет. Поля появляются вместе с выбором, в карточке выбранной услуги, — сразу под
+    /// заголовком экрана, а не в конце списка, куда надо было прокручивать весь справочник.
+    /// </remarks>
+    public bool IsFormVisible => IsEditMode || SelectedCatalogService is not null;
+
+    /// <summary>
+    /// Надпись кнопки сохранения: «Добавить» в добавлении, «Сохранить» в правке.
+    /// </summary>
+    public string SaveButtonText => IsAddMode ? Loc.T("Добавить") : Loc.T("Сохранить");
+
+    /// <summary>
+    /// Ошибка цены есть и должна быть показана.
+    /// </summary>
+    /// <remarks>
+    /// Видимость строк — отдельные флаги, а не <c>DataTrigger</c> на «значение равно null»:
+    /// пустая подпись ошибки всё равно занимает строку и промежуток, и карточка цены
+    /// разъезжается на три пустых поля. Флаг говорит «показывать» прямо, и его же проверяют тесты.
+    /// </remarks>
+    public bool HasPriceError => !string.IsNullOrEmpty(PriceError);
+
+    /// <summary>
+    /// Ошибка длительности есть и должна быть показана.
+    /// </summary>
+    public bool HasDurationError => !string.IsNullOrEmpty(DurationError);
+
+    /// <summary>
+    /// Общая ошибка формы есть и должна быть показана.
+    /// </summary>
+    public bool HasFormError => !string.IsNullOrEmpty(FormError);
+
+    /// <summary>
+    /// Справочник не прочитан, и причина известна.
+    /// </summary>
+    public bool HasCatalogError => !string.IsNullOrEmpty(CatalogError);
 
     /// <summary>
     /// Задача текущего чтения справочника: тесты ждут её вместо таймера.
@@ -248,7 +299,7 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
             }
         }
 
-        Catalog.Clear();
+        CatalogGroups.Clear();
 
         _catalogTask = LoadCatalogAsync(CancellationToken.None);
     }
@@ -279,7 +330,7 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
         SelectedCatalogService = null;
         PriceText = item.Price.ToString("0.##", CultureInfo.InvariantCulture);
         DurationText = item.DurationMinutes.ToString(CultureInfo.InvariantCulture);
-        Catalog.Clear();
+        CatalogGroups.Clear();
         IsCatalogEmpty = false;
         CatalogError = null;
         ClearErrors();
@@ -379,17 +430,67 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Подставляет длительность по умолчанию при выборе услуги.
+    /// Подставляет длительность по умолчанию при выборе услуги и переносит подсветку строки.
     /// </summary>
     /// <param name="value">Выбранная услуга; <c>null</c> — выбор снят.</param>
     partial void OnSelectedCatalogServiceChanged(BarberServiceCatalogItem? value)
     {
+        // Подсветка — состояние строки шаблона: редактор снимает флаг со всех услуг и ставит
+        // его выбранной, иначе в списке остались бы две подсвеченные строки.
+        foreach (var group in CatalogGroups)
+        {
+            foreach (var item in group.Services)
+            {
+                item.IsSelected = ReferenceEquals(item, value);
+            }
+        }
+
         if (value is not null && IsAddMode)
         {
             DurationText = value.DefaultDurationMinutes.ToString(CultureInfo.InvariantCulture);
             FormError = null;
         }
+
+        OnPropertyChanged(nameof(IsFormVisible));
     }
+
+    /// <summary>
+    /// Показывает форму, когда режим добавления включает её без выбранной услуги.
+    /// </summary>
+    partial void OnIsAddModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsFormVisible));
+        OnPropertyChanged(nameof(SaveButtonText));
+    }
+
+    /// <summary>
+    /// Показывает форму правки, у которой услуга фиксирована.
+    /// </summary>
+    partial void OnIsEditModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsFormVisible));
+        OnPropertyChanged(nameof(SaveButtonText));
+    }
+
+    /// <summary>
+    /// Пересчитывает видимость строки ошибки цены.
+    /// </summary>
+    partial void OnPriceErrorChanged(string? value) => OnPropertyChanged(nameof(HasPriceError));
+
+    /// <summary>
+    /// Пересчитывает видимость строки ошибки длительности.
+    /// </summary>
+    partial void OnDurationErrorChanged(string? value) => OnPropertyChanged(nameof(HasDurationError));
+
+    /// <summary>
+    /// Пересчитывает видимость общей ошибки формы.
+    /// </summary>
+    partial void OnFormErrorChanged(string? value) => OnPropertyChanged(nameof(HasFormError));
+
+    /// <summary>
+    /// Пересчитывает видимость причины сбоя справочника.
+    /// </summary>
+    partial void OnCatalogErrorChanged(string? value) => OnPropertyChanged(nameof(HasCatalogError));
 
     /// <summary>
     /// Пересчитывает доступность кнопки вместе с флагом сохранения.
@@ -401,8 +502,14 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Читает справочник и убирает услуги, уже стоящие в прайсе.
+    /// Читает справочники услуг и специализаций и раскладывает услуги по группам.
     /// </summary>
+    /// <remarks>
+    /// Два чтения уходят параллельно, как в вебе: плоский список услуг не несёт названия
+    /// специализации, поэтому заголовки групп приходят из второго справочника. Повтор после
+    /// ошибки спрашивает оба — услуги без специализаций не из чего собрать ни одной группы,
+    /// в отличие от фильтров «Поиска», где каждый справочник кормит свой фильтр.
+    /// </remarks>
     /// <param name="cancellationToken">Токен отмены.</param>
     /// <returns>Задача чтения.</returns>
     public async Task LoadCatalogAsync(CancellationToken cancellationToken = default)
@@ -418,19 +525,35 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
 
         try
         {
-            var items = await _searchApi.GetHairServicesAsync(cancellationToken);
+            var servicesTask = _searchApi.GetHairServicesAsync(cancellationToken);
+            var specializationsTask = _searchApi.GetSpecializationsAsync(cancellationToken);
 
-            Catalog.Clear();
+            await Task.WhenAll(servicesTask, specializationsTask);
 
-            foreach (var item in items)
+            var services = await servicesTask;
+            var specializations = await specializationsTask;
+
+            var available = new List<BarberServiceCatalogItem>(services.Count);
+
+            foreach (var service in services)
             {
-                if (!_existingHairServiceIds.Contains(item.Id))
+                if (!_existingHairServiceIds.Contains(service.Id))
                 {
-                    Catalog.Add(new BarberServiceCatalogItem(item));
+                    available.Add(new BarberServiceCatalogItem(service));
                 }
             }
 
-            IsCatalogEmpty = Catalog.Count == 0;
+            CatalogGroups.Clear();
+
+            foreach (var group in BarberServiceCatalogGroups.Build(
+                         available,
+                         specializations,
+                         Loc.T("Прочие услуги")))
+            {
+                CatalogGroups.Add(group);
+            }
+
+            IsCatalogEmpty = CatalogGroups.Count == 0;
         }
         catch (Exception exception)
         {
@@ -612,55 +735,4 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
         DurationError = null;
         FormError = null;
     }
-}
-
-/// <summary>
-/// Строка справочника услуг в редакторе прайса.
-/// </summary>
-public sealed class BarberServiceCatalogItem
-{
-    /// <summary>
-    /// Создаёт строку из услуги справочника.
-    /// </summary>
-    /// <param name="service">Услуга из публичного справочника.</param>
-    public BarberServiceCatalogItem(HairServiceResponse service)
-    {
-        ArgumentNullException.ThrowIfNull(service);
-
-        Id = service.Id;
-        Name = service.Name;
-        CategoryText = BarberProfileText.CategoryText(service.Category);
-        SpecializationId = service.SpecializationId;
-        DefaultDurationMinutes = service.DefaultDurationMinutes;
-    }
-
-    /// <summary>
-    /// Идентификатор услуги справочника.
-    /// </summary>
-    public Guid Id { get; }
-
-    /// <summary>
-    /// Специализация услуги: её редактор добавляет в профиль вместе с услугой.
-    /// </summary>
-    public Guid SpecializationId { get; }
-
-    /// <summary>
-    /// Название услуги.
-    /// </summary>
-    public string Name { get; }
-
-    /// <summary>
-    /// Категория для показа: «Стрижка».
-    /// </summary>
-    public string CategoryText { get; }
-
-    /// <summary>
-    /// Длительность по умолчанию: её редактор подставляет в поле.
-    /// </summary>
-    public int DefaultDurationMinutes { get; }
-
-    /// <summary>
-    /// Длительность по умолчанию строкой: «45 мин».
-    /// </summary>
-    public string DurationText => BarberProfileText.DurationText(DefaultDurationMinutes);
 }
