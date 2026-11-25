@@ -22,6 +22,8 @@ const SERVICE = {
   hairServiceId: '44444444-4444-4444-8444-444444444444',
   name: 'Стрижка',
   category: 'Haircut' as const,
+  specializationId: '77777777-7777-4777-8777-777777777777',
+  specializationName: 'Барберинг',
   defaultDurationMinutes: 30,
   price: 2000,
   durationMinutes: 30,

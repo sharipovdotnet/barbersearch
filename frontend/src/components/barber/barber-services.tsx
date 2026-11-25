@@ -9,7 +9,7 @@ import { formatDuration, formatPrice } from '@/lib/format'
 import { useI18n } from '@/i18n'
 
 /**
- * Прайс мастера: цена и длительность конкретной услуги.
+ * Прайс мастера: категория и специализация услуги, цена и длительность.
  *
  * Кнопок записи здесь нет: слоты и `POST /api/bookings` живут в «Свободном времени»
  * выше, а кнопка-пустышка хуже, чем её отсутствие.
@@ -45,6 +45,9 @@ export function BarberServices({ profile }: { profile: BarberProfile }) {
                       <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                         <Badge variant="outline">
                           {t(SERVICE_CATEGORY_LABELS[service.category])}
+                        </Badge>
+                        <Badge variant="outline">
+                          {service.specializationName}
                         </Badge>
                         {duration !== '' && (
                           <span className="inline-flex items-center gap-1">

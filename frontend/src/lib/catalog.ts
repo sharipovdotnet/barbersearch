@@ -27,6 +27,9 @@ export type BarberProfileService = {
   hairServiceId: string
   name: string
   category: ServiceCategory
+  /** Специализация из справочника: показывается рядом с категорией. */
+  specializationId: string
+  specializationName: string
   defaultDurationMinutes: number
   price: number
   durationMinutes: number

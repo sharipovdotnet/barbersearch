@@ -779,6 +779,40 @@ describe('isAvatarUploadResponse', () => {
   })
 })
 
+/** Специализация услуги — обязательная пара полей рядом с категорией в прайсе. */
+describe('специализация услуги в публичной карточке барбера', () => {
+  it('принимает непустые specializationId и specializationName', () => {
+    expect(isBarberProfile(testBarberProfile)).toBe(true)
+  })
+
+  it('отвергает услугу без специализации или с пустым названием', () => {
+    const service = testBarberProfile.services[0]
+    const { specializationId, ...withoutId } = service
+    const { specializationName, ...withoutName } = service
+
+    expect(specializationId).not.toBe('')
+    expect(specializationName).not.toBe('')
+    expect(
+      isBarberProfile({
+        ...testBarberProfile,
+        services: [withoutId],
+      })
+    ).toBe(false)
+    expect(
+      isBarberProfile({
+        ...testBarberProfile,
+        services: [withoutName],
+      })
+    ).toBe(false)
+    expect(
+      isBarberProfile({
+        ...testBarberProfile,
+        services: [{ ...service, specializationName: '' }],
+      })
+    ).toBe(false)
+  })
+})
+
 /** `BarberProfile.avatarUrl` — новое nullable-поле публичной карточки (#85). */
 describe('avatarUrl в публичной карточке барбера', () => {
   it('принимает null и относительный URL', () => {

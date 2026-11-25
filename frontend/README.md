@@ -178,8 +178,9 @@ a free-text input.
 for a missing, hidden or unconfirmed profile, `400` for an empty GUID). The page shows the name,
 Russian grade, «Проверен» badge, rating or «Пока нет отзывов», experience, bio, languages,
 certificates, achievements, comfort and communication lists, additional services, services with
-price and duration, specializations, salons with addresses and the weekly schedule, payment
-methods and the late policy. Empty blocks are hidden instead of rendering an empty heading.
+category, specialization, price and duration, specializations, salons with addresses and the weekly
+schedule, payment methods and the late policy. Empty blocks are hidden instead of rendering an empty
+heading.
 
 «Свободное время» sits under the hero and calls `GET /api/barbers/{id}/slots?date=&hairServiceId=&salonId=`
 (anonymous, 120 requests per minute per IP). `date` is the **salon-local** `YYYY-MM-DD` and is

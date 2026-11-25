@@ -2029,11 +2029,12 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
     }
 
     /// <summary>
-    /// Услуги профиля с названием и категорией специализации из справочника.
+    /// Услуги профиля с названием, специализацией и её категорией из справочника.
     /// </summary>
     /// <remarks>
     /// Читает <c>hair_services</c> вместе со <c>specializations</c>: категории у услуги
-    /// больше нет, она берётся из категории специализации. Услуги и их цены уже загружены
+    /// больше нет, она берётся из категории специализации, а специализация показывается
+    /// рядом с категорией в прайсе. Услуги и их цены уже загружены
     /// в агрегат. Услуга, у которой справочник удалён, не показывается — как и в публичной
     /// карточке. <paramref name="includeInactiveServices"/> = <c>false</c> — фильтр публичной
     /// карточки и формы записи: скрытая услуга не показывается клиенту. <c>true</c> —
@@ -2059,6 +2060,8 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                 select new
                 {
                     HairService = hairService,
+                    SpecializationId = specialization.Id,
+                    SpecializationName = specialization.Name,
                     specialization.Category
                 })
             .ToDictionaryAsync(row => row.HairService.Id, cancellationToken);
@@ -2080,7 +2083,9 @@ public sealed class BarberProfileRepository : RepositoryBase<BarberProfile>, IBa
                     hairService.DefaultDurationMinutes,
                     service.Price,
                     service.DurationMinutes,
-                    service.IsActive);
+                    service.IsActive,
+                    row.SpecializationId,
+                    row.SpecializationName);
             })
             .ToList();
     }
