@@ -37,6 +37,9 @@ public sealed class BarberCardViewModelTests
     private static readonly Guid HairServiceId = Guid.Parse("9e100000-0000-4000-8000-000000000004");
     private static readonly Guid BarberServiceId = Guid.Parse("9e100000-0000-4000-8000-000000000005");
     private static readonly Guid HiddenBarberServiceId = Guid.Parse("9e100000-0000-4000-8000-000000000006");
+    private static readonly Guid ColoringBarberServiceId = Guid.Parse("9e100000-0000-4000-8000-000000000007");
+    private static readonly Guid SecondHaircutBarberServiceId = Guid.Parse("9e100000-0000-4000-8000-000000000008");
+    private static readonly Guid ServiceSpecializationId = Guid.Parse("9e100000-0000-4000-8000-0000000000e8");
     private static readonly Guid CreatedId = Guid.Parse("9e100000-0000-4000-8000-00000000000a");
 
     private static readonly DateTimeOffset Now = new(2026, 11, 14, 22, 0, 0, TimeSpan.Zero);
@@ -175,6 +178,96 @@ public sealed class BarberCardViewModelTests
         Assert.DoesNotContain(
             harness.ViewModel.Services,
             service => service.Name == "Скрытая услуга");
+    }
+
+    [Fact]
+    public async Task InitializeAsync_ActiveServices_SortsPriceListButKeepsPickerInApiOrder()
+    {
+        using var harness = new Harness();
+
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(services:
+        [
+            Service(
+                ColoringBarberServiceId,
+                Guid.CreateVersion7(),
+                "Балаяж",
+                5000m,
+                120,
+                isActive: true,
+                category: ServiceCategory.Coloring,
+                specializationName: "Окрашивание"),
+            Service(
+                BarberServiceId,
+                HairServiceId,
+                "Фейд",
+                2400m,
+                45,
+                isActive: true,
+                category: ServiceCategory.Haircut,
+                specializationName: "Фейд"),
+            Service(
+                SecondHaircutBarberServiceId,
+                Guid.CreateVersion7(),
+                "Стрижка машинкой",
+                1800m,
+                30,
+                isActive: true,
+                category: ServiceCategory.Haircut,
+                specializationName: "Стрижка"),
+        ]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        var viewModel = harness.ViewModel;
+
+        // Прайс: категория → специализация → название, а не порядок ответа API.
+        Assert.Equal(
+            ["Стрижка машинкой", "Фейд", "Балаяж"],
+            viewModel.Services.Select(service => service.Name));
+
+        // Picker сохраняет порядок ответа API; «Любая услуга» всегда первая.
+        Assert.Equal(
+            ["Любая услуга", "Балаяж", "Фейд", "Стрижка машинкой"],
+            viewModel.ServiceOptions.Select(option => option.DisplayText));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_ActiveService_ExposesCategoryAndSpecializationBadges()
+    {
+        using var harness = new Harness();
+
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(services:
+        [
+            Service(
+                BarberServiceId,
+                HairServiceId,
+                "Оформление бороды",
+                1800m,
+                30,
+                isActive: true,
+                category: ServiceCategory.Beard,
+                specializationName: "Борода"),
+        ]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        var option = Assert.Single(harness.ViewModel.Services);
+
+        Assert.Equal(ServiceCategory.Beard, option.Category);
+        Assert.Equal("Борода", option.CategoryText);
+        Assert.Equal("Борода", option.SpecializationName);
+
+        // В Picker тот же объект: цена и бейджи не расходятся между списками.
+        Assert.Same(
+            option,
+            harness.ViewModel.ServiceOptions.Single(item => item.Name == option.Name));
+
+        // «Любая услуга» — вне категорий справочника и без бейджей.
+        var any = harness.ViewModel.ServiceOptions[0];
+
+        Assert.Equal(ServiceCategory.Other, any.Category);
+        Assert.Equal(string.Empty, any.CategoryText);
+        Assert.Equal(string.Empty, any.SpecializationName);
     }
 
     [Fact]
@@ -1487,16 +1580,20 @@ public sealed class BarberCardViewModelTests
         string name,
         decimal price,
         int durationMinutes,
-        bool isActive) =>
+        bool isActive,
+        ServiceCategory category = ServiceCategory.Haircut,
+        string specializationName = "Фейд") =>
         new(
             barberServiceId,
             hairServiceId,
             name,
-            ServiceCategory.Haircut,
+            category,
             40,
             price,
             durationMinutes,
-            isActive);
+            isActive,
+            ServiceSpecializationId,
+            specializationName);
 
     private static BarberProfileSalonResponse Salon(
         Guid salonId,

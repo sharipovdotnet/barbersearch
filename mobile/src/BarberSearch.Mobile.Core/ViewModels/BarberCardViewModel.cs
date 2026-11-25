@@ -1178,12 +1178,23 @@ public sealed partial class BarberCardViewModel : ObservableObject
 
         _primaryTimeZoneId = primarySalon?.TimeZoneId ?? string.Empty;
 
+        // Прайс идёт каталожным порядком, а «Свободное время» сохраняет порядок ответа API:
+        // объект услуги у обоих списков общий, поэтому порядок задаётся порядком добавления.
+        var options = new List<(BarberProfileServiceResponse Service, BarberServiceOption Option)>();
+
         foreach (var service in profile.Services.Where(service => service.IsActive))
         {
             var option = BarberServiceOption.From(service);
 
-            Services.Add(option);
+            options.Add((service, option));
             ServiceOptions.Add(option);
+        }
+
+        options.Sort((left, right) => BarberServicesOrder.Compare(left.Service, right.Service));
+
+        foreach (var (_, option) in options)
+        {
+            Services.Add(option);
         }
 
         ServiceOptions.Insert(0, BarberServiceOption.AnyService());

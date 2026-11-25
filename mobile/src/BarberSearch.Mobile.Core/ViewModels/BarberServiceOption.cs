@@ -1,4 +1,5 @@
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
+using BarberSearch.Domain.HairServices;
 using BarberSearch.Mobile.Core.Formatting;
 using BarberSearch.Mobile.Core.Localization;
 
@@ -18,6 +19,9 @@ public sealed class BarberServiceOption
     private BarberServiceOption(
         Guid? hairServiceId,
         string name,
+        ServiceCategory category,
+        string categoryText,
+        string specializationName,
         decimal price,
         string priceText,
         string durationText,
@@ -25,6 +29,9 @@ public sealed class BarberServiceOption
     {
         HairServiceId = hairServiceId;
         Name = name;
+        Category = category;
+        CategoryText = categoryText;
+        SpecializationName = specializationName;
         Price = price;
         PriceText = priceText;
         DurationText = durationText;
@@ -40,6 +47,21 @@ public sealed class BarberServiceOption
     /// Название услуги.
     /// </summary>
     public string Name { get; }
+
+    /// <summary>
+    /// Категория услуги справочника; у «Любой услуги» — <see cref="ServiceCategory.Other"/>.
+    /// </summary>
+    public ServiceCategory Category { get; }
+
+    /// <summary>
+    /// Категория для бейджа: «Стрижка», «Борода»; у «Любой услуги» пусто.
+    /// </summary>
+    public string CategoryText { get; }
+
+    /// <summary>
+    /// Специализация услуги для бейджа: «Фейд»; у «Любой услуги» пусто.
+    /// </summary>
+    public string SpecializationName { get; }
 
     /// <summary>
     /// Цена у этого мастера; для «Любой услуги» — ноль, он никогда не попадает в бронь.
@@ -69,7 +91,16 @@ public sealed class BarberServiceOption
     {
         var text = Loc.T("Любая услуга");
 
-        return new(null, text, 0m, string.Empty, string.Empty, text);
+        return new(
+            null,
+            text,
+            ServiceCategory.Other,
+            string.Empty,
+            string.Empty,
+            0m,
+            string.Empty,
+            string.Empty,
+            text);
     }
 
     /// <summary>
@@ -84,6 +115,9 @@ public sealed class BarberServiceOption
         return new BarberServiceOption(
             service.HairServiceId,
             service.Name,
+            service.Category,
+            BarberProfileText.CategoryText(service.Category),
+            service.SpecializationName,
             service.Price,
             BarberText.Price(service.Price),
             BarberText.Duration(service.DurationMinutes),

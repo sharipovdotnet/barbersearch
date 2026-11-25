@@ -111,6 +111,12 @@ public sealed class BarberCabinetProfileViewModelTests
         Assert.True(viewModel.Services[0].IsActive);
         Assert.True(viewModel.Services[1].IsHidden);
         Assert.Equal("Скрыта", viewModel.Services[1].StatusText);
+
+        // Строка прайса подписана специализацией из ответа: её видит мастер в кабинете.
+        Assert.Equal(
+            BarberCabinetFixtures.ServiceSpecializationName,
+            viewModel.Services[0].SpecializationName);
+
         Assert.True(viewModel.HasServices);
 
         Assert.Single(viewModel.Specializations);

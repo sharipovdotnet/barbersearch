@@ -44,6 +44,7 @@ internal static class BarberCabinetFixtures
     public static readonly Guid OtherSalonId = Guid.Parse("9e100000-0000-4000-8000-000000000003");
     public static readonly Guid BarberServiceId = Guid.Parse("9e100000-0000-4000-8000-000000000004");
     public static readonly Guid HairServiceId = Guid.Parse("9e100000-0000-4000-8000-000000000005");
+    public static readonly Guid ServiceSpecializationId = Guid.Parse("9e100000-0000-4000-8000-0000000000e8");
     public static readonly Guid BookingId = Guid.Parse("9e100000-0000-4000-8000-0000000000b1");
     public static readonly Guid SecondBookingId = Guid.Parse("9e100000-0000-4000-8000-0000000000b2");
     public static readonly Guid CustomerId = Guid.Parse("9e100000-0000-4000-8000-0000000000c1");
@@ -52,14 +53,21 @@ internal static class BarberCabinetFixtures
     public const string Moscow = "Europe/Moscow";
 
     /// <summary>
+    /// Специализация услуги прайса: «Фейд» — по ней прайс группируется и подписывается.
+    /// </summary>
+    public const string ServiceSpecializationName = "Фейд";
+
+    /// <summary>
     /// Услуга мастера: цена и длительность отличаются от справочных.
     /// </summary>
     /// <param name="price">Цена у мастера.</param>
     /// <param name="durationMinutes">Длительность у мастера.</param>
+    /// <param name="specializationName">Специализация услуги; по умолчанию «Фейд».</param>
     /// <returns>Строка прайса.</returns>
     public static BarberProfileServiceResponse Service(
         decimal price = 2400m,
-        int durationMinutes = 60) =>
+        int durationMinutes = 60,
+        string specializationName = ServiceSpecializationName) =>
         new(
             BarberServiceId,
             HairServiceId,
@@ -68,7 +76,9 @@ internal static class BarberCabinetFixtures
             30,
             price,
             durationMinutes,
-            true);
+            true,
+            ServiceSpecializationId,
+            specializationName);
 
     /// <summary>
     /// Салон мастера с поясом IANA.
