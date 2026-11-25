@@ -338,6 +338,7 @@ public static class MauiProgram
         builder.Services.AddTransient<BarberPhotoPage>();
 
         builder.Services.AddTransient<SearchPage>();
+        builder.Services.AddTransient<SpecializationSelectPage>();
         builder.Services.AddTransient<HairServiceSelectPage>();
         builder.Services.AddTransient<BarberPage>();
         builder.Services.AddTransient<PortfolioPhotoPage>();

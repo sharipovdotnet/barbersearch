@@ -34,8 +34,12 @@ public partial class AppShell : Shell
 		// к списку сохраняет и город, и найденных мастеров.
 		Routing.RegisterRoute(BarberPage.Route, new PageRouteFactory<BarberPage>(services));
 
-		// Выбор услуги тоже открывается поверх вкладки «Поиск»: возврат сохраняет
-		// введённые фильтры и найденную выдачу, а сам выбор сразу применяется к фильтру.
+		// Выбор специализации и услуги тоже открывается поверх вкладки «Поиск»: возврат
+		// сохраняет введённые фильтры и найденную выдачу, а сам выбор сразу применяется
+		// к фильтру.
+		Routing.RegisterRoute(
+			SpecializationSelectPage.Route,
+			new PageRouteFactory<SpecializationSelectPage>(services));
 		Routing.RegisterRoute(
 			HairServiceSelectPage.Route,
 			new PageRouteFactory<HairServiceSelectPage>(services));

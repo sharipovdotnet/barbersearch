@@ -24,7 +24,7 @@ public sealed class SearchCatalogOption
     public Guid? Id { get; }
 
     /// <summary>
-    /// Подпись в <c>Picker</c>: название строки справочника или «Любая …».
+    /// Подпись пункта списка: название строки справочника или «Любая …».
     /// </summary>
     public string DisplayText { get; }
 
@@ -59,7 +59,7 @@ public sealed class SearchCatalogOption
     /// <param name="specializationId">
     /// Специализация строки-услуги; <c>null</c> — строка специализации или пункт «любая».
     /// </param>
-    /// <returns>Пункт для <c>Picker</c>.</returns>
+    /// <returns>Пункт списка выбора.</returns>
     public static SearchCatalogOption From(Guid id, string name, Guid? specializationId = null)
     {
         ArgumentNullException.ThrowIfNull(name);

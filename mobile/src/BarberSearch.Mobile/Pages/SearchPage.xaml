@@ -175,16 +175,48 @@
                         (как в вебе), и в двухколоночной сетке на его месте осталась бы дыра.
                     -->
                     <VerticalStackLayout Spacing="12">
+                        <!--
+                            Поле специализации — кнопка, открывающая отдельный экран выбора: в MAUI
+                            у Picker нет optgroup, поэтому заголовки категорий живут на экране
+                            SpecializationSelectPage. Пока справочник не готов, поле показывает
+                            «Загрузка…»/«Любая специализация» и недоступно.
+                        -->
                         <VerticalStackLayout IsVisible="{Binding ShowSpecializationPicker}" Spacing="2">
                             <Label
                                 FontSize="12"
                                 Text="{loc:Translate Key='Специализация'}"
                                 TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                            <Picker
+                            <Border
+                                MinimumHeightRequest="44"
                                 IsEnabled="{Binding IsCatalogsEnabled}"
-                                ItemDisplayBinding="{Binding DisplayText, x:DataType=vm:SearchCatalogOption}"
-                                ItemsSource="{Binding Specializations}"
-                                SelectedItem="{Binding SelectedSpecialization}" />
+                                Padding="12,10"
+                                Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                StrokeShape="RoundRectangle 10">
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer Tapped="OnSpecializationFieldTapped" />
+                                </Border.GestureRecognizers>
+                                <Border.Triggers>
+                                    <DataTrigger
+                                        Binding="{Binding IsCatalogsEnabled}"
+                                        TargetType="Border"
+                                        Value="False">
+                                        <Setter Property="Opacity" Value="0.5" />
+                                    </DataTrigger>
+                                </Border.Triggers>
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <Label
+                                        FontSize="16"
+                                        LineBreakMode="TailTruncation"
+                                        Text="{Binding SpecializationFieldText}"
+                                        VerticalOptions="Center" />
+                                    <Label
+                                        Grid.Column="1"
+                                        FontSize="16"
+                                        Text="▾"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                        VerticalOptions="Center" />
+                                </Grid>
+                            </Border>
                         </VerticalStackLayout>
 
                         <!--
