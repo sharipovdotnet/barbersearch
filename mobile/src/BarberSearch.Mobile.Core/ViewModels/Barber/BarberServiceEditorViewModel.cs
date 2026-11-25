@@ -21,6 +21,8 @@ namespace BarberSearch.Mobile.Core.ViewModels.Barber;
 /// Справочник читается лениво — при открытии добавления, а не вместе с прайсом: он
 /// большой, а нужен только в одном диалоге. Уже добавленные услуги из выдачи убираются
 /// по <c>HairServiceId</c>: повторное добавление сервер отверг бы кодом дубликата.
+/// Специализация выбранной услуги, которой у мастера ещё нет, добавляется автоматически:
+/// отдельной кнопки «Добавить специализацию» в разделе «Профиль» больше нет.
 /// </para>
 /// <para>
 /// Цена ограничена двумя знаками после запятой и суммой 99 999 999,99, длительность —
@@ -46,6 +48,7 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
     private readonly IBarberProfileApi _profileApi;
     private readonly IBarberSearchApi _searchApi;
     private readonly HashSet<Guid> _existingHairServiceIds = [];
+    private readonly HashSet<Guid> _attachedSpecializationIds = [];
 
     private Task _catalogTask = Task.CompletedTask;
     private BarberServiceItem? _editedService;
@@ -186,23 +189,35 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Готовит добавление услуги: запоминает профиль и уже существующие строки прайса.
+    /// Готовит добавление услуги: запоминает профиль, уже существующие строки прайса и
+    /// специализации.
     /// </summary>
     /// <param name="barberProfileId">Профиль мастера.</param>
     /// <param name="existing">Текущий прайс: его услуги не предлагаются повторно.</param>
+    /// <param name="attachedSpecializationIds">
+    /// Специализации профиля: специализация выбранной услуги, которой здесь нет, добавляется
+    /// вместе с услугой.
+    /// </param>
     public void InitializeForAdd(
         Guid barberProfileId,
-        IReadOnlyList<BarberServiceItem> existing)
+        IReadOnlyList<BarberServiceItem> existing,
+        IReadOnlyCollection<Guid>? attachedSpecializationIds = null)
     {
         Initialize(barberProfileId);
-        InitializeForAdd(existing);
+        InitializeForAdd(existing, attachedSpecializationIds);
     }
 
     /// <summary>
     /// Готовит добавление услуги, если профиль уже привязан через <see cref="Initialize"/>.
     /// </summary>
     /// <param name="existing">Текущий прайс: его услуги не предлагаются повторно.</param>
-    public void InitializeForAdd(IReadOnlyList<BarberServiceItem> existing)
+    /// <param name="attachedSpecializationIds">
+    /// Специализации профиля: специализация выбранной услуги, которой здесь нет, добавляется
+    /// вместе с услугой.
+    /// </param>
+    public void InitializeForAdd(
+        IReadOnlyList<BarberServiceItem> existing,
+        IReadOnlyCollection<Guid>? attachedSpecializationIds = null)
     {
         ArgumentNullException.ThrowIfNull(existing);
 
@@ -218,10 +233,19 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
         IsCatalogEmpty = false;
 
         _existingHairServiceIds.Clear();
+        _attachedSpecializationIds.Clear();
 
         foreach (var item in existing)
         {
             _existingHairServiceIds.Add(item.HairServiceId);
+        }
+
+        if (attachedSpecializationIds is not null)
+        {
+            foreach (var specializationId in attachedSpecializationIds)
+            {
+                _attachedSpecializationIds.Add(specializationId);
+            }
         }
 
         Catalog.Clear();
@@ -310,10 +334,20 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
             }
             else
             {
+                var selectedService = SelectedCatalogService!;
+
+                // Специализация выбранной услуги появляется в профиле вместе с услугой:
+                // отдельного шага «Добавить специализацию» больше нет. Сначала пишется она,
+                // чтобы услуга не оказалась в прайсе без своей специализации.
+                await EnsureSpecializationAttachedAsync(
+                    profileId,
+                    selectedService,
+                    cancellationToken);
+
                 await _profileApi.AddServiceAsync(
                     profileId,
                     new AddBarberProfileServiceRequest(
-                        SelectedCatalogService!.Id,
+                        selectedService.Id,
                         price,
                         duration),
                     cancellationToken);
@@ -417,6 +451,51 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Добавляет специализацию выбранной услуги, если её ещё нет в профиле.
+    /// </summary>
+    /// <remarks>
+    /// Повторное добавление сервер отверг бы кодом дубликата; он же приходит, когда
+    /// специализацию успели добавить с другого устройства, и тогда услугу можно сохранять.
+    /// Любой другой отказ прерывает сохранение: услуга не должна попасть в прайс без
+    /// специализации, по которой её найдут в фильтре.
+    /// </remarks>
+    /// <param name="profileId">Профиль мастера.</param>
+    /// <param name="service">Выбранная услуга справочника.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Задача записи.</returns>
+    private async Task EnsureSpecializationAttachedAsync(
+        Guid profileId,
+        BarberServiceCatalogItem service,
+        CancellationToken cancellationToken)
+    {
+        var specializationId = service.SpecializationId;
+
+        if (specializationId == Guid.Empty
+            || !_attachedSpecializationIds.Add(specializationId))
+        {
+            return;
+        }
+
+        try
+        {
+            await _profileApi.AddSpecializationAsync(
+                profileId,
+                specializationId,
+                cancellationToken);
+        }
+        catch (BarberSearchApiException exception)
+            when (exception.ErrorCodes.Contains("barberProfile.addSpecialization.duplicate"))
+        {
+            // Специализация уже есть на сервере: профиль догоняет состояние, услугу пишем.
+        }
+        catch
+        {
+            _attachedSpecializationIds.Remove(specializationId);
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Проверяет цену и длительность.
     /// </summary>
     /// <param name="price">Разобранная цена.</param>
@@ -514,6 +593,7 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
             "barberService.updatePrice" => Loc.T("Цена не может быть отрицательной."),
             "barberProfile.addService.duration" => Loc.T("Длительность — от 1 до 1440 минут."),
             "barberService.updateDuration" => Loc.T("Длительность — от 1 до 1440 минут."),
+            "barberProfile.addSpecialization.specializationNotFound" => Loc.T("Специализация не найдена."),
             _ => apiException.StatusCode switch
             {
                 HttpStatusCode.Forbidden => Loc.T("Прайс доступен только владельцу профиля."),
@@ -550,6 +630,7 @@ public sealed class BarberServiceCatalogItem
         Id = service.Id;
         Name = service.Name;
         CategoryText = BarberProfileText.CategoryText(service.Category);
+        SpecializationId = service.SpecializationId;
         DefaultDurationMinutes = service.DefaultDurationMinutes;
     }
 
@@ -557,6 +638,11 @@ public sealed class BarberServiceCatalogItem
     /// Идентификатор услуги справочника.
     /// </summary>
     public Guid Id { get; }
+
+    /// <summary>
+    /// Специализация услуги: её редактор добавляет в профиль вместе с услугой.
+    /// </summary>
+    public Guid SpecializationId { get; }
 
     /// <summary>
     /// Название услуги.

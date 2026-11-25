@@ -1,6 +1,5 @@
 using BarberSearch.Contracts.Addresses.SuggestCities;
 using BarberSearch.Contracts.Auth.Login;
-using BarberSearch.Contracts.BarberProfiles.AddBarberProfileSalon;
 using BarberSearch.Contracts.BarberProfiles.AddBarberProfileService;
 using BarberSearch.Contracts.BarberProfiles.AddBarberProfileTimeOff;
 using BarberSearch.Contracts.BarberProfiles.BarberSchedule;
@@ -39,7 +38,6 @@ using BarberSearch.Mobile.Core.Api.Auth;
 using BarberSearch.Mobile.Core.Api.Barber;
 using BarberSearch.Mobile.Core.Api.BarberRequests;
 using BarberSearch.Mobile.Core.Media;
-using BarberSearch.Mobile.Core.ViewModels.Barber;
 
 namespace BarberSearch.Mobile.Core.Tests;
 
@@ -356,13 +354,21 @@ internal static class BarberCabinetData
     /// <param name="name">Название.</param>
     /// <param name="durationMinutes">Длительность по умолчанию.</param>
     /// <param name="category">Категория.</param>
+    /// <param name="specializationId">Специализация услуги; по умолчанию «Фейд».</param>
     /// <returns>Строка справочника услуг.</returns>
     public static HairServiceResponse HairService(
         Guid? id = null,
         string name = "Стрижка",
         int durationMinutes = 30,
-        ServiceCategory category = ServiceCategory.Haircut) =>
-        new(id ?? BarberCabinetFixtures.HairServiceId, name, category, durationMinutes, null);
+        ServiceCategory category = ServiceCategory.Haircut,
+        Guid? specializationId = null) =>
+        new(
+            id ?? BarberCabinetFixtures.HairServiceId,
+            name,
+            category,
+            durationMinutes,
+            null,
+            specializationId ?? BarberCabinetFixtures.ServiceSpecializationId);
 
     /// <summary>
     /// Специализация справочника.

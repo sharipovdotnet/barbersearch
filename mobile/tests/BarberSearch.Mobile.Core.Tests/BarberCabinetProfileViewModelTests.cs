@@ -264,83 +264,6 @@ public sealed class BarberCabinetProfileViewModelTests
     }
 
     [Fact]
-    public async Task OpenSpecializationPicker_LoadsCatalogLazilyOnce()
-    {
-        var harness = new Harness();
-
-        harness.Profile.Own = _ => Task.FromResult(BarberCabinetData.Profile(
-            specializations: [BarberCabinetData.ProfileSpecialization()]));
-
-        harness.Search.Specializations = _ => Task.FromResult<IReadOnlyList<SpecializationResponse>>(
-        [
-            BarberCabinetData.Specialization(),
-            BarberCabinetData.Specialization(BarberCabinetData.SecondSpecializationId, "Борода"),
-        ]);
-
-        await harness.ViewModel.ActivateAsync();
-
-        var viewModel = harness.ViewModel;
-
-        Assert.Equal(0, harness.Search.SpecializationCalls);
-
-        await viewModel.OpenSpecializationPickerCommand.ExecuteAsync(null);
-
-        Assert.Equal(1, harness.Search.SpecializationCalls);
-        Assert.True(viewModel.IsSpecializationPickerOpen);
-        Assert.True(viewModel.HasAvailableSpecializations);
-        Assert.Single(viewModel.AvailableSpecializations);
-        Assert.Equal(
-            BarberCabinetData.SecondSpecializationId,
-            viewModel.AvailableSpecializations[0].Id);
-
-        viewModel.CloseSpecializationPickerCommand.Execute(null);
-        await viewModel.OpenSpecializationPickerCommand.ExecuteAsync(null);
-
-        Assert.Equal(1, harness.Search.SpecializationCalls);
-    }
-
-    [Fact]
-    public async Task AddSpecializationAsync_AddsClosesPickerAndRefreshesCatalog()
-    {
-        var harness = new Harness();
-
-        await harness.ViewModel.ActivateAsync();
-
-        var viewModel = harness.ViewModel;
-
-        await viewModel.OpenSpecializationPickerCommand.ExecuteAsync(null);
-
-        await viewModel.AddSpecializationCommand.ExecuteAsync(
-            BarberCabinetData.SecondSpecializationId);
-
-        var add = Assert.Single(harness.Profile.SpecializationAdds);
-
-        Assert.Equal(BarberCabinetData.SecondSpecializationId, add.SpecializationId);
-        Assert.False(viewModel.IsSpecializationPickerOpen);
-        Assert.False(viewModel.IsMutating);
-    }
-
-    [Fact]
-    public async Task AddSpecializationAsync_Duplicate_ShowsReason()
-    {
-        var harness = new Harness();
-
-        await harness.ViewModel.ActivateAsync();
-
-        harness.Profile.AddSpecialization = (_, _) => Task.FromException(
-            BarberCabinetApiError.Create(
-                HttpStatusCode.Conflict,
-                "barberProfile.addSpecialization.duplicate"));
-
-        await harness.ViewModel.AddSpecializationCommand.ExecuteAsync(
-            BarberCabinetData.SecondSpecializationId);
-
-        Assert.Equal(
-            "Эта специализация уже добавлена.",
-            harness.ViewModel.SpecializationError);
-    }
-
-    [Fact]
     public async Task ActivateAsync_TransportFailure_RetriesUntilLoaded()
     {
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -391,124 +314,6 @@ public sealed class BarberCabinetProfileViewModelTests
         Assert.False(viewModel.IsReady);
         Assert.False(viewModel.IsAutoRetrying);
         Assert.Equal(0, harness.ViewModel.ReadAutoRetry.Attempts);
-    }
-
-    [Fact]
-    public async Task SpecializationCatalog_TransportFailure_RetriesUntilLoaded()
-    {
-        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var harness = new Harness(catalogRetry: BarberCabinetRetry.Gated(gate.Task));
-        var calls = 0;
-
-        harness.Search.Specializations = _ =>
-        {
-            calls++;
-
-            return calls == 1
-                ? Task.FromException<IReadOnlyList<SpecializationResponse>>(
-                    new HttpRequestException("offline"))
-                : Task.FromResult<IReadOnlyList<SpecializationResponse>>(
-                    [BarberCabinetData.Specialization()]);
-        };
-
-        await harness.ViewModel.ActivateAsync();
-
-        var viewModel = harness.ViewModel;
-
-        await viewModel.OpenSpecializationPickerCommand.ExecuteAsync(null);
-
-        Assert.Equal(NetworkText, viewModel.SpecializationError);
-        Assert.True(viewModel.IsSpecializationAutoRetrying);
-
-        gate.SetResult();
-        await viewModel.SpecializationsRetryCompletion;
-
-        Assert.Null(viewModel.SpecializationError);
-        Assert.False(viewModel.IsSpecializationAutoRetrying);
-        Assert.Equal(2, calls);
-        Assert.Single(viewModel.AvailableSpecializations);
-    }
-
-    [Fact]
-    public async Task SpecializationCatalog_ClosePicker_StopsAutoRetry()
-    {
-        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var harness = new Harness(catalogRetry: BarberCabinetRetry.Gated(gate.Task));
-
-        harness.Search.Specializations = _ => Task.FromException<IReadOnlyList<SpecializationResponse>>(
-            new HttpRequestException("offline"));
-
-        await harness.ViewModel.ActivateAsync();
-
-        var viewModel = harness.ViewModel;
-
-        await viewModel.OpenSpecializationPickerCommand.ExecuteAsync(null);
-
-        Assert.True(viewModel.IsSpecializationAutoRetrying);
-
-        viewModel.CloseSpecializationPickerCommand.Execute(null);
-        await viewModel.SpecializationsRetryCompletion;
-
-        Assert.False(viewModel.IsSpecializationAutoRetrying);
-        Assert.Equal(1, harness.Search.SpecializationCalls);
-
-        gate.SetResult();
-    }
-
-    [Fact]
-    public async Task SpecializationCatalog_ReturnToSection_ReadsCatalogAgain()
-    {
-        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var harness = new Harness(catalogRetry: BarberCabinetRetry.Gated(gate.Task));
-        var calls = 0;
-
-        harness.Search.Specializations = _ =>
-        {
-            calls++;
-
-            return calls == 1
-                ? Task.FromException<IReadOnlyList<SpecializationResponse>>(
-                    new HttpRequestException("offline"))
-                : Task.FromResult<IReadOnlyList<SpecializationResponse>>(
-                    [BarberCabinetData.Specialization()]);
-        };
-
-        await harness.ViewModel.ActivateAsync();
-
-        var viewModel = harness.ViewModel;
-
-        await viewModel.OpenSpecializationPickerCommand.ExecuteAsync(null);
-
-        Assert.Equal(NetworkText, viewModel.SpecializationError);
-
-        viewModel.Deactivate();
-        await viewModel.SpecializationsRetryCompletion;
-
-        gate.SetResult();
-        await viewModel.ActivateAsync();
-
-        Assert.Null(viewModel.SpecializationError);
-        Assert.Equal(2, calls);
-        Assert.Single(viewModel.AvailableSpecializations);
-    }
-
-    [Fact]
-    public async Task SpecializationCatalog_TerminalFailure_DoesNotArmAutoRetry()
-    {
-        var harness = new Harness(catalogRetry: BarberCabinetRetry.Fast());
-
-        harness.Search.Specializations = _ => Task.FromException<IReadOnlyList<SpecializationResponse>>(
-            BarberCabinetApiError.Create(HttpStatusCode.BadRequest, "validation"));
-
-        await harness.ViewModel.ActivateAsync();
-
-        var viewModel = harness.ViewModel;
-
-        await viewModel.OpenSpecializationPickerCommand.ExecuteAsync(null);
-
-        Assert.Equal(1, harness.Search.SpecializationCalls);
-        Assert.False(viewModel.IsSpecializationAutoRetrying);
-        Assert.NotNull(viewModel.SpecializationError);
     }
 
     [Fact]
@@ -844,28 +649,23 @@ public sealed class BarberCabinetProfileViewModelTests
         };
 
     /// <summary>
-    /// Собранный раздел: подменённые клиенты карточки, справочника и аватара, пикер, часы
-    /// и два цикла повтора.
+    /// Собранный раздел: подменённые клиенты карточки и аватара, выбор файла, часы и цикл повтора.
     /// </summary>
     private sealed class Harness
     {
-        public Harness(AutoRetryLoop? retry = null, AutoRetryLoop? catalogRetry = null)
+        public Harness(AutoRetryLoop? retry = null)
         {
             ViewModel = new BarberCabinetProfileViewModel(
                 Profile,
-                Search,
                 Avatar,
                 Picker,
                 new FixedTimeProvider(BarberCabinetFixtures.Now),
-                retry,
-                catalogRetry);
+                retry);
 
             ViewModel.Initialize(BarberCabinetFixtures.BarberProfileId);
         }
 
         public FakeBarberProfileApi Profile { get; } = new();
-
-        public FakeBarberSearchApi Search { get; } = new();
 
         public FakeAccountAvatarApi Avatar { get; } = new();
 

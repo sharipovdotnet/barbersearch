@@ -129,7 +129,8 @@ public sealed class BarberServiceEditorViewModelTests
 
         harness.ViewModel.InitializeForAdd(
             BarberCabinetFixtures.BarberProfileId,
-            [new BarberServiceItem(BarberCabinetFixtures.Service())]);
+            [new BarberServiceItem(BarberCabinetFixtures.Service())],
+            [BarberCabinetFixtures.ServiceSpecializationId]);
 
         await harness.ViewModel.CatalogLoading;
 
@@ -154,7 +155,127 @@ public sealed class BarberServiceEditorViewModelTests
         Assert.Equal("Услуга добавлена.", announcement);
         Assert.Null(viewModel.FormError);
         Assert.False(viewModel.IsSaving);
+        Assert.Empty(harness.Profile.SpecializationAdds);
         Assert.Empty(harness.Profile.ServiceUpdates);
+    }
+
+    [Fact]
+    public async Task SaveAsync_AddModeWithNewSpecialization_AddsSpecializationWithService()
+    {
+        var harness = new Harness();
+        string? announcement = null;
+
+        harness.Search.HairServices = _ => Task.FromResult<IReadOnlyList<HairServiceResponse>>(
+        [
+            BarberCabinetData.HairService(
+                BarberCabinetData.SecondHairServiceId,
+                "Борода",
+                45,
+                ServiceCategory.Beard,
+                BarberCabinetData.SecondSpecializationId),
+        ]);
+
+        harness.ViewModel.InitializeForAdd(
+            BarberCabinetFixtures.BarberProfileId,
+            [new BarberServiceItem(BarberCabinetFixtures.Service())],
+            [BarberCabinetFixtures.ServiceSpecializationId]);
+
+        await harness.ViewModel.CatalogLoading;
+
+        var viewModel = harness.ViewModel;
+
+        viewModel.Saved += (_, text) => announcement = text;
+        viewModel.SelectedCatalogService = viewModel.Catalog[0];
+        viewModel.PriceText = "1800";
+        viewModel.DurationText = "45";
+
+        await viewModel.SaveCommand.ExecuteAsync(null);
+
+        var specialization = Assert.Single(harness.Profile.SpecializationAdds);
+
+        Assert.Equal(BarberCabinetFixtures.BarberProfileId, specialization.ProfileId);
+        Assert.Equal(BarberCabinetData.SecondSpecializationId, specialization.SpecializationId);
+        Assert.Single(harness.Profile.ServiceAdds);
+        Assert.Equal("Услуга добавлена.", announcement);
+        Assert.Null(viewModel.FormError);
+    }
+
+    [Fact]
+    public async Task SaveAsync_AddModeSpecializationFailure_DoesNotAddService()
+    {
+        var harness = new Harness();
+
+        harness.Search.HairServices = _ => Task.FromResult<IReadOnlyList<HairServiceResponse>>(
+        [
+            BarberCabinetData.HairService(
+                BarberCabinetData.SecondHairServiceId,
+                "Борода",
+                45,
+                ServiceCategory.Beard,
+                BarberCabinetData.SecondSpecializationId),
+        ]);
+
+        harness.ViewModel.InitializeForAdd(
+            BarberCabinetFixtures.BarberProfileId,
+            [new BarberServiceItem(BarberCabinetFixtures.Service())]);
+
+        await harness.ViewModel.CatalogLoading;
+
+        var viewModel = harness.ViewModel;
+
+        viewModel.SelectedCatalogService = viewModel.Catalog[0];
+        viewModel.PriceText = "1800";
+        viewModel.DurationText = "45";
+
+        harness.Profile.AddSpecialization = (_, _) => Task.FromException(
+            new HttpRequestException("offline"));
+
+        await viewModel.SaveCommand.ExecuteAsync(null);
+
+        Assert.Single(harness.Profile.SpecializationAdds);
+        Assert.Empty(harness.Profile.ServiceAdds);
+        Assert.Equal(SaveFailedText, viewModel.FormError);
+        Assert.False(viewModel.IsSaving);
+    }
+
+    [Fact]
+    public async Task SaveAsync_AddModeDuplicateSpecialization_StillAddsService()
+    {
+        var harness = new Harness();
+
+        harness.Search.HairServices = _ => Task.FromResult<IReadOnlyList<HairServiceResponse>>(
+        [
+            BarberCabinetData.HairService(
+                BarberCabinetData.SecondHairServiceId,
+                "Борода",
+                45,
+                ServiceCategory.Beard,
+                BarberCabinetData.SecondSpecializationId),
+        ]);
+
+        harness.ViewModel.InitializeForAdd(
+            BarberCabinetFixtures.BarberProfileId,
+            [new BarberServiceItem(BarberCabinetFixtures.Service())],
+            [BarberCabinetFixtures.ServiceSpecializationId]);
+
+        await harness.ViewModel.CatalogLoading;
+
+        var viewModel = harness.ViewModel;
+
+        viewModel.SelectedCatalogService = viewModel.Catalog[0];
+        viewModel.PriceText = "1800";
+        viewModel.DurationText = "45";
+
+        harness.Profile.AddSpecialization = (_, _) => Task.FromException(
+            BarberCabinetApiError.Create(
+                HttpStatusCode.Conflict,
+                "barberProfile.addSpecialization.duplicate"));
+
+        await viewModel.SaveCommand.ExecuteAsync(null);
+
+        Assert.Single(harness.Profile.SpecializationAdds);
+        Assert.Single(harness.Profile.ServiceAdds);
+        Assert.Null(viewModel.FormError);
     }
 
     [Fact]

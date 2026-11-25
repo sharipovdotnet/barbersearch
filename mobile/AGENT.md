@@ -306,6 +306,18 @@ in Core owns both base addresses.
   API order, the category badge on the card and in the cabinet, and both grouping builders —
   headings in first-appearance order, rows kept in source order, interleaved services collected
   under one heading, the blank-specialization tail, and the cabinet's hidden services in API order.
+- **A specialization is derived from the services, not managed on its own.** The cabinet's
+  «Специализации» block only lists them: neither «Добавить специализацию» nor «Убрать» exists.
+  When the master adds a catalogue service, the editor first attaches the service's
+  `SpecializationId` if the profile does not have it (`POST …/specializations`), then adds the
+  service; a `duplicate` answer counts as already attached, while any other failure keeps the
+  service out of the price list, so a service can never be listed under a missing tag. The
+  profile's specialization ids travel into the editor with the route, so an attached tag is not
+  posted twice, and the duplicate path also covers a tag added from another device. The profile
+  section no longer reads the specialization catalogue at all; its empty state says a tag will
+  appear with the first service. Tests add 3 cases and drop the 7 picker cases (1715 total):
+  attaching a new tag, skipping an attached one, the duplicate answer and a failed attach that
+  leaves the price list unchanged.
 - **Search filters are the web's six, with one touch adaptation.** City, date, language,
   specialization, hair service and the additional-service substring travel in one request, only on
   «Найти», and the catalogs for the two selects come from `GET api/specializations` and
@@ -697,10 +709,7 @@ in Core owns both base addresses.
   one, its button, and adds one muted line, «Пробуем снова…» (the only new catalog key), so the
   screen says the app is working instead of looking frozen. The cabinet's read error cards carry no
   such button: every cabinet read that shows an error card also arms the loop while its section is
-  visible, so a manual tap would only duplicate a retry already running. The specialization
-  picker's lazy catalogue used to be the exception because it had no loop; it now owns one that
-  runs while the picker is open and stops with it, keeping the reason until the answer, so the
-  picker's error card carries the reason and «Пробуем снова…» only. A silent attempt also has to
+  visible, so a manual tap would only duplicate a retry already running. A silent attempt also has to
   keep what is already shown: «Записи» gets `FirstPageMode.Retry`, which does not clear the message
   until the answer — the old silent mode blanked the card into an empty screen for the length of
   every request — and neither the rows nor the reason are erased by a failed attempt. This is a
@@ -1080,15 +1089,15 @@ in Core owns both base addresses.
   the onboarding request plus its salon directory. It adds these writes to the side that is never
   repeated silently: confirm, complete, no-show, cancel, note and price on a booking, the
   reschedule submit, the create-booking submit, the week, the date exceptions and the time offs,
-  attaching a salon and making it primary, the profile update, service add/update/hide/restore,
-  specialization add/remove, mark-read and read-all, and the onboarding's `POST`, token refresh
+  attaching a salon and making it primary, the profile update, service add/update/hide/restore
+  (the add also attaches the service's specialization), mark-read and read-all, and the onboarding's
+  `POST`, token refresh
   and salon attach — after any of these a silent repeat could book twice, hide a refusal or write
   a second profile. One read stays outside the loop: the service editor's hair-service catalog is
   an input aid inside an open picker, retried by its own button (the editor's remarks record it;
   the city suggestions are the existing precedent), and the bell's unread count is silent by
-  design. The specialization picker's catalog, the other input aid, arms a loop of its own while
-  the picker is open and stops it with the picker. Sections stop their loops in `Deactivate`
-  before a push; the child pages use `PageVisibility`.
+  design. Sections stop their loops in `Deactivate` before a push; the child pages use
+  `PageVisibility`.
 
 - **The cabinet is tested at the ViewModel layer, and that is where the coverage stops.** Tests
   add 142 cases (1473 total): the gate (no session, `401`, a customer, a barber without a profile,
