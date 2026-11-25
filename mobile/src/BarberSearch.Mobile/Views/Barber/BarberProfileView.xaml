@@ -687,7 +687,7 @@
                                             Margin="0,4,0,0"
                                             FontFamily="GeistSemiBold"
                                             FontSize="14"
-                                            Text="{Binding DisplayTitle}" />
+                                            Text="{Binding Title}" />
                                         <VerticalStackLayout BindableLayout.ItemsSource="{Binding Services}" Spacing="8">
                                             <BindableLayout.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:BarberServiceItem">
@@ -701,7 +701,7 @@
                                                                     FontFamily="GeistMedium"
                                                                     FontSize="14"
                                                                     LineBreakMode="WordWrap"
-                                                                    Text="{Binding Name}" />
+                                                                    Text="{Binding DisplayName}" />
                                                                 <Label
                                                                     Grid.Column="1"
                                                                     Text="{Binding PriceText}" />

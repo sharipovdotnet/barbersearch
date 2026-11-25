@@ -38,16 +38,6 @@ public sealed class BarberCabinetServiceGroup
     public string Title { get; }
 
     /// <summary>
-    /// Заголовок для показа: маркер «• » и название специализации.
-    /// </summary>
-    /// <remarks>
-    /// Маркер свёрстан текстом, как у пунктов «О мастере»: он подсказывает, что под заголовком
-    /// идёт перечисление услуг. <see cref="Title"/> остаётся чистым названием — по нему
-    /// собирают группы и его проверяют тесты.
-    /// </remarks>
-    public string DisplayTitle => string.Concat("• ", Title);
-
-    /// <summary>
     /// Строки прайса этой специализации в порядке ответа API.
     /// </summary>
     public IReadOnlyList<BarberServiceItem> Services { get; }

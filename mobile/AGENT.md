@@ -270,11 +270,11 @@ in Core owns both base addresses.
   avatar there would promise an editing flow that does not exist.
 - **The price list groups services by specialization, keeps the catalogue badge, and takes the
   catalogue order, not the alphabet.** The public card's «Услуги» block and the cabinet's
-  «Профиль» → «Услуги» list put the specialization in a group heading with a leading «• » bullet
-  (`GeistSemiBold`, 14 pt) and list that specialization's services under it, the same shape as the
-  «Услуга» filter on «Поиск». The per-row outline pill it replaces repeated the same word on every
-  row and was clipped on a phone («Окрашивани», «Блонд-масте»); a heading reads once and is never
-  clipped. Each row keeps the catalogue category badge from `BarberProfileText.CategoryText`
+  «Профиль» → «Услуги» list put the specialization in a group heading
+  (`GeistSemiBold`, 14 pt) and list that specialization's services under it, each service name
+  prefixed with a «• » marker so the group reads as a list — the same shape as the «Услуга» filter
+  on «Поиск». The per-row outline pill it replaces repeated the same word on every row and was
+  clipped on a phone («Окрашивани», «Блонд-масте»); a heading reads once and is never clipped. Each row keeps the catalogue category badge from `BarberProfileText.CategoryText`
   («Стрижка», «Борода», …; `Haircut` in the English interface) and the duration, with the price on
   the right; the cabinet row also keeps «Скрыта» and its actions. Groups are built from the list
   already shown, preserving first appearance and the order inside a group:
@@ -300,8 +300,8 @@ in Core owns both base addresses.
   `barber-services.tsx`; the grouping takes the shape of `groupHairServices` from
   `frontend/src/lib/service-groups.ts` — a heading per specialization — but keeps the list's own
   order instead of its alphabetical group order. No new API call, package or localization key
-  enters the app. Tests add 12 cases (1719 total): the catalogue order over the API one, the unknown category
-  last, the specialization grouping and the Russian collation, the name and `BarberServiceId`
+  enters the app. Tests add 12 cases (1719 total): the catalogue order over the API one, the
+  unknown category last, the specialization grouping and the Russian collation, the name and `BarberServiceId`
   tie-breakers, the non-mutating sort, the card's sorted price list with the slot picker kept in
   API order, the category badge on the card and in the cabinet, and both grouping builders —
   headings in first-appearance order, rows kept in source order, interleaved services collected

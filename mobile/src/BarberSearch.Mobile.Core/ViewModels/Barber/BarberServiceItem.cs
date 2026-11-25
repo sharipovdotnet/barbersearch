@@ -51,6 +51,16 @@ public sealed class BarberServiceItem
     public string Name { get; }
 
     /// <summary>
+    /// Название для строки прайса: маркер «• » и название услуги.
+    /// </summary>
+    /// <remarks>
+    /// Маркер свёрстан текстом, как у пунктов «О мастере»: под заголовком специализации услуги
+    /// читаются перечислением. <see cref="Name"/> остаётся чистым названием — его показывают
+    /// редактор и подтверждения.
+    /// </remarks>
+    public string DisplayName => string.Concat("• ", Name);
+
+    /// <summary>
     /// Категория справочника.
     /// </summary>
     public ServiceCategory Category { get; }

@@ -141,13 +141,13 @@
                                             Margin="0,4,0,0"
                                             FontFamily="GeistSemiBold"
                                             FontSize="14"
-                                            Text="{Binding DisplayTitle}" />
+                                            Text="{Binding Title}" />
                                         <VerticalStackLayout BindableLayout.ItemsSource="{Binding Services}" Spacing="8">
                                             <BindableLayout.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:BarberServiceOption">
                                                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                                                         <VerticalStackLayout Spacing="2">
-                                                            <Label LineBreakMode="WordWrap" Text="{Binding Name}" />
+                                                            <Label LineBreakMode="WordWrap" Text="{Binding DisplayName}" />
                                                             <FlexLayout
                                                                 AlignItems="Center"
                                                                 Direction="Row"

@@ -33,9 +33,6 @@ public sealed class BarberServiceGroupsTests
             ["Фейд", "Борода", "Окрашивание"],
             groups.Select(group => group.Title));
 
-        // Маркер «• » подсказывает, что под заголовком идёт перечисление услуг.
-        Assert.Equal("• Фейд", groups[0].DisplayTitle);
-
         // Строки одной специализации собраны вместе и сохраняют порядок исходного списка.
         Assert.Equal(
             ["Фейд классический", "Фейд с выбриванием"],

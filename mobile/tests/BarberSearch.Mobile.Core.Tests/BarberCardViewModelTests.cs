@@ -257,6 +257,10 @@ public sealed class BarberCardViewModelTests
         Assert.Equal("Борода", option.CategoryText);
         Assert.Equal("Борода", option.SpecializationName);
 
+        // Строка прайса начинается с маркера «• », а Picker показывает чистое название.
+        Assert.Equal("• Оформление бороды", option.DisplayName);
+        Assert.Equal("Оформление бороды", option.DisplayText);
+
         // В Picker тот же объект: цена и бейджи не расходятся между списками.
         Assert.Same(
             option,

@@ -117,6 +117,10 @@ public sealed class BarberCabinetProfileViewModelTests
             BarberCabinetFixtures.ServiceSpecializationName,
             viewModel.Services[0].SpecializationName);
 
+        // Строка прайса начинается с маркера «• », а чистое имя остаётся для правки.
+        Assert.Equal("• Стрижка", viewModel.Services[0].DisplayName);
+        Assert.Equal("Стрижка", viewModel.Services[0].Name);
+
         Assert.True(viewModel.HasServices);
 
         Assert.Single(viewModel.Specializations);
