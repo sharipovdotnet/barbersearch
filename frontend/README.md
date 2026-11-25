@@ -180,7 +180,9 @@ Russian grade, «Проверен» badge, rating or «Пока нет отзы�
 certificates, achievements, comfort and communication lists, additional services, services with
 category, specialization, price and duration, specializations, salons with addresses and the weekly
 schedule, payment methods and the late policy. Empty blocks are hidden instead of rendering an empty
-heading.
+heading. Services are ordered by the catalogue category (haircut, beard, coloring, styling,
+treatment, other), then by specialization name, then by service name, so the rows of one direction
+stay together.
 
 «Свободное время» sits under the hero and calls `GET /api/barbers/{id}/slots?date=&hairServiceId=&salonId=`
 (anonymous, 120 requests per minute per IP). `date` is the **salon-local** `YYYY-MM-DD` and is
