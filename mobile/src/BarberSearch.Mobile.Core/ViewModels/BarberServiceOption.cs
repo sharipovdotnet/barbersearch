@@ -49,6 +49,16 @@ public sealed class BarberServiceOption
     public string Name { get; }
 
     /// <summary>
+    /// Название для строки прайса: маркер «• » и название услуги.
+    /// </summary>
+    /// <remarks>
+    /// Маркер свёрстан текстом, как у пунктов «О мастере»: под заголовком специализации услуги
+    /// читаются перечислением. <see cref="DisplayText"/> для <c>Picker</c> остаётся без маркера,
+    /// иначе «Любая услуга» и пункты выбора начинались бы с точки.
+    /// </remarks>
+    public string DisplayName => string.Concat("• ", Name);
+
+    /// <summary>
     /// Категория услуги справочника; у «Любой услуги» — <see cref="ServiceCategory.Other"/>.
     /// </summary>
     public ServiceCategory Category { get; }
@@ -59,7 +69,7 @@ public sealed class BarberServiceOption
     public string CategoryText { get; }
 
     /// <summary>
-    /// Специализация услуги для бейджа: «Фейд»; у «Любой услуги» пусто.
+    /// Специализация услуги: заголовок её группы в прайсе. У «Любой услуги» пусто.
     /// </summary>
     public string SpecializationName { get; }
 

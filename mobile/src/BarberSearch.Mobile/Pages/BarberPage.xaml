@@ -110,7 +110,7 @@
                     </VerticalStackLayout>
                 </Border>
 
-                <!-- Услуги: цена и длительность, без кнопок записи. -->
+                <!-- Услуги: специализация заголовком группы, цена и длительность строкой. -->
                 <Border
                     Margin="0,0,0,12"
                     Padding="16"
@@ -127,51 +127,59 @@
                             LineBreakMode="WordWrap"
                             Text="{loc:Translate Key='Услуги пока не добавлены.'}"
                             TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Services}" Spacing="8">
+
+                        <!--
+                            Специализация — заголовок группы, а не бейдж на каждой строке: так она
+                            читается один раз и не обрезается на узком экране, как в фильтре
+                            «Услуга» на «Поиске». Порядок групп задаёт отсортированный прайс.
+                        -->
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding ServiceGroups}" Spacing="8">
                             <BindableLayout.ItemTemplate>
-                                <DataTemplate x:DataType="vm:BarberServiceOption">
-                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                                        <VerticalStackLayout Spacing="2">
-                                            <Label LineBreakMode="WordWrap" Text="{Binding Name}" />
-                                            <FlexLayout
-                                                AlignItems="Center"
-                                                Direction="Row"
-                                                Wrap="Wrap">
-                                                <Border
-                                                    Margin="0,0,8,4"
-                                                    Padding="8,2"
-                                                    BackgroundColor="Transparent"
-                                                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
-                                                    StrokeShape="RoundRectangle 8">
-                                                    <Label
-                                                        FontSize="12"
-                                                        Text="{Binding CategoryText}"
-                                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                                                </Border>
-                                                <Border
-                                                    Margin="0,0,8,4"
-                                                    Padding="8,2"
-                                                    BackgroundColor="Transparent"
-                                                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
-                                                    StrokeShape="RoundRectangle 8">
-                                                    <Label
-                                                        FontSize="12"
-                                                        Text="{Binding SpecializationName}"
-                                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                                                </Border>
-                                                <Label
-                                                    Margin="0,0,8,4"
-                                                    FontSize="12"
-                                                    Text="{Binding DurationText}"
-                                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
-                                                    VerticalTextAlignment="Center" />
-                                            </FlexLayout>
-                                        </VerticalStackLayout>
+                                <DataTemplate x:DataType="vm:BarberServiceGroup">
+                                    <VerticalStackLayout Spacing="8">
                                         <Label
-                                            Grid.Column="1"
-                                            Text="{Binding PriceText}"
-                                            VerticalOptions="Center" />
-                                    </Grid>
+                                            Margin="0,4,0,0"
+                                            FontFamily="GeistSemiBold"
+                                            FontSize="14"
+                                            Text="{Binding Title}" />
+                                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Services}" Spacing="8">
+                                            <BindableLayout.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:BarberServiceOption">
+                                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                                        <VerticalStackLayout Spacing="2">
+                                                            <Label LineBreakMode="WordWrap" Text="{Binding DisplayName}" />
+                                                            <FlexLayout
+                                                                AlignItems="Center"
+                                                                Direction="Row"
+                                                                Wrap="Wrap">
+                                                                <Border
+                                                                    Margin="0,0,8,4"
+                                                                    Padding="8,2"
+                                                                    BackgroundColor="Transparent"
+                                                                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                                                    StrokeShape="RoundRectangle 8">
+                                                                    <Label
+                                                                        FontSize="12"
+                                                                        Text="{Binding CategoryText}"
+                                                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                                                </Border>
+                                                                <Label
+                                                                    Margin="0,0,8,4"
+                                                                    FontSize="12"
+                                                                    Text="{Binding DurationText}"
+                                                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                                                    VerticalTextAlignment="Center" />
+                                                            </FlexLayout>
+                                                        </VerticalStackLayout>
+                                                        <Label
+                                                            Grid.Column="1"
+                                                            Text="{Binding PriceText}"
+                                                            VerticalOptions="Center" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </BindableLayout.ItemTemplate>
+                                        </VerticalStackLayout>
+                                    </VerticalStackLayout>
                                 </DataTemplate>
                             </BindableLayout.ItemTemplate>
                         </VerticalStackLayout>

@@ -268,32 +268,44 @@ in Core owns both base addresses.
   a successfully read card into an error — the approved card URL stays as the fallback. The account
   hub keeps initials because the account slice still allows no avatar management at all; a read-only
   avatar there would promise an editing flow that does not exist.
-- **The price list shows the catalogue category and the service specialization, and takes the
-  catalogue order, not the alphabet.** The public card's «Услуги» block puts two outline badges
-  under each service name — the catalogue category from `BarberProfileText.CategoryText`
-  («Стрижка», «Борода», …; `Haircut` in the English interface) and `SpecializationName` from the
-  API, Russian, as the web prints it — then the duration, with the price on the right. Active
-  services are laid out by `BarberServicesOrder`, a pure comparison and sort helper in Core:
+- **The price list groups services by specialization, keeps the catalogue badge, and takes the
+  catalogue order, not the alphabet.** The public card's «Услуги» block and the cabinet's
+  «Профиль» → «Услуги» list put the specialization in a group heading
+  (`GeistSemiBold`, 14 pt) and list that specialization's services under it, each service name
+  prefixed with a «• » marker so the group reads as a list — the same shape as the «Услуга» filter
+  on «Поиск». The per-row outline pill it replaces repeated the same word on every row and was
+  clipped on a phone («Окрашивани», «Блонд-масте»); a heading reads once and is never clipped. Each row keeps the catalogue category badge from `BarberProfileText.CategoryText`
+  («Стрижка», «Борода», …; `Haircut` in the English interface) and the duration, with the price on
+  the right; the cabinet row also keeps «Скрыта» and its actions. Groups are built from the list
+  already shown, preserving first appearance and the order inside a group:
+  `BarberServiceGroups.Build` for the card and `BarberCabinetServiceGroups.Build` for the cabinet
+  collect rows whose `SpecializationName` is blank into one trailing «Прочие услуги» / «Other
+  services» group, so no service is lost. Active services are laid out by `BarberServicesOrder`, a
+  pure comparison and sort helper in Core:
   category rank from `SearchSpecializationGroups.CategoryOrder` (haircut, beard, coloring,
   styling, treatment, other; an unknown category last), then the specialization name in the
   Russian collation, then the service name, then `BarberServiceId` as the final tie-breaker.
   Catalogue order rather than alphabetical is deliberate: the catalogue is the showcase's own
   order, a client looks for a familiar service in it, services of one direction stand together,
-  and the badges read top to bottom as groups; an alphabetical list would scatter one direction
+  and the headings read top to bottom as groups; an alphabetical list would scatter one direction
   across the section. The sort copies the input and returns a new list, so the caller's order is
   never mutated, and the full tie-breaking makes the price list independent of the API's row
   order — it cannot jump between two reads of the same profile. The «Свободное время» `Picker`
   deliberately keeps the API order: it and the price list share the same `BarberServiceOption`
   instances, so only the card list is re-ordered, exactly as the web keeps its select in API
-  order while its card sorts. The cabinet's «Профиль» → «Услуги» list carries the same two badges
-  on every row, active and hidden, and keeps its API order, matching `barber-profile-services.tsx`;
-  hidden services stay out of the public price list. The port mirrors
+  order while its card sorts. The cabinet's list keeps its API order, matching
+  `barber-profile-services.tsx`, and keeps hidden services in their groups; hidden services stay
+  out of the public price list. The port mirrors
   `frontend/src/lib/barber-services-order.ts` (`sortBarberServices`) and the web's
-  `barber-services.tsx`. No new API call, package or localization key enters the app. Tests add
-  10 cases (1707 total): the catalogue order over the API one, the unknown category last, the
-  specialization grouping and the Russian collation, the name and `BarberServiceId` tie-breakers,
-  the non-mutating sort, the card's sorted price list with the slot picker kept in API order, and
-  the category and specialization badges on the card and in the cabinet.
+  `barber-services.tsx`; the grouping takes the shape of `groupHairServices` from
+  `frontend/src/lib/service-groups.ts` — a heading per specialization — but keeps the list's own
+  order instead of its alphabetical group order. No new API call, package or localization key
+  enters the app. Tests add 12 cases (1719 total): the catalogue order over the API one, the
+  unknown category last, the specialization grouping and the Russian collation, the name and `BarberServiceId`
+  tie-breakers, the non-mutating sort, the card's sorted price list with the slot picker kept in
+  API order, the category badge on the card and in the cabinet, and both grouping builders —
+  headings in first-appearance order, rows kept in source order, interleaved services collected
+  under one heading, the blank-specialization tail, and the cabinet's hidden services in API order.
 - **Search filters are the web's six, with one touch adaptation.** City, date, language,
   specialization, hair service and the additional-service substring travel in one request, only on
   «Найти», and the catalogs for the two selects come from `GET api/specializations` and
