@@ -143,6 +143,41 @@
             <!-- Режим добавления: справочник читается лениво, при открытии формы. -->
             <VerticalStackLayout IsVisible="{Binding IsAddMode}" Spacing="12">
 
+                <!--
+                    Поиск по названию услуги. Фильтр локальный, без запроса и задержки: справочник
+                    уже в памяти, и каждая буква сразу пересобирает видимые строки и счётчики
+                    групп. «×» — тот же жест, что у даты на «Поиске»: строка очищается одним
+                    касанием, выбор услуги при этом остаётся.
+                -->
+                <Border
+                    IsVisible="{Binding IsServiceSearchVisible}"
+                    MinimumHeightRequest="44"
+                    Padding="12,0,0,0"
+                    Stroke="{AppThemeBinding Light={StaticResource Input}, Dark={StaticResource InputDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                        <Entry
+                            Grid.Column="0"
+                            FontSize="16"
+                            Placeholder="{loc:Translate Key='Найти услугу'}"
+                            Text="{Binding ServiceQuery}"
+                            VerticalOptions="Center" />
+                        <Button
+                            Grid.Column="1"
+                            BackgroundColor="Transparent"
+                            Command="{Binding ClearServiceQueryCommand}"
+                            FontSize="18"
+                            HeightRequest="44"
+                            IsVisible="{Binding HasServiceQuery}"
+                            Padding="0"
+                            SemanticProperties.Description="{loc:Translate Key='Очистить поиск'}"
+                            Text="×"
+                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                            VerticalOptions="Center"
+                            WidthRequest="44" />
+                    </Grid>
+                </Border>
+
                 <ActivityIndicator
                     HorizontalOptions="Start"
                     IsRunning="{Binding IsLoadingCatalog}"
@@ -175,20 +210,90 @@
                     TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
 
                 <!--
+                    Поиск ничего не нашёл: это не пустой справочник, а пустой результат фильтра,
+                    поэтому строка своя и рядом «Сбросить» — вернуться к полному списку одним
+                    касанием, а не стирать запрос по буквам.
+                -->
+                <VerticalStackLayout IsVisible="{Binding HasNoMatches}" Spacing="8">
+                    <Label
+                        FontSize="14"
+                        LineBreakMode="WordWrap"
+                        Text="{loc:Translate Key='Ничего не найдено.'}"
+                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                    <Button
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource SecondaryDark}}"
+                        Command="{Binding ClearServiceQueryCommand}"
+                        HorizontalOptions="Start"
+                        Text="{loc:Translate Key='Сбросить'}"
+                        TextColor="{AppThemeBinding Light={StaticResource SecondaryForeground}, Dark={StaticResource SecondaryForegroundDark}}" />
+                </VerticalStackLayout>
+
+                <!--
                     Справочник группами по специализациям, как в фильтре «Услуга» на «Поиске»:
                     заголовок называет направление один раз, строки под ним читаются
-                    перечислением. Порядок групп задаёт BarberServiceCatalogGroups.
+                    перечислением. Порядок групп задаёт BarberServiceCatalogGroups, а раскрытие —
+                    редактор: по умолчанию открыта одна группа, остальные закрыты.
                 -->
                 <VerticalStackLayout BindableLayout.ItemsSource="{Binding CatalogGroups}" Spacing="8">
                     <BindableLayout.ItemTemplate>
                         <DataTemplate x:DataType="vm:BarberServiceCatalogGroup">
-                            <VerticalStackLayout Spacing="8">
-                                <Label
-                                    Margin="0,8,0,0"
-                                    FontFamily="GeistSemiBold"
-                                    FontSize="14"
-                                    Text="{Binding Title}" />
-                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding Services}" Spacing="8">
+
+                            <!-- Группа без совпадений не рисуется вовсе: ни заголовка, ни нуля. -->
+                            <VerticalStackLayout IsVisible="{Binding HasMatches}" Spacing="8">
+
+                                <!--
+                                    Заголовок группы — кнопка сворачивания: название направления,
+                                    счётчик видимых услуг и шеврон. Нажатие попадает в любую точку
+                                    строки высотой 44 pt, а не только в стрелку.
+                                -->
+                                <Grid
+                                    ColumnDefinitions="*,Auto,Auto"
+                                    ColumnSpacing="8"
+                                    MinimumHeightRequest="44"
+                                    Padding="0,8">
+                                    <Grid.GestureRecognizers>
+                                        <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnCatalogGroupTapped" />
+                                    </Grid.GestureRecognizers>
+
+                                    <Label
+                                        Grid.Column="0"
+                                        FontFamily="GeistSemiBold"
+                                        FontSize="14"
+                                        LineBreakMode="TailTruncation"
+                                        Text="{Binding Title}"
+                                        VerticalTextAlignment="Center" />
+
+                                    <!-- Счётчик видимого: одни цифры, шёпотом, рядом с названием. -->
+                                    <Border
+                                        Grid.Column="1"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                        Padding="8,2"
+                                        Stroke="Transparent"
+                                        StrokeShape="RoundRectangle 8"
+                                        VerticalOptions="Center">
+                                        <Label
+                                            FontSize="12"
+                                            Text="{Binding CountText}"
+                                            TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                    </Border>
+
+                                    <!--
+                                        Шеврон — тот же «›», что у строк хаба: свёрнутая группа
+                                        смотрит вправо, раскрытая — вниз. Поворот ведёт страница
+                                        по изменению IsExpanded, поэтому стрелка не врёт и
+                                        тогда, когда группу раскрыл поиск.
+                                    -->
+                                    <Label
+                                        Grid.Column="2"
+                                        BindingContextChanged="OnGroupChevronBindingContextChanged"
+                                        FontSize="18"
+                                        Text="›"
+                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                        VerticalTextAlignment="Center" />
+                                </Grid>
+
+                                <!-- Строки группы: видны только у раскрытой группы, без анимации высоты. -->
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding VisibleServices}" IsVisible="{Binding IsExpanded}" Spacing="8">
                                     <BindableLayout.ItemTemplate>
                                         <DataTemplate x:DataType="vm:BarberServiceCatalogItem">
 

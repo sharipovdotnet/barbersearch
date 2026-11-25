@@ -32,6 +32,13 @@ namespace BarberSearch.Mobile.Core.ViewModels.Barber;
 /// справочника.
 /// </para>
 /// <para>
+/// Поиск по названию фильтрует этот же снимок справочника, не пересоздавая строк: справочник
+/// мал и уже в памяти, поэтому запроса, задержки на ввод и повторного чтения у поиска нет.
+/// Группы сворачиваются, и по умолчанию открыта одна — выбранная или первая. Раскрытие,
+/// счётчики и совпадения живут здесь, чтобы правила проверялись без телефона; странице остаются
+/// поворот шеврона, клавиатура и прокрутка.
+/// </para>
+/// <para>
 /// Цена ограничена двумя знаками после запятой и суммой 99 999 999,99, длительность —
 /// 1..1440 минутами. Это клиентская граница, а не источник истины: серверные коды
 /// (<c>duplicate</c>, <c>updateService.notFound</c>, <c>updateDuration</c>) раскладываются
@@ -57,8 +64,18 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
     private readonly HashSet<Guid> _existingHairServiceIds = [];
     private readonly HashSet<Guid> _attachedSpecializationIds = [];
 
+    /// <summary>
+    /// Раскрытие групп до поиска: возвращается, когда строку поиска очистили.
+    /// </summary>
+    /// <remarks>
+    /// Мастер, открывший «Окрашивание», не должен после поиска и очистки получить вид по
+    /// умолчанию и искать свою группу заново. Память — на одну сессию добавления услуги.
+    /// </remarks>
+    private readonly Dictionary<BarberServiceCatalogGroup, bool> _expansionBeforeQuery = [];
+
     private Task _catalogTask = Task.CompletedTask;
     private BarberServiceItem? _editedService;
+    private bool _isSearchingCatalog;
 
     /// <summary>
     /// Создаёт редактор услуги.
@@ -116,6 +133,19 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     private string _serviceName = string.Empty;
+
+    /// <summary>
+    /// Строка поиска по названию услуги в справочнике.
+    /// </summary>
+    /// <remarks>
+    /// Фильтр локальный и мгновенный: справочник уже в памяти, каждое нажатие клавиши
+    /// пересчитывает видимые строки, счётчики групп и раскрытие. Выбор услуги поиск не трогает —
+    /// карточка цены над списком остаётся на месте, меняется только список под ней.
+    /// </remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasServiceQuery))]
+    [NotifyPropertyChangedFor(nameof(HasNoMatches))]
+    private string _serviceQuery = string.Empty;
 
     /// <summary>
     /// Справочник услуг читается.
@@ -214,6 +244,36 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
     public bool HasCatalogError => !string.IsNullOrEmpty(CatalogError);
 
     /// <summary>
+    /// В строке поиска что-то набрано: кнопка «×» видна только тогда.
+    /// </summary>
+    /// <remarks>
+    /// Считаются и одни пробелы: мастер их набрал, и стереть их должен «×», а не выбор строки.
+    /// </remarks>
+    public bool HasServiceQuery => ServiceQuery.Length > 0;
+
+    /// <summary>
+    /// Поиск ничего не нашёл: каталог прочитан, но ни одна строка не подошла.
+    /// </summary>
+    /// <remarks>
+    /// Это не пустой справочник («Все услуги справочника уже в прайсе.»): там групп нет, и
+    /// подсказка остаётся своя. Здесь группы есть, просто все они спрятаны фильтром.
+    /// </remarks>
+    public bool HasNoMatches =>
+        !BarberServiceCatalogFilter.IsEmpty(ServiceQuery)
+        && CatalogGroups.Count > 0
+        && !CatalogGroups.Any(group => group.HasMatches);
+
+    /// <summary>
+    /// Строка поиска над справочником видна: каталог прочитан и в нём есть строки.
+    /// </summary>
+    /// <remarks>
+    /// Пока каталог читается, упал или уже весь в прайсе, искать не в чем — поле молчит, а
+    /// состояние объясняет подсказка. При пустом результате поиска группы ещё есть (они просто
+    /// спрятаны), поэтому поле и «Сбросить» из вида не уходят.
+    /// </remarks>
+    public bool IsServiceSearchVisible => IsAddMode && CatalogGroups.Count > 0 && !HasCatalogError;
+
+    /// <summary>
     /// Задача текущего чтения справочника: тесты ждут её вместо таймера.
     /// </summary>
     public Task CatalogLoading => _catalogTask;
@@ -282,6 +342,15 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
         ClearErrors();
         CatalogError = null;
         IsCatalogEmpty = false;
+
+        // Новый диалог — новый поиск: строка, раскрытие и память о нём не переезжают из
+        // предыдущего открытия. Присваивание после SelectedCatalogService, иначе очистка
+        // запроса пересчитала бы ещё пустой справочник.
+        _expansionBeforeQuery.Clear();
+        _isSearchingCatalog = false;
+        ServiceQuery = string.Empty;
+        OnPropertyChanged(nameof(HasNoMatches));
+        OnPropertyChanged(nameof(IsServiceSearchVisible));
 
         _existingHairServiceIds.Clear();
         _attachedSpecializationIds.Clear();
@@ -443,6 +512,14 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
             {
                 item.IsSelected = ReferenceEquals(item, value);
             }
+
+            // Выбор раскрывает свою группу: подсвеченная строка не должна оказаться под
+            // закрытым заголовком. Остальные группы это не трогает — сравнение услуг идёт
+            // по двум направлениям сразу.
+            if (value is not null && group.Services.Contains(value))
+            {
+                group.IsExpanded = true;
+            }
         }
 
         if (value is not null && IsAddMode)
@@ -461,6 +538,7 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsFormVisible));
         OnPropertyChanged(nameof(SaveButtonText));
+        OnPropertyChanged(nameof(IsServiceSearchVisible));
     }
 
     /// <summary>
@@ -490,7 +568,11 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
     /// <summary>
     /// Пересчитывает видимость причины сбоя справочника.
     /// </summary>
-    partial void OnCatalogErrorChanged(string? value) => OnPropertyChanged(nameof(HasCatalogError));
+    partial void OnCatalogErrorChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasCatalogError));
+        OnPropertyChanged(nameof(IsServiceSearchVisible));
+    }
 
     /// <summary>
     /// Пересчитывает доступность кнопки вместе с флагом сохранения.
@@ -499,6 +581,142 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(CanSave));
         SaveCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Перефильтровывает справочник на каждое изменение строки поиска.
+    /// </summary>
+    /// <param name="value">Новая строка поиска.</param>
+    partial void OnServiceQueryChanged(string value) => ApplyServiceQuery();
+
+    /// <summary>
+    /// Очищает строку поиска: «×» в поле и «Сбросить» в пустом результате зовут одно и то же.
+    /// </summary>
+    [RelayCommand]
+    private void ClearServiceQuery() => ServiceQuery = string.Empty;
+
+    /// <summary>
+    /// Сворачивает или раскрывает одну группу справочника.
+    /// </summary>
+    /// <param name="group">Группа, по заголовку которой нажали.</param>
+    /// <remarks>
+    /// Это не аккордеон: соседние группы остаются как были. Мастер сравнивает услуги двух
+    /// направлений, и закрывать открытое им же — не помощь.
+    /// </remarks>
+    [RelayCommand]
+    private void ToggleGroup(BarberServiceCatalogGroup? group)
+    {
+        if (group is null || !CatalogGroups.Contains(group))
+        {
+            return;
+        }
+
+        group.IsExpanded = !group.IsExpanded;
+    }
+
+    /// <summary>
+    /// Раскрывает группу выбранной услуги, а без выбора — первую.
+    /// </summary>
+    /// <remarks>
+    /// Первая группа — первая стрижка: с каталожным порядком это самое вероятное направление
+    /// мастера, и один открытый заголовок на экран из шестнадцати и есть смысл свёрнутого
+    /// списка. Остальные закрыты, чтобы каталог занимал один экран.
+    /// </remarks>
+    private void ApplyDefaultExpansion()
+    {
+        var selected = SelectedCatalogService;
+        BarberServiceCatalogGroup? selectedGroup = null;
+
+        if (selected is not null)
+        {
+            foreach (var group in CatalogGroups)
+            {
+                if (group.Services.Contains(selected))
+                {
+                    selectedGroup = group;
+
+                    break;
+                }
+            }
+        }
+
+        for (var index = 0; index < CatalogGroups.Count; index++)
+        {
+            var group = CatalogGroups[index];
+
+            group.IsExpanded = selectedGroup is not null
+                ? ReferenceEquals(group, selectedGroup)
+                : index == 0;
+        }
+    }
+
+    /// <summary>
+    /// Пересчитывает видимые строки, счётчики и раскрытие под текущую строку поиска.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Группа без совпадений прячется целиком, группа с совпадениями раскрывается на каждом
+    /// изменении запроса: попадание не должно остаться под свёрнутым заголовком.
+    /// </para>
+    /// <para>
+    /// Раскрытие до поиска запоминается на переходе «пусто → непусто» и возвращается, когда
+    /// строку очистили: мастер, открывший «Окрашивание», возвращается к своему виду, а не к
+    /// виду по умолчанию.
+    /// </para>
+    /// </remarks>
+    private void ApplyServiceQuery()
+    {
+        var isSearching = !BarberServiceCatalogFilter.IsEmpty(ServiceQuery);
+
+        if (isSearching && !_isSearchingCatalog)
+        {
+            _expansionBeforeQuery.Clear();
+
+            foreach (var group in CatalogGroups)
+            {
+                _expansionBeforeQuery[group] = group.IsExpanded;
+            }
+        }
+
+        _isSearchingCatalog = isSearching;
+
+        foreach (var group in CatalogGroups)
+        {
+            group.ApplyQuery(ServiceQuery);
+
+            if (isSearching && group.HasMatches)
+            {
+                group.IsExpanded = true;
+            }
+        }
+
+        if (!isSearching)
+        {
+            RestoreExpansion();
+        }
+
+        OnPropertyChanged(nameof(HasNoMatches));
+    }
+
+    /// <summary>
+    /// Возвращает раскрытие групп, которое было до поиска.
+    /// </summary>
+    private void RestoreExpansion()
+    {
+        if (_expansionBeforeQuery.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var group in CatalogGroups)
+        {
+            if (_expansionBeforeQuery.TryGetValue(group, out var isExpanded))
+            {
+                group.IsExpanded = isExpanded;
+            }
+        }
+
+        _expansionBeforeQuery.Clear();
     }
 
     /// <summary>
@@ -522,6 +740,7 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
         IsLoadingCatalog = true;
         CatalogError = null;
         IsCatalogEmpty = false;
+        _expansionBeforeQuery.Clear();
 
         try
         {
@@ -554,6 +773,21 @@ public sealed partial class BarberServiceEditorViewModel : ObservableObject
             }
 
             IsCatalogEmpty = CatalogGroups.Count == 0;
+
+            // Свежий снимок справочника раскладывается по умолчанию, а не по раскрытию старого:
+            // группы — новые объекты, и запомненное раскрытие к ним не относится.
+            ApplyDefaultExpansion();
+
+            if (!BarberServiceCatalogFilter.IsEmpty(ServiceQuery))
+            {
+                // Поиск, переживший перечитывание, — это поиск по новому снимку: запоминаем
+                // раскрытие по умолчанию, чтобы очистка строки вернула именно его.
+                _isSearchingCatalog = false;
+                ApplyServiceQuery();
+            }
+
+            OnPropertyChanged(nameof(IsServiceSearchVisible));
+            OnPropertyChanged(nameof(HasNoMatches));
         }
         catch (Exception exception)
         {

@@ -1252,6 +1252,56 @@ in Core owns both base addresses.
   highlight moving with the choice, the revealed card and «Добавить»/«Сохранить» wording, and the
   edit-mode card that opens without a catalogue read.
 
+- **The add-service catalogue is searched by name, and its groups collapse to one open heading.**
+  The grouped list still meant reading 16 headings and 1.5–2 screens to find one known service, and
+  «Борода» or «Окрашивание» sat below the fold. Two mobile-only additions fix that — a search field
+  over the service name and collapsible group headings. Neither has a web counterpart: the web
+  dialog is a native `<select>` with `<optgroup>`s
+  (`frontend/src/components/barber/barber-profile-services.tsx`), and a browser-scrolled optgroup is
+  not a thumb on a 44 pt row. This is a deliberate deviation from §8, recorded here: the phone needs
+  to find a row inside a long catalogue, and the web has nothing to copy for it.
+  The field is one 44 pt `Border` (radius 10, `Input` stroke) with a borderless 16 pt `Entry`
+  (`FontSize="16"`, «Найти услугу») and a 44 pt `×` clear button copied from the date clear of
+  «Поиск» (`SearchPage.xaml`); it appears only in add mode once the catalogue has rows
+  (`IsServiceSearchVisible`), and the `×` only while the query is non-empty. Filtering is local and
+  immediate — no request, no debounce — because the catalogue is already in memory: a row matches
+  when the trimmed query is a case-insensitive substring of the name, with «ё» read as «е» on both
+  sides (`BarberServiceCatalogFilter`: `Replace('ё', 'е').Replace('Ё', 'Е')` plus an ordinal
+  `Contains`; ordinal is right for a substring test, not a sort), so «Окантовка и бритьё шеи»
+  answers a master typing «бритье». Every keystroke re-filters the same item instances —
+  `IsSelected` and the duration prefill live on the item the price card points at, so the catalogue
+  is filtered, never rebuilt, and the query leaves `SelectedCatalogService`, the card and
+  `DurationText` untouched.
+  A heading is now a 44 pt toggle row: the specialization name (`GeistSemiBold`, 14), a muted pill
+  with the number of rows currently under the heading (bare digits — there is no plural key for
+  «услуг», and a count is a hint, not a sentence), and a `›` chevron drawn like the hub rows' one
+  (`ProfilePage.xaml`), rotated 0 → 90° with `RotateToAsync(90, 160, Easing.CubicOut)` in the
+  page's code-behind. The rotation follows `IsExpanded` changes rather than the tap, because the
+  query and the selection open groups too and a chevron pointing right over visible rows is a lie;
+  rows are shown and hidden with `IsVisible`, since MAUI has no cheap height animation and a
+  `HeightRequest` tween fights the layout. After a load only one group is open — the selected one,
+  or with nothing selected the first, which with the catalogue order is the first haircut
+  specialization, the master's likeliest direction — so all headings fit roughly one screen instead
+  of two. A tap toggles one group and leaves the others alone (not an accordion: a master compares
+  two directions, and closing what they just opened is no favour); every query change opens every
+  matching group, hides groups without matches entirely (no zero-count collapsed headings), and a
+  no-match state replaces them with «Ничего не найдено.» and a secondary «Сбросить». The real empty
+  catalogue keeps its own «Все услуги справочника уже в прайсе.» line, so `IsCatalogEmpty` and
+  `HasNoMatches` stay separate flags. The expansion is snapshotted when the query goes from empty to
+  non-empty and restored when it is cleared, so a master who opened «Окрашивание», searched and
+  cleared comes back to their view instead of the default one; the `×` and «Сбросить» both call
+  `ClearServiceQueryCommand`. New keys: «Найти услугу» → “Find a service”, «Сбросить» → “Reset”,
+  «Очистить поиск» → “Clear search”; «Ничего не найдено.» is reused. The rules live in
+  `BarberSearch.Mobile.Core` (`ServiceQuery`, `IsServiceSearchVisible`, `HasNoMatches`,
+  `ClearServiceQueryCommand`, `ToggleGroupCommand`, and on the group
+  `IsExpanded`/`VisibleServices`/`MatchCount`/`ApplyQuery`), so the page keeps only the rotation,
+  the field wiring and the existing scroll/pulse animations. Tests add 16 cases (1742 total):
+  the filter's substring, case and «ё» rules and its spaces-only query, groups hidden and their
+  counts following the query, the no-match flag kept apart from the empty catalogue, the
+  first-group-only default, the selection opening its group, a toggle that leaves the neighbours
+  alone, the query opening every matching group, the restored expansion after clearing, and the
+  query leaving the choice and the duration untouched.
+
 ## 6. What the backend still lacks
 
 The mobile MVP is blocked by two backend changes (`backend/`) that do not exist yet:
