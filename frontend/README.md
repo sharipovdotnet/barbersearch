@@ -904,9 +904,12 @@ that the card appears in search after confirmation.
 
 What changed: the barber can now fix the name, experience, «О себе» and late policy, add a
 service with its own price and duration, change that price later, hide a service and bring it
-back, and add or remove specializations. The service catalogue is loaded lazily — the first
-open of «Добавить услугу» is the only catalogue request, and a failed catalogue does not hide
-the price list that is already on screen.
+back, and add or remove specializations. The service and specialization catalogues are loaded
+lazily together — the first open of «Добавить услугу» is the only catalogue request — and a
+failed catalogue does not hide the price list that is already on screen. The «Услуга» select
+groups the catalogue by specialization (`<optgroup>`, groups alphabetically and rows in API
+order), and a service whose specialization is missing from the public list stays in the
+trailing «Прочие услуги» group instead of disappearing.
 
 «Удаление» услуги intentionally **hides** it instead of erasing the row. The row is what the
 customer, barber and admin booking lists join through (`bookings → barber_services →
