@@ -22,6 +22,11 @@ namespace BarberSearch.Mobile.Pages;
 /// (<see cref="BarberCabinetProfileViewModel.ActivateAsync"/>) и закрывается: раздел
 /// показывает новую строку, а возврат в кабинет снова активирует его.
 /// </para>
+/// <para>
+/// Выбор строки справочника отвечает движением, а не только цветом: строка на мгновение
+/// сжимается под пальцем, карточка цены выезжает на первом выборе, и страница уводит к ней —
+/// иначе подсвеченная строка осталась бы внизу, а поля — выше, за пределами экрана.
+/// </para>
 /// </remarks>
 public partial class BarberServiceEditorPage : ContentPage, IQueryAttributable
 {
@@ -97,14 +102,65 @@ public partial class BarberServiceEditorPage : ContentPage, IQueryAttributable
     /// Выбирает строку справочника: команды выбора у строки нет, а состояние выбора
     /// живёт в ViewModel.
     /// </summary>
-    /// <param name="sender">Распознаватель нажатия строки.</param>
+    /// <remarks>
+    /// Движения идут вместе: прокрутка к карточке, отклик строки и (на первом выборе) выезд
+    /// карточки. Последовательное выполнение читалось бы как задержка между касанием и ответом.
+    /// </remarks>
+    /// <param name="sender">Строка справочника, к которой привязан жест.</param>
     /// <param name="e">Параметр строки — сама услуга справочника.</param>
-    private void OnCatalogServiceTapped(object? sender, TappedEventArgs e)
+    private async void OnCatalogServiceTapped(object? sender, TappedEventArgs e)
     {
-        if (e.Parameter is BarberServiceCatalogItem item)
+        if (e.Parameter is not BarberServiceCatalogItem item)
         {
-            _viewModel.SelectedCatalogService = item;
+            return;
         }
+
+        var isCardShown = _viewModel.IsFormVisible;
+
+        _viewModel.SelectedCatalogService = item;
+
+        // Цена и длительность стоят над списком: после выбора экран уводит к ним.
+        var scroll = FormScroll.ScrollToAsync(0, 0, true);
+
+        // Отклик на касание: строка «проседает» под пальцем и возвращается. Движение видно и
+        // тогда, когда выбор не изменился, — повторное нажатие тоже должно отвечать.
+        var pulse = sender is VisualElement row
+            ? PulseAsync(row)
+            : Task.CompletedTask;
+
+        // Карточка раскрывается на первом выборе: дальше у неё меняется только содержимое.
+        var reveal = !isCardShown && _viewModel.IsFormVisible
+            ? RevealEditorCardAsync()
+            : Task.CompletedTask;
+
+        await Task.WhenAll(pulse, reveal);
+        await scroll;
+    }
+
+    /// <summary>
+    /// Коротко сжимает строку под пальцем и отпускает.
+    /// </summary>
+    /// <param name="row">Строка справочника.</param>
+    /// <returns>Задача анимации.</returns>
+    private static async Task PulseAsync(VisualElement row)
+    {
+        await row.ScaleToAsync(0.97, 60, Easing.CubicOut);
+        await row.ScaleToAsync(1, 120, Easing.CubicOut);
+    }
+
+    /// <summary>
+    /// Показывает карточку цены с коротким выездом: выбор услуги должен читаться как шаг,
+    /// а не как мгновенная подмена содержимого.
+    /// </summary>
+    /// <returns>Задача анимации.</returns>
+    private async Task RevealEditorCardAsync()
+    {
+        EditorCard.Opacity = 0;
+        EditorCard.TranslationY = 8;
+
+        await Task.WhenAll(
+            EditorCard.FadeToAsync(1, 180, Easing.CubicOut),
+            EditorCard.TranslateToAsync(0, 0, 200, Easing.CubicOut));
     }
 
     /// <summary>
