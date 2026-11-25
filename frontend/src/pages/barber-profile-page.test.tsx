@@ -42,6 +42,46 @@ const BARBER = {
   isEmailVerified: true,
 } as const
 
+/** Вторая специализация: ответ API намеренно ставит её первой, группы — по алфавиту. */
+const beardSpecialization = {
+  id: '12121212-1212-4212-8212-121212121212',
+  name: 'Борода',
+  description: null,
+  category: 'Beard',
+} as const
+
+const barberingSpecialization = {
+  id: '34343434-3434-4434-8434-343434343434',
+  name: 'Барберинг',
+  description: null,
+  category: 'Haircut',
+} as const
+
+const fadeHairService = {
+  id: '56565656-5656-4656-8656-565656565656',
+  name: 'Фейд',
+  category: 'Haircut',
+  defaultDurationMinutes: 40,
+  specializationId: barberingSpecialization.id,
+} as const
+
+const beardHairService = {
+  id: '78787878-7878-4878-8878-787878787878',
+  name: 'Оформление бороды',
+  category: 'Beard',
+  defaultDurationMinutes: 30,
+  specializationId: beardSpecialization.id,
+} as const
+
+/** Специализации нет в публичном списке: строка не должна потеряться. */
+const headShaveHairService = {
+  id: '90909090-9090-4090-8090-909090909090',
+  name: 'Бритьё головы',
+  category: 'Other',
+  defaultDurationMinutes: 20,
+  specializationId: 'abababab-abab-4bab-8bab-abababababab',
+} as const
+
 function sessionValue(
   status: SessionContextValue['status'],
   user: SessionContextValue['user']
@@ -466,6 +506,66 @@ describe('BarberProfilePage: мутации', () => {
   })
 })
 
+describe('BarberProfilePage: группировка услуг', () => {
+  it('раскладывает справочник по <optgroup> специализаций', async () => {
+    mockOwnProfile()
+    server.use(
+      http.get('/api/specializations', () =>
+        HttpResponse.json([beardSpecialization, barberingSpecialization])
+      ),
+      http.get('/api/hair-services', () =>
+        HttpResponse.json([
+          beardHairService,
+          headShaveHairService,
+          fadeHairService,
+        ])
+      )
+    )
+
+    renderPage()
+    await waitForProfile()
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Добавить услугу' })
+    )
+
+    const select = await screen.findByLabelText('Услуга')
+
+    await waitFor(() => {
+      expect(within(select).getAllByRole('group')).toHaveLength(3)
+    })
+
+    const groups = within(select).getAllByRole('group')
+
+    // Группы по алфавиту названий, «Прочие услуги» — последней.
+    expect(groups.map((group) => group.getAttribute('label'))).toStrictEqual([
+      'Барберинг',
+      'Борода',
+      'Прочие услуги',
+    ])
+
+    const labelsIn = (label: string): (string | null)[] =>
+      within(within(select).getByRole('group', { name: label }))
+        .getAllByRole('option')
+        .map((option) => option.textContent)
+
+    expect(labelsIn('Барберинг')).toStrictEqual(['Фейд'])
+    expect(labelsIn('Борода')).toStrictEqual(['Оформление бороды'])
+    expect(labelsIn('Прочие услуги')).toStrictEqual(['Бритьё головы'])
+
+    const options = within(select).getAllByRole('option')
+
+    // «Выберите услугу» — отсутствие выбора, а не группа.
+    expect(options[0]).toHaveTextContent('Выберите услугу')
+    expect(options[0].closest('optgroup')).toBeNull()
+
+    // Выбор строки из группы по-прежнему подставляет её длительность.
+    await userEvent.selectOptions(select, fadeHairService.id)
+
+    expect(screen.getByLabelText('Длительность, мин')).toHaveValue(40)
+  })
+})
+
 describe('BarberProfilePage: отказы', () => {
   it('ошибка каталога не ломает список и предлагает «Повторить»', async () => {
     let fail = true
@@ -492,6 +592,42 @@ describe('BarberProfilePage: отказы', () => {
       await screen.findByText('Не удалось загрузить каталог услуг.')
     ).toBeInTheDocument()
     // Список услуг остаётся на экране: упал только справочник диалога.
+    expect(screen.getAllByText('Стрижка').length).toBeGreaterThan(0)
+
+    fail = false
+    await userEvent.click(screen.getByRole('button', { name: 'Повторить' }))
+
+    expect(
+      await screen.findByRole('option', { name: 'Стрижка' })
+    ).toBeInTheDocument()
+  })
+
+  it('ошибка справочника специализаций: ошибка вместо плоского списка', async () => {
+    let fail = true
+
+    mockOwnProfile()
+    server.use(
+      http.get('/api/specializations', () => {
+        if (fail) {
+          return HttpResponse.json(problemDetails(500), { status: 500 })
+        }
+
+        return HttpResponse.json([catalogueSpecialization])
+      })
+    )
+
+    renderPage()
+    await waitForProfile()
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Добавить услугу' })
+    )
+
+    expect(
+      await screen.findByText('Не удалось загрузить каталог услуг.')
+    ).toBeInTheDocument()
+    // Без названий специализаций группы не построить: селект не показываем.
+    expect(screen.queryByLabelText('Услуга')).not.toBeInTheDocument()
     expect(screen.getAllByText('Стрижка').length).toBeGreaterThan(0)
 
     fail = false

@@ -30,6 +30,11 @@ import type { BarberProfileService } from '@/lib/catalog'
 import { describeApiFailure } from '@/lib/errors'
 import { formatDuration, formatPrice } from '@/lib/format'
 import { fetchHairServices, type HairServiceOption } from '@/lib/hair-services'
+import { groupHairServices } from '@/lib/service-groups'
+import {
+  fetchSpecializations,
+  type SpecializationOption,
+} from '@/lib/specializations'
 
 /**
  * Прайс барбера в своём кабинете.
@@ -38,9 +43,11 @@ import { fetchHairServices, type HairServiceOption } from '@/lib/hair-services'
  * join'ы броней не теряли записи. Поэтому барбер видит скрытую услугу с бейджем
  * «Скрыта» и может вернуть её тем же `POST`, который перезапишет цену и длительность.
  *
- * Справочник услуг ленивый: он запрашивается при первом открытии диалога добавления
- * и никогда — при монтировании страницы. Ошибка справочника живёт внутри диалога и
- * не прячет уже загруженный прайс.
+ * Справочники услуг и специализаций ленивые: они запрашиваются одним `Promise.all`
+ * при первом открытии диалога добавления и никогда — при монтировании страницы.
+ * Специализации нужны только для заголовков `optgroup`: в справочнике десятки услуг,
+ * и группа подсказывает, к чему относится строка. Ошибка любого справочника живёт
+ * внутри диалога и не прячет уже загруженный прайс.
  */
 
 type ServiceDialog =
@@ -64,6 +71,9 @@ export function BarberProfileServices({
   const [catalogueStatus, setCatalogueStatus] =
     useState<CatalogueStatus>('idle')
   const [catalogue, setCatalogue] = useState<HairServiceOption[]>([])
+  const [specializations, setSpecializations] = useState<
+    SpecializationOption[]
+  >([])
   const [catalogueError, setCatalogueError] = useState<string | null>(null)
   const [restoringId, setRestoringId] = useState<string | null>(null)
   const [listError, setListError] = useState<string | null>(null)
@@ -83,13 +93,17 @@ export function BarberProfileServices({
     setCatalogueError(null)
 
     try {
-      const items = await fetchHairServices()
+      const [items, specializationItems] = await Promise.all([
+        fetchHairServices(),
+        fetchSpecializations(),
+      ])
 
       if (catalogueVersion.current !== version) {
         return
       }
 
       setCatalogue(items)
+      setSpecializations(specializationItems)
       setCatalogueStatus('ready')
     } catch (cause) {
       if (catalogueVersion.current !== version) {
@@ -214,6 +228,7 @@ export function BarberProfileServices({
             <AddServiceDialog
               barberProfileId={barberProfileId}
               available={available}
+              specializations={specializations}
               status={catalogueStatus}
               error={catalogueError}
               onRetry={() => {
@@ -347,6 +362,7 @@ function ServiceRow({
 function AddServiceDialog({
   barberProfileId,
   available,
+  specializations,
   status,
   error,
   onRetry,
@@ -355,6 +371,7 @@ function AddServiceDialog({
 }: {
   barberProfileId: string
   available: readonly HairServiceOption[]
+  specializations: readonly SpecializationOption[]
   status: CatalogueStatus
   error: string | null
   onRetry: () => void
@@ -367,6 +384,11 @@ function AddServiceDialog({
   const [duration, setDuration] = useState('')
   const [isPending, setIsPending] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+
+  // Услуги сгруппированы по специализациям, как в фильтре витрины: группы идут
+  // по алфавиту, строки внутри — в порядке API. Услуга, чья специализация не
+  // пришла в публичном списке, не теряется — она попадает в «Прочие услуги».
+  const serviceGroups = groupHairServices(available, specializations)
 
   const parsedPrice = Number(price)
   const parsedDuration = Number(duration)
@@ -461,10 +483,20 @@ function AddServiceDialog({
               <option value="" disabled>
                 {t('Выберите услугу')}
               </option>
-              {available.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.name}
-                </option>
+              {serviceGroups.map((group) => (
+                <optgroup
+                  key={
+                    group.specialization?.id ??
+                    'hair-services-without-specialization'
+                  }
+                  label={group.specialization?.name ?? t('Прочие услуги')}
+                >
+                  {group.services.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
