@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using BarberSearch.Mobile.Core.ViewModels.Barber;
 
 namespace BarberSearch.Mobile.Pages;
@@ -27,10 +28,27 @@ namespace BarberSearch.Mobile.Pages;
 /// сжимается под пальцем, карточка цены выезжает на первом выборе, и страница уводит к ней —
 /// иначе подсвеченная строка осталась бы внизу, а поля — выше, за пределами экрана.
 /// </para>
+/// <para>
+/// Свёрнутая группа — это заголовок с шевроном: состояние живёт в редакторе, а страница только
+/// ведёт поворот стрелки. Подписка на изменение <see cref="BarberServiceCatalogGroup.IsExpanded"/>
+/// вместо поворота по касанию нужна потому, что группу открывает ещё и поиск, и выбор услуги:
+/// стрелка обязана смотреть вниз всегда, когда строки видны.
+/// </para>
 /// </remarks>
 public partial class BarberServiceEditorPage : ContentPage, IQueryAttributable
 {
     private readonly BarberServiceEditorViewModel _viewModel;
+
+    /// <summary>
+    /// Шевроны групп: по одному на отрисованный заголовок, с подпиской на раскрытие своей группы.
+    /// </summary>
+    /// <remarks>
+    /// Словарь, а не поиск по визуальному дереву: шаблон группы создаёт стрелку сам, и её
+    /// ссылка нужна только затем, чтобы анимировать поворот. Группы живут столько же, сколько
+    /// страница, поэтому подписки снимаются вместе с ней.
+    /// </remarks>
+    private readonly Dictionary<Label, (BarberServiceCatalogGroup Group, PropertyChangedEventHandler Handler)>
+        _chevrons = [];
 
     private BarberCabinetProfileViewModel? _owner;
     private bool _queryApplied;
@@ -135,6 +153,93 @@ public partial class BarberServiceEditorPage : ContentPage, IQueryAttributable
 
         await Task.WhenAll(pulse, reveal);
         await scroll;
+    }
+
+    /// <summary>
+    /// Сворачивает или раскрывает группу по нажатию на её заголовок.
+    /// </summary>
+    /// <remarks>
+    /// Решение принимает редактор: у него в одной команде и флаг группы, и правило «чужие
+    /// группы не трогать». Страница только передаёт нажатую группу.
+    /// </remarks>
+    /// <param name="sender">Строка заголовка группы.</param>
+    /// <param name="e">Параметр строки — сама группа.</param>
+    private void OnCatalogGroupTapped(object? sender, TappedEventArgs e)
+    {
+        if (e.Parameter is BarberServiceCatalogGroup group)
+        {
+            _viewModel.ToggleGroupCommand.Execute(group);
+        }
+    }
+
+    /// <summary>
+    /// Подписывает шеврон на раскрытие своей группы и ставит стрелку по текущему состоянию.
+    /// </summary>
+    /// <remarks>
+    /// Событие приходит, когда шаблон группы выдал стрелке контекст, — раньше подписываться
+    /// не на что, а нарисованная стрелка должна сразу смотреть в свою сторону: раскрытие по
+    /// умолчанию задаётся до того, как список отрисован.
+    /// </remarks>
+    /// <param name="sender">Шеврон группы.</param>
+    /// <param name="e">Аргументы события.</param>
+    private void OnGroupChevronBindingContextChanged(object? sender, EventArgs e)
+    {
+        if (sender is not Label chevron)
+        {
+            return;
+        }
+
+        if (_chevrons.Remove(chevron, out var previous))
+        {
+            previous.Group.PropertyChanged -= previous.Handler;
+        }
+
+        if (chevron.BindingContext is not BarberServiceCatalogGroup group)
+        {
+            return;
+        }
+
+        chevron.Rotation = ChevronRotation(group.IsExpanded);
+
+        PropertyChangedEventHandler handler = (_, args) =>
+        {
+            if (args.PropertyName == nameof(BarberServiceCatalogGroup.IsExpanded))
+            {
+                AnimateChevron(chevron, group.IsExpanded);
+            }
+        };
+
+        group.PropertyChanged += handler;
+        _chevrons[chevron] = (group, handler);
+    }
+
+    /// <summary>
+    /// Поворот стрелки по состоянию группы.
+    /// </summary>
+    /// <param name="isExpanded">Группа раскрыта.</param>
+    /// <returns>Угол в градусах: 90 — вниз, 0 — вправо.</returns>
+    private static double ChevronRotation(bool isExpanded) => isExpanded ? 90 : 0;
+
+    /// <summary>
+    /// Поворачивает шеврон к новому состоянию группы.
+    /// </summary>
+    /// <remarks>
+    /// Анимация — единственное, что страница делает с шевроном: высоту строк не анимируем,
+    /// потому что дешёвой анимации высоты в MAUI нет, а твин <c>HeightRequest</c> дерётся с
+    /// разметкой. Ошибку глотаем: страницу могли закрыть, пока стрелка ехала.
+    /// </remarks>
+    /// <param name="chevron">Шеврон группы.</param>
+    /// <param name="isExpanded">Группа раскрыта.</param>
+    private static async void AnimateChevron(Label chevron, bool isExpanded)
+    {
+        try
+        {
+            await chevron.RotateToAsync(ChevronRotation(isExpanded), 160, Easing.CubicOut);
+        }
+        catch (Exception)
+        {
+            // Страница закрылась во время анимации: показывать нечего.
+        }
     }
 
     /// <summary>

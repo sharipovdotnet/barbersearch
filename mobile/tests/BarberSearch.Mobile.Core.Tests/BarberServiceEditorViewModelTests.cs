@@ -546,6 +546,243 @@ public sealed class BarberServiceEditorViewModelTests
         Assert.False(harness.ViewModel.IsSaving);
     }
 
+    [Fact]
+    public async Task ServiceQuery_Substring_FiltersRowsOfMatchingGroupAndHidesOthers()
+    {
+        var harness = await LoadThreeGroupCatalogAsync();
+
+        var viewModel = harness.ViewModel;
+        var fadeGroup = viewModel.CatalogGroups[0];
+        var beardGroup = viewModel.CatalogGroups[1];
+        var stylingGroup = viewModel.CatalogGroups[2];
+
+        viewModel.ServiceQuery = "фейд";
+
+        Assert.True(viewModel.HasServiceQuery);
+        Assert.True(viewModel.IsServiceSearchVisible);
+
+        // Строка группы остаётся прежним экземпляром: фильтр не пересоздаёт справочник,
+        // а показывает снимок API-порядка целиком или только его совпадения.
+        Assert.Same(fadeGroup.Services[0], Assert.Single(fadeGroup.VisibleServices));
+        Assert.Equal(2, fadeGroup.Services.Count);
+
+        Assert.False(beardGroup.HasMatches);
+        Assert.Empty(beardGroup.VisibleServices);
+        Assert.False(stylingGroup.HasMatches);
+        Assert.Empty(stylingGroup.VisibleServices);
+    }
+
+    [Fact]
+    public async Task ServiceQuery_MatchCount_CountsOnlyVisibleRows()
+    {
+        var harness = await LoadThreeGroupCatalogAsync();
+
+        var viewModel = harness.ViewModel;
+        var fadeGroup = viewModel.CatalogGroups[0];
+        var beardGroup = viewModel.CatalogGroups[1];
+
+        viewModel.ServiceQuery = "классика";
+
+        // В группе две строки, но под запрос подходит одна: счётчик обещает только видимое.
+        Assert.Equal(2, fadeGroup.Services.Count);
+        Assert.Equal(1, fadeGroup.MatchCount);
+        Assert.Equal("1", fadeGroup.CountText);
+        Assert.True(fadeGroup.HasMatches);
+
+        Assert.Equal(0, beardGroup.MatchCount);
+        Assert.Equal("0", beardGroup.CountText);
+    }
+
+    [Fact]
+    public async Task ServiceQuery_NoMatch_SetsHasNoMatchesButKeepsCatalogueNonEmpty()
+    {
+        var harness = await LoadThreeGroupCatalogAsync();
+
+        var viewModel = harness.ViewModel;
+
+        viewModel.ServiceQuery = "шарлотка";
+
+        Assert.True(viewModel.HasNoMatches);
+
+        // «Ничего не найдено» — не пустой справочник: группы на месте, их просто спрятал фильтр.
+        Assert.False(viewModel.IsCatalogEmpty);
+        Assert.True(viewModel.IsServiceSearchVisible);
+        Assert.Equal(3, viewModel.CatalogGroups.Count);
+        Assert.All(viewModel.CatalogGroups, group => Assert.False(group.HasMatches));
+    }
+
+    [Fact]
+    public async Task ClearServiceQueryCommand_NoMatch_RestoresRowsAndClearsHasNoMatches()
+    {
+        var harness = await LoadThreeGroupCatalogAsync();
+
+        var viewModel = harness.ViewModel;
+
+        viewModel.ServiceQuery = "шарлотка";
+
+        Assert.True(viewModel.HasNoMatches);
+
+        viewModel.ClearServiceQueryCommand.Execute(null);
+
+        Assert.Equal(string.Empty, viewModel.ServiceQuery);
+        Assert.False(viewModel.HasServiceQuery);
+        Assert.False(viewModel.HasNoMatches);
+        Assert.All(viewModel.CatalogGroups, group =>
+        {
+            Assert.True(group.HasMatches);
+            Assert.Equal(group.Services.Count, group.MatchCount);
+            Assert.Equal(group.Services, group.VisibleServices);
+        });
+    }
+
+    [Fact]
+    public async Task ServiceQuery_SpacesOnly_LeavesAllGroupsVisible()
+    {
+        var harness = await LoadThreeGroupCatalogAsync();
+
+        var viewModel = harness.ViewModel;
+
+        viewModel.ServiceQuery = "   ";
+
+        // Пробелы набраны — «×» видна, но искать нечего: фильтр пропускает весь справочник.
+        Assert.True(viewModel.HasServiceQuery);
+        Assert.False(viewModel.HasNoMatches);
+        Assert.True(viewModel.IsServiceSearchVisible);
+        Assert.All(viewModel.CatalogGroups, group =>
+        {
+            Assert.True(group.HasMatches);
+            Assert.Equal(group.Services, group.VisibleServices);
+        });
+    }
+
+    [Fact]
+    public async Task InitializeForAdd_DefaultExpansion_OpensOnlyFirstGroup()
+    {
+        var harness = await LoadThreeGroupCatalogAsync();
+
+        var groups = harness.ViewModel.CatalogGroups;
+
+        Assert.True(groups[0].IsExpanded);
+        Assert.False(groups[1].IsExpanded);
+        Assert.False(groups[2].IsExpanded);
+    }
+
+    [Fact]
+    public async Task SelectCatalogService_OpensItsGroupWithoutTouchingOthers()
+    {
+        var harness = await LoadThreeGroupCatalogAsync();
+
+        var viewModel = harness.ViewModel;
+        var groups = viewModel.CatalogGroups;
+
+        viewModel.SelectedCatalogService = groups[2].Services[0];
+
+        // Выбор раскрывает свою группу: подсвеченная строка не должна остаться под закрытым
+        // заголовком. Первую группу он не закрывает, вторую не открывает.
+        Assert.True(groups[2].IsExpanded);
+        Assert.True(groups[0].IsExpanded);
+        Assert.False(groups[1].IsExpanded);
+        Assert.Equal("20", viewModel.DurationText);
+    }
+
+    [Fact]
+    public async Task ToggleGroupCommand_ClosesAndReopensOneGroupAndLeavesAnother()
+    {
+        var harness = await LoadThreeGroupCatalogAsync();
+
+        var viewModel = harness.ViewModel;
+        var groups = viewModel.CatalogGroups;
+
+        viewModel.ToggleGroupCommand.Execute(groups[0]);
+
+        Assert.False(groups[0].IsExpanded);
+        Assert.False(groups[1].IsExpanded);
+
+        viewModel.ToggleGroupCommand.Execute(groups[0]);
+
+        Assert.True(groups[0].IsExpanded);
+
+        viewModel.ToggleGroupCommand.Execute(groups[1]);
+
+        Assert.True(groups[1].IsExpanded);
+        Assert.True(groups[0].IsExpanded);
+    }
+
+    [Fact]
+    public async Task ServiceQuery_OpensEveryGroupWithMatches()
+    {
+        var harness = await LoadThreeGroupCatalogAsync();
+
+        var viewModel = harness.ViewModel;
+        var groups = viewModel.CatalogGroups;
+
+        // Мастер свернул открытую по умолчанию группу: поиск обязан открыть её снова,
+        // если в ней есть совпадение, — и так же поступить со второй совпавшей группой.
+        viewModel.ToggleGroupCommand.Execute(groups[0]);
+
+        Assert.False(groups[0].IsExpanded);
+
+        viewModel.ServiceQuery = "ка";
+
+        Assert.True(groups[0].HasMatches);
+        Assert.True(groups[2].HasMatches);
+        Assert.True(groups[0].IsExpanded);
+        Assert.True(groups[2].IsExpanded);
+        Assert.False(groups[1].HasMatches);
+        Assert.False(groups[1].IsExpanded);
+    }
+
+    [Fact]
+    public async Task ClearServiceQuery_RestoresExpansionFromBeforeSearch()
+    {
+        var harness = await LoadThreeGroupCatalogAsync();
+
+        var viewModel = harness.ViewModel;
+        var groups = viewModel.CatalogGroups;
+
+        // Мастер открыл «Бороду» и свернул открытую по умолчанию «Фейд»: после поиска он
+        // должен вернуться к своему виду, а не к виду по умолчанию.
+        viewModel.ToggleGroupCommand.Execute(groups[1]);
+        viewModel.ToggleGroupCommand.Execute(groups[0]);
+
+        viewModel.ServiceQuery = "ка";
+
+        Assert.True(groups[0].IsExpanded);
+        Assert.True(groups[2].IsExpanded);
+
+        viewModel.ClearServiceQueryCommand.Execute(null);
+
+        Assert.False(groups[0].IsExpanded);
+        Assert.True(groups[1].IsExpanded);
+        Assert.False(groups[2].IsExpanded);
+    }
+
+    [Fact]
+    public async Task ServiceQuery_KeepsSelectedServiceAndDuration()
+    {
+        var harness = await LoadThreeGroupCatalogAsync();
+
+        var viewModel = harness.ViewModel;
+        var chosen = viewModel.CatalogGroups[2].Services[0];
+
+        viewModel.SelectedCatalogService = chosen;
+
+        Assert.Equal("20", viewModel.DurationText);
+
+        // Запрос прячет группу выбранной услуги: выбор и длительность остаются на месте,
+        // меняется только список под карточкой цены.
+        viewModel.ServiceQuery = "фейд";
+
+        Assert.Same(chosen, viewModel.SelectedCatalogService);
+        Assert.Equal("20", viewModel.DurationText);
+        Assert.True(chosen.IsSelected);
+
+        viewModel.ServiceQuery = "уклад";
+
+        Assert.Same(chosen, viewModel.SelectedCatalogService);
+        Assert.Equal("20", viewModel.DurationText);
+    }
+
     /// <summary>
     /// Единственная группа выдачи: тесты с одной специализацией не перечисляют её по имени.
     /// </summary>
@@ -561,6 +798,58 @@ public sealed class BarberServiceEditorViewModelTests
     /// <returns>Строка справочника.</returns>
     private static BarberServiceCatalogItem OnlyCatalogService(BarberServiceEditorViewModel viewModel) =>
         Assert.Single(OnlyGroup(viewModel).Services);
+
+    /// <summary>
+    /// Справочник из трёх групп: «Фейд» с двумя услугами, «Борода» и «Укладка».
+    /// </summary>
+    /// <remarks>
+    /// Порядок групп каталожный: стрижка, борода, укладка. Две строки в первой группе нужны,
+    /// чтобы фильтр мог спрятать одну из них, не пряча заголовок, а три группы — чтобы видеть,
+    /// что раскрытие и поиск не трогают соседние направления.
+    /// </remarks>
+    /// <returns>Собранный редактор с прочитанным справочником.</returns>
+    private static async Task<Harness> LoadThreeGroupCatalogAsync()
+    {
+        var fadeSpecializationId = Guid.Parse("9e100000-0000-4000-8000-0000000000d1");
+        var beardSpecializationId = Guid.Parse("9e100000-0000-4000-8000-0000000000d2");
+        var stylingSpecializationId = Guid.Parse("9e100000-0000-4000-8000-0000000000d3");
+        var fadeServiceId = Guid.Parse("9e100000-0000-4000-8000-0000000000d4");
+        var classicServiceId = Guid.Parse("9e100000-0000-4000-8000-0000000000d5");
+        var beardServiceId = Guid.Parse("9e100000-0000-4000-8000-0000000000d6");
+        var stylingServiceId = Guid.Parse("9e100000-0000-4000-8000-0000000000d7");
+
+        var harness = new Harness();
+
+        harness.Search.Specializations = _ => Task.FromResult<IReadOnlyList<SpecializationResponse>>(
+        [
+            BarberCabinetData.Specialization(
+                fadeSpecializationId, "Фейд", category: ServiceCategory.Haircut),
+            BarberCabinetData.Specialization(
+                beardSpecializationId, "Борода", category: ServiceCategory.Beard),
+            BarberCabinetData.Specialization(
+                stylingSpecializationId, "Укладка", category: ServiceCategory.Styling),
+        ]);
+
+        harness.Search.HairServices = _ => Task.FromResult<IReadOnlyList<HairServiceResponse>>(
+        [
+            BarberCabinetData.HairService(
+                fadeServiceId, "Фейд", 30, ServiceCategory.Haircut, fadeSpecializationId),
+            BarberCabinetData.HairService(
+                classicServiceId, "Классика", 40, ServiceCategory.Haircut, fadeSpecializationId),
+            BarberCabinetData.HairService(
+                beardServiceId, "Борода", 45, ServiceCategory.Beard, beardSpecializationId),
+            BarberCabinetData.HairService(
+                stylingServiceId, "Укладка", 20, ServiceCategory.Styling, stylingSpecializationId),
+        ]);
+
+        harness.ViewModel.InitializeForAdd(
+            BarberCabinetFixtures.BarberProfileId,
+            [new BarberServiceItem(BarberCabinetFixtures.Service())]);
+
+        await harness.ViewModel.CatalogLoading;
+
+        return harness;
+    }
 
     /// <summary>
     /// Собранный редактор: подменённые клиенты профиля и справочника.
