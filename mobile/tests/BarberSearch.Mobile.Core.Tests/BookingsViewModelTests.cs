@@ -41,6 +41,7 @@ public sealed class BookingsViewModelTests
     private static readonly Guid BarberServiceId = Guid.Parse("9e200000-0000-4000-8000-000000000004");
     private static readonly Guid HairServiceId = Guid.Parse("9e200000-0000-4000-8000-000000000005");
     private static readonly Guid SalonId = Guid.Parse("9e200000-0000-4000-8000-000000000006");
+    private static readonly Guid SpecializationId = Guid.Parse("9e200000-0000-4000-8000-000000000007");
     private static readonly Guid FirstBookingId = Guid.Parse("9e200000-0000-4000-8000-000000000011");
     private static readonly Guid SecondBookingId = Guid.Parse("9e200000-0000-4000-8000-000000000012");
     private static readonly Guid ThirdBookingId = Guid.Parse("9e200000-0000-4000-8000-000000000013");
@@ -1845,7 +1846,9 @@ public sealed class BookingsViewModelTests
             40,
             2400m,
             45,
-            IsActive: true);
+            IsActive: true,
+            SpecializationId: SpecializationId,
+            SpecializationName: "Фейд");
 
     private static BarberProfileSalonResponse SalonResponse() =>
         new(

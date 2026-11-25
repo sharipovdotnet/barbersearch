@@ -30,6 +30,7 @@ public sealed class RescheduleBookingViewModelTests
     private static readonly Guid BarberServiceId = Guid.Parse("9e300000-0000-4000-8000-000000000004");
     private static readonly Guid HairServiceId = Guid.Parse("9e300000-0000-4000-8000-000000000005");
     private static readonly Guid SalonId = Guid.Parse("9e300000-0000-4000-8000-000000000006");
+    private static readonly Guid SpecializationId = Guid.Parse("9e300000-0000-4000-8000-000000000007");
 
     private static readonly DateTimeOffset Now = new(2026, 11, 14, 10, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset VisitStartAt = new(2026, 11, 15, 15, 30, 0, TimeSpan.Zero);
@@ -683,7 +684,9 @@ public sealed class RescheduleBookingViewModelTests
             40,
             2400m,
             45,
-            true);
+            true,
+            SpecializationId,
+            "Фейд");
 
     private static BarberProfileSalonResponse Salon() =>
         new(

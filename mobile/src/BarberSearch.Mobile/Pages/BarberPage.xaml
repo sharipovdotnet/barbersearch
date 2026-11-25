@@ -133,10 +133,39 @@
                                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                                         <VerticalStackLayout Spacing="2">
                                             <Label LineBreakMode="WordWrap" Text="{Binding Name}" />
-                                            <Label
-                                                FontSize="12"
-                                                Text="{Binding DurationText}"
-                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                            <FlexLayout
+                                                AlignItems="Center"
+                                                Direction="Row"
+                                                Wrap="Wrap">
+                                                <Border
+                                                    Margin="0,0,8,4"
+                                                    Padding="8,2"
+                                                    BackgroundColor="Transparent"
+                                                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                                    StrokeShape="RoundRectangle 8">
+                                                    <Label
+                                                        FontSize="12"
+                                                        Text="{Binding CategoryText}"
+                                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                                </Border>
+                                                <Border
+                                                    Margin="0,0,8,4"
+                                                    Padding="8,2"
+                                                    BackgroundColor="Transparent"
+                                                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                                    StrokeShape="RoundRectangle 8">
+                                                    <Label
+                                                        FontSize="12"
+                                                        Text="{Binding SpecializationName}"
+                                                        TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                                                </Border>
+                                                <Label
+                                                    Margin="0,0,8,4"
+                                                    FontSize="12"
+                                                    Text="{Binding DurationText}"
+                                                    TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                                    VerticalTextAlignment="Center" />
+                                            </FlexLayout>
                                         </VerticalStackLayout>
                                         <Label
                                             Grid.Column="1"

@@ -28,6 +28,7 @@ public sealed class BarberServiceItem
         Name = service.Name;
         Category = service.Category;
         CategoryText = BarberProfileText.CategoryText(service.Category);
+        SpecializationName = service.SpecializationName;
         DefaultDurationMinutes = service.DefaultDurationMinutes;
         Price = service.Price;
         DurationMinutes = service.DurationMinutes;
@@ -58,6 +59,11 @@ public sealed class BarberServiceItem
     /// Категория для показа: «Стрижка», «Борода».
     /// </summary>
     public string CategoryText { get; }
+
+    /// <summary>
+    /// Специализация для показа: «Фейд», «Оформление бороды».
+    /// </summary>
+    public string SpecializationName { get; }
 
     /// <summary>
     /// Длительность по умолчанию из справочника: её подставляет редактор.
