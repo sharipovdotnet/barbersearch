@@ -4,19 +4,24 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { BarberSectionHeading } from '@/components/barber/barber-section'
 import { SERVICE_CATEGORY_LABELS } from '@/lib/barber-profile-labels'
+import { sortBarberServices } from '@/lib/barber-services-order'
 import type { BarberProfile } from '@/lib/catalog'
 import { formatDuration, formatPrice } from '@/lib/format'
 import { useI18n } from '@/i18n'
 
 /**
- * Прайс мастера: цена и длительность конкретной услуги.
+ * Прайс мастера: категория и специализация услуги, цена и длительность.
  *
- * Кнопок записи здесь нет: слоты и `POST /api/bookings` живут в «Свободном времени»
- * выше, а кнопка-пустышка хуже, чем её отсутствие.
+ * Строки отсортированы категорией, специализацией и названием, чтобы услуги
+ * одного направления шли подряд. Кнопок записи здесь нет: слоты и
+ * `POST /api/bookings` живут в «Свободном времени» выше, а кнопка-пустышка хуже,
+ * чем её отсутствие.
  */
 export function BarberServices({ profile }: { profile: BarberProfile }) {
   const { t } = useI18n()
-  const services = profile.services.filter((service) => service.isActive)
+  const services = sortBarberServices(
+    profile.services.filter((service) => service.isActive)
+  )
 
   return (
     <section aria-labelledby="barber-services-heading">
@@ -45,6 +50,9 @@ export function BarberServices({ profile }: { profile: BarberProfile }) {
                       <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                         <Badge variant="outline">
                           {t(SERVICE_CATEGORY_LABELS[service.category])}
+                        </Badge>
+                        <Badge variant="outline">
+                          {service.specializationName}
                         </Badge>
                         {duration !== '' && (
                           <span className="inline-flex items-center gap-1">

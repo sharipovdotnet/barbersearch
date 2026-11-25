@@ -30,6 +30,8 @@ function service(
     hairServiceId: `hair-${name}`,
     name,
     category: 'Haircut',
+    specializationId: `specialization-${name}`,
+    specializationName: 'Барберинг',
     defaultDurationMinutes: 60,
     durationMinutes: 60,
     price: 2000,

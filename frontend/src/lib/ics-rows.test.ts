@@ -56,6 +56,8 @@ const haircut: BarberProfileService = {
   hairServiceId: 'hair-haircut',
   name: 'Стрижка',
   category: 'Haircut',
+  specializationId: 'specialization-haircut',
+  specializationName: 'Барберинг',
   defaultDurationMinutes: 60,
   durationMinutes: 60,
   price: 2000,

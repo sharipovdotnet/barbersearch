@@ -3308,6 +3308,9 @@ Read endpoints (added 2026-10-19):
   nested records; no domain entity is serialized. Each service carries
   `barberServiceId` (`barber_services.id`, the value `POST api/bookings` expects) and
   `hairServiceId` (`hair_services.id`); the old ambiguous `id` field was renamed by R-20.
+  Each service also carries `specializationId` and `specializationName` from the joined
+  `specializations` row, so the public price list shows the specialization next to the
+  derived `category`.
   Since issue-54 each nested salon also carries `kind`, so the card labels the place («Кабинет»,
   «На дому», «Выезд») instead of showing only a barbershop name; a hidden place appears here
   exactly like a listed one, because the card does not filter `IsListed`.

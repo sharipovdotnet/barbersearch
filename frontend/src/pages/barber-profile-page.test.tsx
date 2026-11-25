@@ -211,7 +211,17 @@ describe('BarberProfilePage: чтение', () => {
     expect(screen.getAllByText('Стрижка').length).toBeGreaterThan(0)
     expect(screen.getByText('Оформление бороды')).toBeInTheDocument()
     expect(screen.getByText('Скрыта')).toBeInTheDocument()
-    expect(screen.getByText('Барберинг')).toBeInTheDocument()
+    expect(
+      within(serviceRow('Стрижка')).getByText('Барберинг')
+    ).toBeInTheDocument()
+    expect(
+      within(serviceRow('Оформление бороды')).getByText('Бритьё')
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: 'Специализации' })).getByText(
+        'Барберинг'
+      )
+    ).toBeInTheDocument()
 
     // Справочники не тянутся вместе со страницей.
     expect(requests).not.toContain('/api/hair-services')

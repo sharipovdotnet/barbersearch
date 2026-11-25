@@ -68,6 +68,9 @@ public sealed class BarberProfileOwnReadTests
         Assert.Equal(1500m, service.Price);
         Assert.Equal(45, service.DurationMinutes);
         Assert.False(service.IsActive);
+        // Специализация приходит вместе с категорией: по ней прайс показывает второй бейдж.
+        Assert.Equal(seeded.Specialization.Id, service.SpecializationId);
+        Assert.Equal(seeded.Specialization.Name, service.SpecializationName);
 
         // Публичная карточка тот же профиль по-прежнему скрывает.
         using var publicCard = await app.Client.GetAsync($"api/barbers/{seeded.Profile.Id}");
@@ -208,7 +211,7 @@ public sealed class BarberProfileOwnReadTests
         db.BarberProfiles.Add(profile);
         await db.SaveChangesAsync();
 
-        return new SeededProfileBarber(user, profile, salon, hairService);
+        return new SeededProfileBarber(user, profile, salon, specialization, hairService);
     }
 
     private static T Require<T>(Result<T, Failure> result)
@@ -235,5 +238,6 @@ public sealed class BarberProfileOwnReadTests
         User User,
         BarberProfile Profile,
         Salon Salon,
+        Specialization Specialization,
         HairService HairService);
 }

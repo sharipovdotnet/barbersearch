@@ -661,6 +661,8 @@ function isProfileService(value: unknown): value is BarberProfileService {
     isNonEmptyString(value.hairServiceId) &&
     isString(value.name) &&
     isServiceCategory(value.category) &&
+    isNonEmptyString(value.specializationId) &&
+    isNonEmptyString(value.specializationName) &&
     isNumber(value.defaultDurationMinutes) &&
     isNumber(value.price) &&
     isNumber(value.durationMinutes) &&

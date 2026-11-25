@@ -299,6 +299,7 @@ function ServiceRow({
           <Badge variant="outline">
             {t(SERVICE_CATEGORY_LABELS[service.category])}
           </Badge>
+          <Badge variant="outline">{service.specializationName}</Badge>
           {duration !== '' && (
             <span className="inline-flex items-center gap-1">
               <Clock className="size-3.5" aria-hidden />

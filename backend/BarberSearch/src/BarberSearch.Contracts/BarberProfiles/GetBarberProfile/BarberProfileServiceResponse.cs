@@ -19,6 +19,8 @@ namespace BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
 /// <param name="Price">Цена у этого барбера.</param>
 /// <param name="DurationMinutes">Длительность у этого барбера.</param>
 /// <param name="IsActive">Можно ли записаться на услугу.</param>
+/// <param name="SpecializationId">Специализация услуги справочника.</param>
+/// <param name="SpecializationName">Название специализации для подписи в прайсе.</param>
 public record BarberProfileServiceResponse(
     Guid BarberServiceId,
     Guid HairServiceId,
@@ -27,4 +29,6 @@ public record BarberProfileServiceResponse(
     int DefaultDurationMinutes,
     decimal Price,
     int DurationMinutes,
-    bool IsActive);
+    bool IsActive,
+    Guid SpecializationId,
+    string SpecializationName);
