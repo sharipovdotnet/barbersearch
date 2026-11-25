@@ -270,7 +270,7 @@ in Core owns both base addresses.
   avatar there would promise an editing flow that does not exist.
 - **The price list groups services by specialization, keeps the catalogue badge, and takes the
   catalogue order, not the alphabet.** The public card's «Услуги» block and the cabinet's
-  «Профиль» → «Услуги» list put the specialization in a group heading
+  «Профиль» → «Услуги» list put the specialization in a group heading with a leading «• » bullet
   (`GeistSemiBold`, 14 pt) and list that specialization's services under it, the same shape as the
   «Услуга» filter on «Поиск». The per-row outline pill it replaces repeated the same word on every
   row and was clipped on a phone («Окрашивани», «Блонд-масте»); a heading reads once and is never

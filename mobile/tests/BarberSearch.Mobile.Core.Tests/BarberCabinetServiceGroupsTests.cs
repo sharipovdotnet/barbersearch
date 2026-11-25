@@ -33,6 +33,9 @@ public sealed class BarberCabinetServiceGroupsTests
             ["Окрашивание", "Фейд", "Стрижка"],
             groups.Select(group => group.Title));
 
+        // Маркер «• » подсказывает, что под заголовком идёт перечисление услуг.
+        Assert.Equal("• Окрашивание", groups[0].DisplayTitle);
+
         var coloring = Assert.Single(groups[0].Services);
         Assert.True(coloring.IsHidden);
         Assert.Equal("Балаяж", coloring.Name);
