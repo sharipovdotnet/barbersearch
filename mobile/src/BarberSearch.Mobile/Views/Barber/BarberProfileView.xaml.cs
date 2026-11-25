@@ -31,9 +31,8 @@ namespace BarberSearch.Mobile.Views.Barber;
 /// (<see cref="BarberPhotoPage"/>): раздел передаёт ему снимок списка и переходит.
 /// </para>
 /// <para>
-/// Выбор специализации в пикере — единственное локальное состояние: у ViewModel нет
-/// свойства выбора, а команда добавления принимает идентификатор. Список специализаций
-/// перечитывается вместе с карточкой, поэтому выбор сбрасывается и здесь.
+/// Специализации нельзя добавить или убрать вручную: они приходят вместе с услугами,
+/// и список здесь только для показа.
 /// </para>
 /// </remarks>
 public partial class BarberProfileView : ContentView
@@ -49,7 +48,6 @@ public partial class BarberProfileView : ContentView
     private readonly LegalOptions _legalOptions;
     private readonly ObservableCollection<BarberProfilePhotoTile> _photoTiles = [];
 
-    private Guid? _selectedSpecializationId;
     private bool _isNavigating;
     private double _photoTileWidth;
     private int _avatarGeneration;
@@ -83,11 +81,6 @@ public partial class BarberProfileView : ContentView
 
         BindableLayout.SetItemsSource(PhotoTilesHost, _photoTiles);
         PhotoTilesHost.SizeChanged += OnPhotoTilesHostSizeChanged;
-
-        // Подпись строки задаётся кодом: ItemDisplayBinding — привязка к элементу, а не к
-        // ViewModel раздела, поэтому компилированная разметка здесь не подходит.
-        SpecializationPicker.ItemDisplayBinding = new Binding(
-            nameof(BarberSpecializationOption.Name));
 
         _viewModel.Photos.CollectionChanged += OnPhotosChanged;
         _viewModel.OpenEditRequested += OnOpenEditRequested;
@@ -390,75 +383,6 @@ public partial class BarberProfileView : ContentView
         {
             await _viewModel.RestoreServiceCommand.ExecuteAsync(item);
         }
-    }
-
-    /// <summary>
-    /// Убирает специализацию: удаление физическое, подтверждения в вебе нет.
-    /// </summary>
-    private async void OnRemoveSpecializationClicked(object? sender, EventArgs e)
-    {
-        if (sender is Button { BindingContext: BarberSpecializationItem item })
-        {
-            await _viewModel.RemoveSpecializationCommand.ExecuteAsync(item);
-        }
-    }
-
-    /// <summary>
-    /// Запоминает выбранную строку справочника: команда добавления принимает идентификатор.
-    /// </summary>
-    private void OnSpecializationSelected(object? sender, EventArgs e)
-    {
-        _selectedSpecializationId = (sender as Picker)?.SelectedItem is BarberSpecializationOption option
-            ? option.Id
-            : null;
-
-        AddSpecializationButton.IsEnabled = _selectedSpecializationId is not null;
-    }
-
-    /// <summary>
-    /// Закрывает пикер и сбрасывает локальный выбор: справочник остаётся прочитанным.
-    /// </summary>
-    /// <remarks>
-    /// Команда закрывает пикер, но выбранная строка — состояние экрана, а не ViewModel:
-    /// без сброса повторное открытие показало бы старый выбор и активную кнопку.
-    /// </remarks>
-    private void OnCloseSpecializationPickerClicked(object? sender, EventArgs e) =>
-        ResetSpecializationSelection();
-
-    /// <summary>
-    /// Сбрасывает выбор специализации в пикере.
-    /// </summary>
-    private void ResetSpecializationSelection()
-    {
-        _selectedSpecializationId = null;
-        AddSpecializationButton.IsEnabled = false;
-        SpecializationPicker.SelectedIndex = -1;
-    }
-
-    /// <summary>
-    /// Добавляет специализацию и сбрасывает пикер: справочник перечитывается вместе с карточкой.
-    /// </summary>
-    private async void OnAddSpecializationClicked(object? sender, EventArgs e)
-    {
-        if (_selectedSpecializationId is not { } specializationId)
-        {
-            return;
-        }
-
-        // Кнопка гаснет на время записи, выбор остаётся: после отказа справочник не
-        // пересобирается, и человеку не нужно выбирать строку заново.
-        AddSpecializationButton.IsEnabled = false;
-
-        await _viewModel.AddSpecializationCommand.ExecuteAsync(specializationId);
-
-        if (_viewModel.IsSpecializationPickerOpen)
-        {
-            AddSpecializationButton.IsEnabled = true;
-
-            return;
-        }
-
-        ResetSpecializationSelection();
     }
 
     /// <summary>

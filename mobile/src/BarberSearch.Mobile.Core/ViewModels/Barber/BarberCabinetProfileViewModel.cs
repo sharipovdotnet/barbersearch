@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using BarberSearch.Contracts.BarberProfiles.GetBarberProfile;
-using BarberSearch.Contracts.Specializations.GetSpecializations;
 using BarberSearch.Contracts.Users.Me;
 using BarberSearch.Domain.Common;
 using BarberSearch.Mobile.Core.Api;
@@ -34,9 +33,9 @@ namespace BarberSearch.Mobile.Core.ViewModels.Barber;
 /// </para>
 /// <para>
 /// Чтение карточки лечится автоповтором, записи — нет: <c>DELETE</c> и <c>POST</c> не
-/// повторяются вслепую, решение остаётся за человеком. Справочник специализаций
-/// запрашивается лениво — только когда пикер впервые открыли — и тоже лечится
-/// автоповтором, но своим: он живёт, пока пикер открыт, и останавливается вместе с ним.
+/// повторяются вслепую, решение остаётся за человеком. Специализация появляется в профиле
+/// вместе с услугой: отдельного добавления из справочника в разделе больше нет, поэтому и
+/// ленивого чтения справочника специализаций здесь не осталось.
 /// </para>
 /// <para>
 /// Аватар — отдельный срез: карточка мастера отдаёт только одобренный и не скрытый кадр,
@@ -52,22 +51,15 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     private static string OtherServicesGroupTitle => Loc.T("Прочие услуги");
     private static string HideFailedText => Loc.T("Не удалось скрыть услугу. Попробуйте ещё раз.");
     private static string RestoreFailedText => Loc.T("Не удалось вернуть услугу. Попробуйте ещё раз.");
-    private static string RemoveSpecializationFailedText => Loc.T("Не удалось убрать специализацию. Попробуйте ещё раз.");
-    private static string AddSpecializationFailedText => Loc.T("Не удалось добавить специализацию. Попробуйте ещё раз.");
-    private static string CatalogFailedText => Loc.T("Не удалось загрузить справочник специализаций.");
 
     private readonly IBarberProfileApi _profileApi;
-    private readonly IBarberSearchApi _searchApi;
     private readonly IAccountAvatarApi _avatarApi;
     private readonly IPortfolioPhotoPicker _photoPicker;
     private readonly TimeProvider _timeProvider;
     private readonly AutoRetryLoop _autoRetry;
-    private readonly AutoRetryLoop _specializationsAutoRetry;
-    private readonly List<SpecializationResponse> _allSpecializations = [];
 
     private ApiFailureKind _lastFailureKind;
     private bool _isPageVisible;
-    private bool _isCatalogLoaded;
 
     // Аватар из /me: null, пока профиль аккаунта не прочитан. Карточка даёт только
     // одобренный кадр, поэтому её URL — запасной вариант на случай сбоя этого чтения.
@@ -82,44 +74,31 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     /// Создаёт раздел профиля.
     /// </summary>
     /// <param name="profileApi">Собственная карточка и мутации прайса.</param>
-    /// <param name="searchApi">Публичный справочник специализаций.</param>
     /// <param name="avatarApi">Аватар аккаунта: состояние проверки, загрузка и удаление.</param>
     /// <param name="photoPicker">Системный выбор файла с подготовкой кадра в приложении.</param>
     /// <param name="timeProvider">Часы: время последнего чтения показывает шапка.</param>
     /// <param name="autoRetry">
     /// Цикл автоповтора карточки; <c>null</c> — собственный цикл с обычным расписанием.
     /// </param>
-    /// <param name="specializationsAutoRetry">
-    /// Цикл автоповтора справочника специализаций; <c>null</c> — собственный цикл.
-    /// Параметры необязательные и стоят последними, чтобы DI и тесты не зависели от
-    /// их порядка.
-    /// </param>
     public BarberCabinetProfileViewModel(
         IBarberProfileApi profileApi,
-        IBarberSearchApi searchApi,
         IAccountAvatarApi avatarApi,
         IPortfolioPhotoPicker photoPicker,
         TimeProvider timeProvider,
-        AutoRetryLoop? autoRetry = null,
-        AutoRetryLoop? specializationsAutoRetry = null)
+        AutoRetryLoop? autoRetry = null)
     {
         ArgumentNullException.ThrowIfNull(profileApi);
-        ArgumentNullException.ThrowIfNull(searchApi);
         ArgumentNullException.ThrowIfNull(avatarApi);
         ArgumentNullException.ThrowIfNull(photoPicker);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         _profileApi = profileApi;
-        _searchApi = searchApi;
         _avatarApi = avatarApi;
         _photoPicker = photoPicker;
         _timeProvider = timeProvider;
 
         _autoRetry = autoRetry ?? new AutoRetryLoop();
         _autoRetry.StateChanged += OnAutoRetryStateChanged;
-
-        _specializationsAutoRetry = specializationsAutoRetry ?? new AutoRetryLoop();
-        _specializationsAutoRetry.StateChanged += OnSpecializationsAutoRetryStateChanged;
 
         // Лимит портфолио меняется вместе с коллекцией: добавление, очистка и перечитывание
         // карточки одинаково должны переключить «Добавить фото» и подсказку о лимите.
@@ -221,30 +200,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     private bool _isMutating;
 
     /// <summary>
-    /// Пикер специализаций открыт.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isSpecializationPickerOpen;
-
-    /// <summary>
-    /// Справочник специализаций читается.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isSpecializationLoading;
-
-    /// <summary>
-    /// Справочник не ответил, и цикл уже пробует снова: строка «Пробуем снова…».
-    /// </summary>
-    [ObservableProperty]
-    private bool _isSpecializationAutoRetrying;
-
-    /// <summary>
-    /// Причина сбоя справочника; живёт внутри пикера.
-    /// </summary>
-    [ObservableProperty]
-    private string? _specializationError;
-
-    /// <summary>
     /// Строки прайса в порядке ответа сервера.
     /// </summary>
     public ObservableCollection<BarberServiceItem> Services { get; } = [];
@@ -294,11 +249,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     /// Комфорт в кресле.
     /// </summary>
     public ObservableCollection<string> Goodies { get; } = [];
-
-    /// <summary>
-    /// Специализации справочника, которых у мастера ещё нет.
-    /// </summary>
-    public ObservableCollection<BarberSpecializationOption> AvailableSpecializations { get; } = [];
 
     /// <summary>
     /// Имя мастера из карточки.
@@ -405,11 +355,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     /// Достигнут предел портфолио: сначала нужно удалить кадр.
     /// </summary>
     public bool IsPhotoLimitReached => Photos.Count >= PortfolioPhotoLimits.MaxPhotos;
-
-    /// <summary>
-    /// В справочнике есть что добавить.
-    /// </summary>
-    public bool HasAvailableSpecializations => AvailableSpecializations.Count > 0;
 
     /// <summary>
     /// Сырой URL аватара: состояние аккаунта важнее карточки, пока оно прочитано.
@@ -606,7 +551,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         }
 
         _autoRetry.Stop();
-        _specializationsAutoRetry.Stop();
 
         BarberProfileId = barberProfileId;
         OnPropertyChanged(nameof(BarberProfileId));
@@ -619,8 +563,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         IsForbidden = false;
         IsNotFound = false;
         IsSignInRequired = false;
-        IsSpecializationPickerOpen = false;
-        SpecializationError = null;
         _accountAvatar = null;
         _cardAvatarUrl = null;
         IsAvatarUploading = false;
@@ -649,25 +591,15 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         }
 
         await LoadAsync(silent: Profile is not null, cancellationToken);
-
-        if (IsSpecializationPickerOpen && !_isCatalogLoaded)
-        {
-            StartSpecializationsAutoRetry(await LoadSpecializationsAsync(cancellationToken));
-        }
     }
 
     /// <summary>
-    /// Скрывает раздел: останавливает оба автоповтора, не сбрасывая карточку.
+    /// Скрывает раздел: останавливает автоповтор, не сбрасывая карточку.
     /// </summary>
-    /// <remarks>
-    /// Пикер остаётся открытым: вернувшийся раздел прочитает справочник заново и снова
-    /// вооружит его цикл, если сбой повторяемый.
-    /// </remarks>
     public void Deactivate()
     {
         _isPageVisible = false;
         _autoRetry.Stop();
-        _specializationsAutoRetry.Stop();
     }
 
     /// <summary>
@@ -679,11 +611,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     /// Завершается, когда цикл повтора чтения останавливается.
     /// </summary>
     internal Task ReadRetryCompletion => _autoRetry.Completion;
-
-    /// <summary>
-    /// Завершается, когда цикл повтора справочника останавливается: тесты ждут его вместо пауз.
-    /// </summary>
-    internal Task SpecializationsRetryCompletion => _specializationsAutoRetry.Completion;
 
     /// <summary>
     /// Применяет карточку, полученную дочерним экраном после сохранения.
@@ -781,7 +708,7 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         }
         catch (Exception exception)
         {
-            ActionError = DescribeWriteFailure(exception, HideFailedText, WriteTarget.Service);
+            ActionError = DescribeWriteFailure(exception, HideFailedText);
         }
         finally
         {
@@ -822,153 +749,7 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         }
         catch (Exception exception)
         {
-            ActionError = DescribeWriteFailure(exception, RestoreFailedText, WriteTarget.Service);
-        }
-        finally
-        {
-            IsMutating = false;
-        }
-    }
-
-    /// <summary>
-    /// Убирает специализацию: удаление физическое и необратимое.
-    /// </summary>
-    /// <param name="item">Строка специализации.</param>
-    /// <param name="cancellationToken">Токен отмены.</param>
-    [RelayCommand]
-    private async Task RemoveSpecializationAsync(
-        BarberSpecializationItem? item,
-        CancellationToken cancellationToken)
-    {
-        if (item is null || IsMutating || BarberProfileId == Guid.Empty)
-        {
-            return;
-        }
-
-        var profileId = BarberProfileId;
-        IsMutating = true;
-        ActionError = null;
-
-        try
-        {
-            await _profileApi.RemoveSpecializationAsync(
-                profileId,
-                item.SpecializationId,
-                cancellationToken);
-
-            await LoadAsync(silent: true, cancellationToken);
-        }
-        catch (Exception exception)
-        {
-            ActionError = DescribeWriteFailure(
-                exception,
-                RemoveSpecializationFailedText,
-                WriteTarget.Specialization);
-        }
-        finally
-        {
-            IsMutating = false;
-        }
-    }
-
-    /// <summary>
-    /// Открывает пикер и подгружает справочник при первом открытии.
-    /// </summary>
-    /// <param name="cancellationToken">Токен отмены.</param>
-    [RelayCommand]
-    private async Task OpenSpecializationPickerAsync(CancellationToken cancellationToken)
-    {
-        IsSpecializationPickerOpen = true;
-        ActionError = null;
-
-        if (_isCatalogLoaded)
-        {
-            RebuildAvailableSpecializations();
-
-            return;
-        }
-
-        StartSpecializationsAutoRetry(await LoadSpecializationsAsync(cancellationToken));
-    }
-
-    /// <summary>
-    /// Закрывает пикер, не сбрасывая уже прочитанный справочник.
-    /// </summary>
-    [RelayCommand]
-    private void CloseSpecializationPicker()
-    {
-        IsSpecializationPickerOpen = false;
-        SpecializationError = null;
-        _specializationsAutoRetry.Stop();
-    }
-
-    /// <summary>
-    /// Одна попытка цикла: перечитывает справочник, не стирая причину до ответа.
-    /// </summary>
-    /// <param name="cancellationToken">Токен отмены.</param>
-    /// <returns>Вид сбоя: по нему решает цикл.</returns>
-    private Task<ApiFailureKind> RetrySpecializationsAsync(CancellationToken cancellationToken) =>
-        IsSpecializationPickerOpen && _isPageVisible
-            ? LoadSpecializationsAsync(cancellationToken, silent: true)
-            : Task.FromResult(ApiFailureKind.Terminal);
-
-    /// <summary>
-    /// Запускает цикл справочника, пока пикер открыт и сбой повторяемый.
-    /// </summary>
-    /// <param name="kind">Вид сбоя первого чтения.</param>
-    private void StartSpecializationsAutoRetry(ApiFailureKind kind)
-    {
-        if (!IsSpecializationPickerOpen
-            || !_isPageVisible
-            || !kind.IsRetryable()
-            || _specializationsAutoRetry.IsRunning)
-        {
-            return;
-        }
-
-        _specializationsAutoRetry.Start(RetrySpecializationsAsync);
-    }
-
-    /// <summary>
-    /// Добавляет специализацию из справочника.
-    /// </summary>
-    /// <param name="specializationId">Идентификатор специализации справочника.</param>
-    /// <param name="cancellationToken">Токен отмены.</param>
-    [RelayCommand]
-    private async Task AddSpecializationAsync(
-        Guid specializationId,
-        CancellationToken cancellationToken)
-    {
-        if (specializationId == Guid.Empty
-            || IsMutating
-            || BarberProfileId == Guid.Empty)
-        {
-            return;
-        }
-
-        var profileId = BarberProfileId;
-        IsMutating = true;
-        ActionError = null;
-        SpecializationError = null;
-
-        try
-        {
-            await _profileApi.AddSpecializationAsync(
-                profileId,
-                specializationId,
-                cancellationToken);
-
-            IsSpecializationPickerOpen = false;
-
-            await LoadAsync(silent: true, cancellationToken);
-            RebuildAvailableSpecializations();
-        }
-        catch (Exception exception)
-        {
-            SpecializationError = DescribeWriteFailure(
-                exception,
-                AddSpecializationFailedText,
-                WriteTarget.Specialization);
+            ActionError = DescribeWriteFailure(exception, RestoreFailedText);
         }
         finally
         {
@@ -1217,7 +998,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         AddRange(CommunicationFormat, profile.CommunicationFormat);
         AddRange(Goodies, profile.Goodies);
 
-        RebuildAvailableSpecializations();
         _cardAvatarUrl = profile.AvatarUrl;
         NotifyProfileState();
         NotifyAvatarState();
@@ -1274,7 +1054,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         Achievements.Clear();
         CommunicationFormat.Clear();
         Goodies.Clear();
-        AvailableSpecializations.Clear();
         NotifyCollectionState();
     }
 
@@ -1298,89 +1077,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     }
 
     /// <summary>
-    /// Перечитывает справочник специализаций.
-    /// </summary>
-    /// <param name="cancellationToken">Токен отмены.</param>
-    /// <param name="silent">
-    /// Попытка цикла: причина остаётся на экране до ответа, индикатор загрузки не мигает.
-    /// </param>
-    /// <returns>Вид сбоя: по нему решает цикл.</returns>
-    private async Task<ApiFailureKind> LoadSpecializationsAsync(
-        CancellationToken cancellationToken,
-        bool silent = false)
-    {
-        if (IsSpecializationLoading)
-        {
-            return ApiFailureKind.None;
-        }
-
-        if (!silent)
-        {
-            IsSpecializationLoading = true;
-            SpecializationError = null;
-        }
-
-        try
-        {
-            var items = await _searchApi.GetSpecializationsAsync(cancellationToken);
-
-            _allSpecializations.Clear();
-            _allSpecializations.AddRange(items);
-            _isCatalogLoaded = true;
-            SpecializationError = null;
-
-            RebuildAvailableSpecializations();
-
-            return ApiFailureKind.None;
-        }
-        catch (Exception exception)
-        {
-            var kind = ApiFailureClassifier.Classify(exception, cancellationToken);
-
-            if (kind != ApiFailureKind.None)
-            {
-                SpecializationError = BarberProfileText.ReadError(
-                    exception,
-                    kind,
-                    CatalogFailedText);
-            }
-
-            return kind;
-        }
-        finally
-        {
-            IsSpecializationLoading = false;
-        }
-    }
-
-    /// <summary>
-    /// Оставляет в пикере только специализации, которых у мастера ещё нет.
-    /// </summary>
-    private void RebuildAvailableSpecializations()
-    {
-        if (!_isCatalogLoaded)
-        {
-            return;
-        }
-
-        var attached = Specializations
-            .Select(item => item.SpecializationId)
-            .ToHashSet();
-
-        AvailableSpecializations.Clear();
-
-        foreach (var option in _allSpecializations)
-        {
-            if (!attached.Contains(option.Id))
-            {
-                AvailableSpecializations.Add(new BarberSpecializationOption(option));
-            }
-        }
-
-        OnPropertyChanged(nameof(HasAvailableSpecializations));
-    }
-
-    /// <summary>
     /// Одна попытка цикла: перечитывает карточку тихо.
     /// </summary>
     private Task<ApiFailureKind> RetryReadAsync(CancellationToken cancellationToken) =>
@@ -1393,18 +1089,11 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         IsAutoRetrying = _autoRetry.IsRunning;
 
     /// <summary>
-    /// Переключает строку «Пробуем снова…» в пикере вслед за состоянием его цикла.
-    /// </summary>
-    private void OnSpecializationsAutoRetryStateChanged(object? sender, EventArgs e) =>
-        IsSpecializationAutoRetrying = _specializationsAutoRetry.IsRunning;
-
-    /// <summary>
     /// Текст сбоя записи: коды домена важнее кода HTTP.
     /// </summary>
     private static string DescribeWriteFailure(
         Exception exception,
-        string fallback,
-        WriteTarget target)
+        string fallback)
     {
         if (exception is not BarberSearchApiException apiException)
         {
@@ -1423,9 +1112,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
             "barberProfile.addService.duration" => Loc.T("Длительность — от 1 до 1440 минут."),
             "barberService.updatePrice" => Loc.T("Цена не может быть отрицательной."),
             "barberService.updateDuration" => Loc.T("Длительность — от 1 до 1440 минут."),
-            "barberProfile.addSpecialization.duplicate" => Loc.T("Эта специализация уже добавлена."),
-            "barberProfile.addSpecialization.specializationNotFound" => Loc.T("Специализация не найдена."),
-            "barberProfile.removeSpecialization.notFound" => Loc.T("Специализация уже убрана. Обновите страницу."),
             _ => null,
         };
 
@@ -1436,9 +1122,7 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
 
         if (apiException.StatusCode == HttpStatusCode.Forbidden)
         {
-            return target == WriteTarget.Service
-                ? Loc.T("Прайс доступен только владельцу профиля.")
-                : Loc.T("Специализации доступны только владельцу профиля.");
+            return Loc.T("Прайс доступен только владельцу профиля.");
         }
 
         return BarberProfileText.WriteError(apiException, fallback);
@@ -1476,7 +1160,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         OnPropertyChanged(nameof(HasPhotos));
         OnPropertyChanged(nameof(CanAddPhoto));
         OnPropertyChanged(nameof(IsPhotoLimitReached));
-        OnPropertyChanged(nameof(HasAvailableSpecializations));
     }
 
     /// <summary>
@@ -1546,52 +1229,4 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         bool IsBlocked,
         PhotoModerationStatus Status,
         string? RejectionReason);
-
-    /// <summary>
-    /// Куда адресована мутация: по этому выбирается текст отказа <c>403</c>.
-    /// </summary>
-    private enum WriteTarget
-    {
-        Service,
-        Specialization,
-    }
-}
-
-/// <summary>
-/// Строка пикера специализаций: специализация справочника, которой у мастера ещё нет.
-/// </summary>
-public sealed class BarberSpecializationOption
-{
-    /// <summary>
-    /// Создаёт строку из ответа справочника.
-    /// </summary>
-    /// <param name="specialization">Специализация справочника.</param>
-    public BarberSpecializationOption(SpecializationResponse specialization)
-    {
-        ArgumentNullException.ThrowIfNull(specialization);
-
-        Id = specialization.Id;
-        Name = specialization.Name;
-        Description = specialization.Description;
-    }
-
-    /// <summary>
-    /// Идентификатор специализации: его принимает добавление.
-    /// </summary>
-    public Guid Id { get; }
-
-    /// <summary>
-    /// Название специализации.
-    /// </summary>
-    public string Name { get; }
-
-    /// <summary>
-    /// Описание; <c>null</c>, если его нет.
-    /// </summary>
-    public string? Description { get; }
-
-    /// <summary>
-    /// Описание заполнено.
-    /// </summary>
-    public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
 }

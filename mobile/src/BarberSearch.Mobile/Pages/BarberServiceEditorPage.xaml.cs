@@ -82,7 +82,12 @@ public partial class BarberServiceEditorPage : ContentPage, IQueryAttributable
         }
         else
         {
-            _viewModel.InitializeForAdd(profileId, owner.Services);
+            _viewModel.InitializeForAdd(
+                profileId,
+                owner.Services,
+                owner.Specializations
+                    .Select(specialization => specialization.SpecializationId)
+                    .ToArray());
         }
 
         _viewModel.Saved += OnSaved;

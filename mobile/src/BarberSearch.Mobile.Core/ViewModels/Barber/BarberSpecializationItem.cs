@@ -7,7 +7,8 @@ namespace BarberSearch.Mobile.Core.ViewModels.Barber;
 /// </summary>
 /// <remarks>
 /// <see cref="Id"/> — запись связи, <see cref="SpecializationId"/> — строка справочника:
-/// удаление адресуется второй, а показ и сравнение со справочником — тоже ей.
+/// по ней редактор услуги понимает, что специализация у мастера уже есть, и не добавляет
+/// её повторно. Показ ведут <see cref="Name"/> и <see cref="Description"/>.
 /// </remarks>
 public sealed class BarberSpecializationItem
 {
