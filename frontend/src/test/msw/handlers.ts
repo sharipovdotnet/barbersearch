@@ -71,7 +71,7 @@ export const testBarberProfile: BarberProfile = {
       name: 'Оформление бороды',
       category: 'Beard',
       specializationId: '88888888-9999-4aaa-8bbb-cccccccccccc',
-      specializationName: 'Оформление бороды',
+      specializationName: 'Бритьё',
       defaultDurationMinutes: 30,
       price: 800,
       durationMinutes: 30,
