@@ -112,7 +112,7 @@ public sealed class BarberCabinetProfileViewModelTests
         Assert.True(viewModel.Services[1].IsHidden);
         Assert.Equal("Скрыта", viewModel.Services[1].StatusText);
 
-        // Строка прайса подписана специализацией из ответа: её видит мастер в кабинете.
+        // Строка прайса помнит специализацию из ответа: по ней собирается заголовок группы.
         Assert.Equal(
             BarberCabinetFixtures.ServiceSpecializationName,
             viewModel.Services[0].SpecializationName);
@@ -127,6 +127,90 @@ public sealed class BarberCabinetProfileViewModelTests
         Assert.Equal("Опубликовано", viewModel.Photos[0].StatusText);
         Assert.Equal("Скрыто администратором", viewModel.Photos[1].StatusText);
         Assert.True(viewModel.HasPhotos);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_Services_BuildsServiceGroupsInApiOrderIncludingHidden()
+    {
+        var harness = new Harness();
+
+        harness.Profile.Own = _ => Task.FromResult(BarberCabinetData.Profile(services:
+        [
+            CabinetService("Балаяж", "Окрашивание", isActive: false),
+            CabinetService("Фейд классический", "Фейд"),
+            CabinetService("Стрижка машинкой", "Стрижка"),
+            CabinetService("Фейд с выбриванием", "Фейд"),
+        ]));
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+
+        // Группы идут в порядке ответа API; кабинет не пересортировывает прайс.
+        Assert.Equal(
+            ["Окрашивание", "Фейд", "Стрижка"],
+            viewModel.ServiceGroups.Select(group => group.Title));
+
+        // Скрытая услуга остаётся в своей группе: владелец видит прайс целиком.
+        var hidden = Assert.Single(viewModel.ServiceGroups[0].Services);
+        Assert.True(hidden.IsHidden);
+        Assert.Equal("Балаяж", hidden.Name);
+        Assert.Equal("Балаяж", viewModel.Services[0].Name);
+
+        // Чередование API не разрывает группу и не меняет порядок строк в ней.
+        Assert.Equal(
+            ["Фейд классический", "Фейд с выбриванием"],
+            viewModel.ServiceGroups[1].Services.Select(service => service.Name));
+    }
+
+    [Fact]
+    public async Task ActivateAsync_ServiceWithoutSpecialization_BuildsOtherServicesGroup()
+    {
+        var harness = new Harness();
+
+        harness.Profile.Own = _ => Task.FromResult(BarberCabinetData.Profile(services:
+        [
+            CabinetService("Стрижка наголо", " "),
+            CabinetService("Фейд классический", "Фейд"),
+        ]));
+
+        await harness.ViewModel.ActivateAsync();
+
+        // Строка без специализации не теряется: она замыкает список «Прочими услугами».
+        Assert.Equal(
+            ["Фейд", "Прочие услуги"],
+            harness.ViewModel.ServiceGroups.Select(group => group.Title));
+        Assert.Equal(
+            ["Стрижка наголо"],
+            harness.ViewModel.ServiceGroups[1].Services.Select(service => service.Name));
+    }
+
+    [Fact]
+    public async Task ActivateAsync_Reload_RebuildsServiceGroups()
+    {
+        var harness = new Harness();
+
+        harness.Profile.Own = _ => Task.FromResult(BarberCabinetData.Profile(services:
+        [
+            CabinetService("Фейд классический", "Фейд"),
+        ]));
+
+        await harness.ViewModel.ActivateAsync();
+
+        Assert.Single(harness.ViewModel.ServiceGroups);
+
+        harness.Profile.Own = _ => Task.FromResult(BarberCabinetData.Profile(services:
+        [
+            CabinetService("Фейд классический", "Фейд"),
+            CabinetService("Стрижка машинкой", "Стрижка"),
+        ]));
+
+        await harness.ViewModel.ActivateAsync();
+
+        // Возврат в раздел собирает группы заново, а не дописывает новые к прежним.
+        Assert.Equal(
+            ["Фейд", "Стрижка"],
+            harness.ViewModel.ServiceGroups.Select(group => group.Title));
     }
 
     [Fact]
@@ -735,6 +819,25 @@ public sealed class BarberCabinetProfileViewModelTests
             $"Работа {index}",
             id: Guid.Parse($"9e100000-0000-4000-8000-{index + 1:D12}"))),
     ];
+
+    /// <summary>
+    /// Услуга прайса с собственными идентификаторами: группы проверяются на нескольких строках.
+    /// </summary>
+    /// <param name="name">Название услуги.</param>
+    /// <param name="specializationName">Специализация услуги.</param>
+    /// <param name="isActive">Видима ли услуга клиентам.</param>
+    /// <returns>Строка прайса кабинета.</returns>
+    private static BarberProfileServiceResponse CabinetService(
+        string name,
+        string specializationName,
+        bool isActive = true) =>
+        BarberCabinetFixtures.Service(specializationName: specializationName) with
+        {
+            BarberServiceId = Guid.CreateVersion7(),
+            HairServiceId = Guid.CreateVersion7(),
+            Name = name,
+            IsActive = isActive,
+        };
 
     /// <summary>
     /// Собранный раздел: подменённые клиенты карточки, справочника и аватара, пикер, часы

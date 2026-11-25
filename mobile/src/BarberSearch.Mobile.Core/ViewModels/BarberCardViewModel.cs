@@ -65,6 +65,7 @@ public sealed partial class BarberCardViewModel : ObservableObject
     private const int SlotHorizonDays = 30;
 
     private static string NoReviewsTextValue => Loc.T("Пока нет отзывов");
+    private static string OtherServicesGroupTitle => Loc.T("Прочие услуги");
     private static string VenueFallbackText => Loc.T("Салон");
     private static string NotWorkingDayValue => Loc.T("В этот день мастер не работает.");
     private static string NoFreeTimeValue => Loc.T("Свободного времени на этот день нет.");
@@ -296,6 +297,17 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// Услуги в прайсе карточки (только активные).
     /// </summary>
     public ObservableCollection<BarberServiceOption> Services { get; } = [];
+
+    /// <summary>
+    /// Тот же прайс, разложенный по специализациям: заголовок группы и её строки.
+    /// </summary>
+    /// <remarks>
+    /// Источник для блока «Услуги»: специализация читается заголовком, а не бейджем на каждой
+    /// строке, поэтому длинное название больше не обрезается. Порядок групп и строк повторяет
+    /// <see cref="Services"/> (категория → специализация → название), а строки без
+    /// специализации собраны в последнюю группу «Прочие услуги».
+    /// </remarks>
+    public ObservableCollection<BarberServiceGroup> ServiceGroups { get; } = [];
 
     /// <summary>
     /// Пункты выбора услуги: «Любая услуга» плюс активные услуги прайса.
@@ -1161,6 +1173,7 @@ public sealed partial class BarberCardViewModel : ObservableObject
     private void ApplyProfile(BarberProfileResponse profile)
     {
         Services.Clear();
+        ServiceGroups.Clear();
         ServiceOptions.Clear();
         Salons.Clear();
         Photos.Clear();
@@ -1195,6 +1208,13 @@ public sealed partial class BarberCardViewModel : ObservableObject
         foreach (var (_, option) in options)
         {
             Services.Add(option);
+        }
+
+        // Группы собираются из уже отсортированного прайса: заголовок специализации заменяет
+        // её бейдж на каждой строке, порядок групп повторяет порядок строк.
+        foreach (var group in BarberServiceGroups.Build(Services, OtherServicesGroupTitle))
+        {
+            ServiceGroups.Add(group);
         }
 
         ServiceOptions.Insert(0, BarberServiceOption.AnyService());

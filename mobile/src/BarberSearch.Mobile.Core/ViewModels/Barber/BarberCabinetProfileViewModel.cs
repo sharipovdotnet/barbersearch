@@ -49,6 +49,7 @@ namespace BarberSearch.Mobile.Core.ViewModels.Barber;
 public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IBarberCabinetSection
 {
     private static string LoadFailedText => Loc.T("Не удалось загрузить профиль.");
+    private static string OtherServicesGroupTitle => Loc.T("Прочие услуги");
     private static string HideFailedText => Loc.T("Не удалось скрыть услугу. Попробуйте ещё раз.");
     private static string RestoreFailedText => Loc.T("Не удалось вернуть услугу. Попробуйте ещё раз.");
     private static string RemoveSpecializationFailedText => Loc.T("Не удалось убрать специализацию. Попробуйте ещё раз.");
@@ -247,6 +248,17 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     /// Строки прайса в порядке ответа сервера.
     /// </summary>
     public ObservableCollection<BarberServiceItem> Services { get; } = [];
+
+    /// <summary>
+    /// Тот же прайс, разложенный по специализациям: заголовок группы и её строки.
+    /// </summary>
+    /// <remarks>
+    /// Источник для блока «Услуги»: специализация читается заголовком, а не бейджем на каждой
+    /// строке, поэтому длинное название больше не обрезается. Порядок групп и строк повторяет
+    /// <see cref="Services"/> (порядок ответа API), скрытые услуги остаются в своих группах,
+    /// а строки без специализации собраны в последнюю группу «Прочие услуги».
+    /// </remarks>
+    public ObservableCollection<BarberCabinetServiceGroup> ServiceGroups { get; } = [];
 
     /// <summary>
     /// Специализации мастера.
@@ -1182,6 +1194,13 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
             Services.Add(new BarberServiceItem(service));
         }
 
+        // Группы собираются из уже разложенного прайса: заголовок специализации заменяет её
+        // бейдж на каждой строке, а порядок API и скрытые строки сохраняются.
+        foreach (var group in BarberCabinetServiceGroups.Build(Services, OtherServicesGroupTitle))
+        {
+            ServiceGroups.Add(group);
+        }
+
         foreach (var specialization in profile.Specializations)
         {
             Specializations.Add(new BarberSpecializationItem(specialization));
@@ -1247,6 +1266,7 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     private void ClearCollections()
     {
         Services.Clear();
+        ServiceGroups.Clear();
         Specializations.Clear();
         Photos.Clear();
         AdditionalServices.Clear();

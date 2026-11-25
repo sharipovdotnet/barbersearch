@@ -348,9 +348,11 @@ recorded in `AGENT.md` §5.
 | «Салоны» | The profile's attachments with their moderation status, the primary salon («Сделать основным»), a public-catalog search for a new place, «Создать салон» for the barber's own place (the web's five place-kind radio cards with their hints, catalogue flag, name, city/address with suggestions, country, time zone, coordinates, phone, website), and call / map / copy address / open this salon's schedule. «Создать салон» and «Добавить салон» stay fixed above the list while it scrolls. |
 | «Профиль» | The card (avatar, name, grade, rating, experience, languages, payment, bio, late policy), the photo grid — tap a frame to upload, caption, reorder, hide, restore or delete it — services and prices (add, edit, hide, restore), specializations, «Редактировать профиль», «Поделиться профилем» and «Открыть, как видят клиенты» — the last two only for a verified and active profile. The avatar has «Загрузить фото» / «Изменить фото» / «Удалить» (with a native confirmation) and shows «На проверке» or «Отклонено» with the rejection reason until moderation decides; the file is the account photo, not a portfolio frame. |
 
-In «Профиль» → «Услуги» the own price list shows the same category and specialization badges as
-the public card on every row, active and hidden alike — a hidden row also keeps its «Скрыта»
-badge — and stays in the API order: the cabinet never re-sorts its rows.
+In «Профиль» → «Услуги» the own price list groups the rows by specialization, with the
+specialization as a heading and the rows under it, active and hidden alike — a hidden row keeps
+its «Скрыта» badge and the category badge and duration stay where they were. It stays in the API
+order: the cabinet never re-sorts its rows, and services with an empty specialization go to a
+trailing «Прочие услуги» group.
 
 Reads retry themselves while the screen or section is visible; writes show their reason and are
 never repeated silently (`AGENT.md` §5 lists both sides and the one picker catalog that keeps only
@@ -654,12 +656,15 @@ card already had them; every other section follows the web order, and an empty s
 at all — the web's rule that a heading without data is noise. «Отзывы» is the only section with an
 empty state.
 
-Each row of «Услуги» puts two outline badges under the service name — the catalogue category
-(«Стрижка», «Борода», …; `Haircut` in the English interface) and the specialization the API returns
-— then the duration, with the price on the right. Rows are ordered by catalogue category →
-specialization → name in the Russian collation, the port of the web's `sortBarberServices`, because
-the catalogue order is the showcase's own and an alphabetical list would scatter one direction
-across the section.
+The «Услуги» block groups the rows by specialization: the specialization is a group heading and
+its services are listed under it, the same shape as the «Услуга» filter on «Поиск». The per-row
+outline pill it replaces repeated the same word on every row and was clipped on a phone
+(«Окрашивани», «Блонд-масте»), while a heading reads once and is never clipped. Each row keeps
+the catalogue category badge («Стрижка», «Борода», …; `Haircut` in the English interface) and the
+duration, with the price on the right; services with an empty specialization form a trailing
+«Прочие услуги» group. Groups and rows are ordered by catalogue category → specialization → name
+in the Russian collation, the port of the web's `sortBarberServices`, because the catalogue order
+is the showcase's own and an alphabetical list would scatter one direction across the section.
 
 All of it comes from the same public `GET api/barbers/{id}` the card already reads: `avatarUrl`,
 `isVerified`, `yearsOfExperience`, `bio`, `languages`, `certificatesAndTraining`, `achievements`,
@@ -829,8 +834,13 @@ specialization field's text and `null` reset (9 cases), bringing the suite to **
 price-list slice adds the catalogue category order over the API one, the unknown category last, the
 specialization grouping and the Russian collation, the name and `barberServiceId` tie-breakers, the
 non-mutating sort, the card's sorted price list with the slot picker kept in API order, and the
-category and specialization badges on the card and in the cabinet (10 cases), bringing the suite to
-**1707 tests**. The page layer, the two page timers and the platform intents are not covered —
+category badge on the card and in the cabinet (10 cases). The
+specialization-grouping slice moves the specialization from a per-row pill to a group heading on
+both screens: it adds the two pure builders' cases — headings in first-appearance order, rows kept
+in source order, interleaved services collected under one heading, the blank-specialization tail,
+the cabinet's hidden services in API order — and the two ViewModels' rebuilt groups (12 cases),
+bringing the suite to **1719 tests**. The page layer, the two page timers and the platform intents
+are not covered —
 `AGENT.md` §5 says where the risk sits. The Android build
 stays at 0 warnings; the iOS C# compile is clean after an iOS
 `PlatformTheme` no-op partial and the CA1711 suppressions: one explicit line in the existing

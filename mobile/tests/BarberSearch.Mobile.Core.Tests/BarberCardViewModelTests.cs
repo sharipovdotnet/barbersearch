@@ -232,7 +232,7 @@ public sealed class BarberCardViewModelTests
     }
 
     [Fact]
-    public async Task InitializeAsync_ActiveService_ExposesCategoryAndSpecializationBadges()
+    public async Task InitializeAsync_ActiveService_ExposesCategoryBadgeAndSpecializationName()
     {
         using var harness = new Harness();
 
@@ -268,6 +268,151 @@ public sealed class BarberCardViewModelTests
         Assert.Equal(ServiceCategory.Other, any.Category);
         Assert.Equal(string.Empty, any.CategoryText);
         Assert.Equal(string.Empty, any.SpecializationName);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_ActiveServices_BuildsServiceGroupsFromSortedPriceList()
+    {
+        using var harness = new Harness();
+
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(services:
+        [
+            Service(
+                ColoringBarberServiceId,
+                Guid.CreateVersion7(),
+                "Балаяж",
+                5000m,
+                120,
+                isActive: true,
+                category: ServiceCategory.Coloring,
+                specializationName: "Окрашивание"),
+            Service(
+                BarberServiceId,
+                HairServiceId,
+                "Фейд",
+                2400m,
+                45,
+                isActive: true,
+                category: ServiceCategory.Haircut,
+                specializationName: "Фейд"),
+            Service(
+                SecondHaircutBarberServiceId,
+                Guid.CreateVersion7(),
+                "Стрижка машинкой",
+                1800m,
+                30,
+                isActive: true,
+                category: ServiceCategory.Haircut,
+                specializationName: "Стрижка"),
+        ]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        var viewModel = harness.ViewModel;
+
+        // Заголовки идут в порядке отсортированного прайса, а не ответа API.
+        Assert.Equal(
+            ["Стрижка", "Фейд", "Окрашивание"],
+            viewModel.ServiceGroups.Select(group => group.Title));
+        Assert.Equal(
+            ["Стрижка машинкой"],
+            viewModel.ServiceGroups[0].Services.Select(service => service.Name));
+        Assert.Equal(
+            ["Фейд"],
+            viewModel.ServiceGroups[1].Services.Select(service => service.Name));
+        Assert.Equal(
+            ["Балаяж"],
+            viewModel.ServiceGroups[2].Services.Select(service => service.Name));
+
+        // Группы — снимок того же прайса, а не второй список услуг.
+        Assert.Equal(
+            viewModel.Services.Count,
+            viewModel.ServiceGroups.Sum(group => group.Services.Count));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_ServiceWithoutSpecialization_BuildsOtherServicesGroup()
+    {
+        using var harness = new Harness();
+
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(services:
+        [
+            Service(
+                BarberServiceId,
+                HairServiceId,
+                "Фейд",
+                2400m,
+                45,
+                isActive: true,
+                specializationName: "Фейд"),
+            Service(
+                HiddenBarberServiceId,
+                Guid.CreateVersion7(),
+                "Стрижка наголо",
+                1200m,
+                30,
+                isActive: true,
+                specializationName: " "),
+        ]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        // Строка без специализации не теряется: она замыкает список «Прочими услугами».
+        Assert.Equal(
+            ["Фейд", "Прочие услуги"],
+            harness.ViewModel.ServiceGroups.Select(group => group.Title));
+        Assert.Equal(
+            ["Стрижка наголо"],
+            harness.ViewModel.ServiceGroups[1].Services.Select(service => service.Name));
+    }
+
+    [Fact]
+    public async Task RetryLoadCommand_ChangedPriceList_RebuildsServiceGroups()
+    {
+        using var harness = new Harness();
+
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(services:
+        [
+            Service(
+                BarberServiceId,
+                HairServiceId,
+                "Фейд",
+                2400m,
+                45,
+                isActive: true,
+                specializationName: "Фейд"),
+        ]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.Single(harness.ViewModel.ServiceGroups);
+
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(services:
+        [
+            Service(
+                BarberServiceId,
+                HairServiceId,
+                "Фейд",
+                2400m,
+                45,
+                isActive: true,
+                specializationName: "Фейд"),
+            Service(
+                SecondHaircutBarberServiceId,
+                Guid.CreateVersion7(),
+                "Стрижка машинкой",
+                1800m,
+                30,
+                isActive: true,
+                specializationName: "Стрижка"),
+        ]));
+
+        await harness.ViewModel.RetryLoadCommand.ExecuteAsync(null);
+
+        // Перечитывание профиля очищает и собирает группы заново, а не дописывает их.
+        Assert.Equal(
+            ["Стрижка", "Фейд"],
+            harness.ViewModel.ServiceGroups.Select(group => group.Title));
     }
 
     [Fact]

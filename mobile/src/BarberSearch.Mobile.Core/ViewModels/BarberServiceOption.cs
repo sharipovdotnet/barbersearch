@@ -59,7 +59,7 @@ public sealed class BarberServiceOption
     public string CategoryText { get; }
 
     /// <summary>
-    /// Специализация услуги для бейджа: «Фейд»; у «Любой услуги» пусто.
+    /// Специализация услуги: заголовок её группы в прайсе. У «Любой услуги» пусто.
     /// </summary>
     public string SpecializationName { get; }
 

@@ -61,7 +61,7 @@ public sealed class BarberServiceItem
     public string CategoryText { get; }
 
     /// <summary>
-    /// Специализация для показа: «Фейд», «Оформление бороды».
+    /// Специализация услуги: заголовок её группы в прайсе кабинета.
     /// </summary>
     public string SpecializationName { get; }
 
