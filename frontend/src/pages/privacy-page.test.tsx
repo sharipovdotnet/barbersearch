@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { COOKIE_REGISTRY, LEGAL_ENTITY } from '@/lib/legal'
+import { LEGAL_ENTITY } from '@/lib/legal'
 import { PrivacyPage } from '@/pages/privacy-page'
 
 describe('PrivacyPage', () => {
@@ -20,16 +20,19 @@ describe('PrivacyPage', () => {
     ).toBeInTheDocument()
   })
 
-  it('перечисляет в разделе о cookie все записи реестра', () => {
+  it('объясняет cookie, не публикуя технический перечень', () => {
     render(<PrivacyPage />)
 
     const cookies = screen.getByRole('region', {
       name: /Cookie и аналогичные технологии/,
     })
 
-    for (const cookie of COOKIE_REGISTRY) {
-      expect(within(cookies).getByText(cookie.name)).toBeInTheDocument()
-    }
+    expect(
+      within(cookies).getByText(/только строго необходимые cookie/)
+    ).toBeInTheDocument()
+    expect(
+      within(cookies).queryByText(/barbersearch\.auth/)
+    ).not.toBeInTheDocument()
   })
 
   it('указывает реквизиты Оператора и контакт для обращений', () => {
