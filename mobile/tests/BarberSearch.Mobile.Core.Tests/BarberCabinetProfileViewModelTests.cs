@@ -125,7 +125,6 @@ public sealed class BarberCabinetProfileViewModelTests
 
         Assert.Single(viewModel.Specializations);
         Assert.Equal("Фейд", viewModel.Specializations[0].Name);
-        Assert.True(viewModel.HasSpecializations);
 
         Assert.Equal(2, viewModel.Photos.Count);
         Assert.Equal("Опубликовано", viewModel.Photos[0].StatusText);
@@ -309,7 +308,6 @@ public sealed class BarberCabinetProfileViewModelTests
 
         Assert.Equal(BarberCabinetFixtures.ServiceSpecializationId, removal.SpecializationId);
         Assert.Empty(viewModel.Specializations);
-        Assert.False(viewModel.HasSpecializations);
         Assert.Null(viewModel.ActionError);
         Assert.False(viewModel.IsMutating);
 
@@ -356,7 +354,7 @@ public sealed class BarberCabinetProfileViewModelTests
 
         await viewModel.HideServiceCommand.ExecuteAsync(item);
 
-        // Вторая активная услуга того же направления держит специализацию в блоке.
+        // Вторая активная услуга того же направления держит специализацию.
         Assert.Empty(harness.Profile.SpecializationRemovals);
         Assert.Single(viewModel.Specializations);
         Assert.Equal(2, harness.Profile.OwnCalls);
@@ -420,7 +418,6 @@ public sealed class BarberCabinetProfileViewModelTests
 
         Assert.Equal(BarberCabinetFixtures.ServiceSpecializationId, addition.SpecializationId);
         Assert.Single(viewModel.Specializations);
-        Assert.True(viewModel.HasSpecializations);
         Assert.Null(viewModel.ActionError);
         Assert.Equal(3, harness.Profile.OwnCalls);
     }
