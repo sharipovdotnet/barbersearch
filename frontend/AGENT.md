@@ -659,6 +659,16 @@ green; `npm run build` — 2695 modules, entry `index-*.js` 392.21 kB (gzip 128.
 owner keeps `frontend/e2e/**` for a separate agent); the rows keep their names, badges and prices,
 so the existing locators are unchanged.
 
+**Verification snapshot, 2026-11-26 (barber specializations synced with services).**
+`npm run lint` — 0 warnings / 0 errors (552 files, 116 rules); `npm test` — 1695 tests in 154 files,
+green; `npm run build` — 2696 modules, entry `index-*.js` 392.21 kB (gzip 128.64 kB), CSS
+`index-*.css` 91.27 kB (gzip 15.57 kB), lazy `barber-profile-page-*.js` 32.04 kB (gzip 7.58 kB);
+`npm run check:i18n` — 1792 `t()` strings, 2113 translations, 0 missing, 0 conflicts, 0 visible
+Russian strings in JSX (421 outside `t()`). `npm run test:e2e` was **not** rerun (the owner keeps
+`frontend/e2e/**` for a separate agent); the slice only adds `GET`/`POST`/`DELETE` calls on the
+existing barber profile screen and one `role="alert"` line, and no visible row, label or route
+changes, so the E2E locators are unaffected.
+
 ### 5.1 API proxy
 
 `vite.config.ts` proxies `/api` to `VITE_API_PROXY_TARGET`, default `http://localhost:5243`
@@ -2232,6 +2242,26 @@ dependency and no `ui/**` change.
 | Error boundary | ✅ route-level boundary in `App.tsx` with a Russian fallback; no per-widget boundaries (§14) |
 | i18n | ✅ ru/en: header switch, persisted choice, `t()` over Russian source strings, English JSON catalogs, locale-aware dates/numbers/plurals, `npm run check:i18n` gate |
 | API typing | ✅ hand-written types + strict response guards |
+
+**Barber specializations are derived from the price list.** A profile tag exists while at least
+one **active** service carries its `specializationId`: a hidden row stays in the price list for
+booking history but holds no tag, so hiding the last active service of a direction removes the tag
+and restoring that service adds it back. A tag with no service row at all is a manual setting made
+in «Специализации» and is never removed by this rule — neither the web nor the mobile client may
+erase it. Known consequence: manually removing a tag whose service is still active brings it back
+on the next service action. `lib/barber-specialization-sync.ts` holds the pure diff (`add` in
+first-appearance order in the services, `remove` in the profile's tag order, empty ids skipped,
+duplicates collapsed, inputs never mutated); `syncBarberSpecializations` in
+`lib/barber-profile.ts` re-reads `GET /api/barber-profiles/{id}` — the props are stale right after
+a service mutation, and this extra `GET` is the accepted cost — and applies it with one
+`DELETE`/`POST .../specializations/{id}` per id. The sync runs only after «Скрыть», «Вернуть» and
+«Добавить услугу», before `onChanged`/`onAdded`, so the following reload shows the final state; it
+never runs on mount, on a price edit (`updateBarberService`), on a card save, on a manual tag
+action or on a photo action. A sync failure never undoes or repeats the service mutation: the
+services section shows «Не удалось обновить специализации. Попробуйте ещё раз.» in its already
+existing `listError` while the service action stands. A `409 duplicate` / `404
+removeSpecialization.notFound` on a tag is a race with another client and stays silent;
+`addSpecialization.specializationNotFound` is a real error and is never swallowed.
 
 **Booking reschedule (#95).** A future `Pending`/`Confirmed` visit can be moved instead of
 cancelled and re-booked: `/account` adds a calendar-clock icon button on every such row (before

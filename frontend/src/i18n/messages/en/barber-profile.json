@@ -43,6 +43,7 @@
   "Цена не может быть отрицательной.": "The price cannot be negative.",
   "Длительность — от 1 до 1440 минут.": "Duration must be between 1 and 1440 minutes.",
   "Не удалось сохранить профиль. Попробуйте ещё раз.": "Could not save the profile. Try again.",
+  "Не удалось обновить специализации. Попробуйте ещё раз.": "Could not update the specializations. Try again.",
 
   "Фотографии": "Photos",
   "Работы видны в вашей карточке. Первое фото показывается первым.": "Your work is visible on your card. The first photo is shown first.",
