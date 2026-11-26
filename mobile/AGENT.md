@@ -1320,10 +1320,11 @@ in Core owns both base addresses.
   hover one. Each name is a chip in a wrapping `FlexLayout` — `Muted`/`MutedDark` background,
   `Padding="8,4"`, `RoundRectangle 6`, 12 pt — exactly like the language and payment chips of the
   same card, and the description is no longer visible by itself. Only the gap is tighter than the
-  neighbour chips': the wrapper's margin is 4 pt horizontally and none vertically, because the 44 pt
-  target already leaves 12 pt of air between two rows and a second vertical margin spread the block
-  out on the phone. Hover does not exist on a phone, so
-  a tap replaces it: the tapped chip opens a `Muted` panel with the description directly under the
+  neighbour chips': the wrapper's margin is 4 pt horizontally and none vertically, and the chip fills
+  the 44 pt target with a 3 pt inset above and below, so two rows stand 6 pt apart instead of the
+  12 pt the bare target left — the badges read as one cluster while every target keeps its 44 pt.
+  Hover does not exist on a phone, so a tap replaces it: the tapped chip opens a `Muted` panel with
+  the description directly under the
   row of chips, a second tap on the same chip closes it, and a tap on another chip moves it — at most
   one description is open. A chip whose catalogue entry has no description is static: the tap
   changes nothing, no empty panel appears, and `HasDescription` still decides. The selected chip gets

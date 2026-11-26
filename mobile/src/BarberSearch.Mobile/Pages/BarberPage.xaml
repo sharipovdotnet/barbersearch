@@ -130,12 +130,12 @@
 
                         <!--
                             Обёртка задаёт цель нажатия не меньше 44 pt: сам чип остаётся
-                            компактным и центрируется. Жест висит на обёртке, а не на рамке,
-                            иначе палец попадал бы в текст. Чип без описания тап игнорирует —
-                            решение принимает ViewModel, у неё же состояние выделения.
-                            Отступ только горизонтальный, 4: цель в 44 pt уже даёт 12 pt
-                            воздуха по вертикали между рядами, и второй вертикальный отступ
-                            раздувал бы блок.
+                            компактным. Жест висит на обёртке, а не на рамке, иначе палец
+                            попадал бы в текст. Чип без описания тап игнорирует — решение
+                            принимает ViewModel, у неё же состояние выделения.
+                            Отступ только горизонтальный, 4. По вертикали чип заполняет цель
+                            с отступом 3: без него рамки стояли бы в 12 pt друг от друга —
+                            это и есть весь воздух цели, и ряд бейджей выглядел растянутым.
                         -->
                         <FlexLayout BindableLayout.ItemsSource="{Binding Specializations}" Wrap="Wrap">
                             <BindableLayout.ItemTemplate>
@@ -151,13 +151,13 @@
                                             <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnSpecializationTapped" />
                                         </Grid.GestureRecognizers>
                                         <Border
+                                            Margin="0,3"
                                             Padding="8,4"
                                             BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
                                             HorizontalOptions="Center"
                                             Stroke="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
                                             StrokeShape="RoundRectangle 6"
-                                            StrokeThickness="0"
-                                            VerticalOptions="Center">
+                                            StrokeThickness="0">
                                             <Border.Triggers>
                                                 <!-- Выбранное состояние — рамка Primary: рядом ещё и текст описания. -->
                                                 <DataTrigger
