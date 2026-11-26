@@ -1319,23 +1319,23 @@ in Core owns both base addresses.
   a hover tooltip, and the phone follows the web structure with a touch input model instead of the
   hover one. Each name is a chip in a wrapping `FlexLayout` — `Muted`/`MutedDark` background,
   `Padding="8,4"`, `RoundRectangle 6`, 12 pt — exactly like the language and payment chips of the
-  same card, and the description is no longer visible by itself. Only the gap is tighter than the
-  neighbour chips': the wrapper's margin is 4 pt horizontally and none vertically, and the chip fills
-  the 44 pt target with a 3 pt inset above and below, so two rows stand 6 pt apart instead of the
-  12 pt the bare target left — the badges read as one cluster while every target keeps its 44 pt.
+  same card, and the description is no longer visible by itself. Only the gap and the target differ:
+  the wrapper's margin is 4 pt horizontally and none vertically, and its height is 38 rather than 44,
+  because a 44 pt target around a 32 pt chip would be 12 pt of bare air between two rows and the
+  block read as stretched. With the 38 pt step two rows stand 6 pt apart, the targets do not overlap,
+  and the chip keeps the height of the language and payment chips.
   Hover does not exist on a phone, so a tap replaces it: the tapped chip opens a `Muted` panel with
-  the description directly under the
-  row of chips, a second tap on the same chip closes it, and a tap on another chip moves it — at most
-  one description is open. A chip whose catalogue entry has no description is static: the tap
-  changes nothing, no empty panel appears, and `HasDescription` still decides. The selected chip gets
-  a visible state built only from the existing tokens — a 1 pt `Primary`/`PrimaryDark` frame through
-  a `DataTrigger` on `IsSelected` — and the description text beside it is the second, non-colour
-  signal. Every chip sits inside a `Grid` with `MinimumHeightRequest`/`MinimumWidthRequest` 44, so
-  the target is a thumb target while the chip itself stays compact and centered; the gesture hangs
-  on that wrapper rather than on the frame, and the wrapper carries the name as
-  `SemanticProperties.Description` and the description as `SemanticProperties.Hint`, so TalkBack
-  reads both without a tap (an empty `hint` on a chip without a description) while the panel is an
-  ordinary visible `Label` that the reading order reaches. The state lives in Core:
+  the description directly under the row of chips, a second tap on the same chip closes it, and a tap
+  on another chip moves it — at most one description is open. A chip whose catalogue entry has no
+  description is static: the tap changes nothing, no empty panel appears, and `HasDescription` still
+  decides. The selected chip gets a visible state built only from the existing tokens — a 1 pt
+  `Primary`/`PrimaryDark` frame through a `DataTrigger` on `IsSelected` — and the description text
+  beside it is the second, non-colour signal. Every chip sits inside a `Grid` whose target is 44 pt
+  wide and 38 pt tall, so the target is a thumb target while the chip itself stays compact and
+  centered; the gesture hangs on that wrapper rather than on the frame, and the wrapper carries the
+  name as `SemanticProperties.Description` and the description as `SemanticProperties.Hint`, so
+  TalkBack reads both without a tap (an empty `hint` on a chip without a description) while the panel
+  is an ordinary visible `Label` that the reading order reaches. The state lives in Core:
   `BarberSpecializationOption` is an `ObservableObject` with `IsSelected` — the slot chip does the
   same — and `ToggleSpecializationCommand` on the card clears the previous chip and updates
   `HasSelectedSpecializationDescription`/`SelectedSpecializationDescription`; a profile reload clears

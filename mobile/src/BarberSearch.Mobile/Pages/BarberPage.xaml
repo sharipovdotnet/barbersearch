@@ -129,13 +129,15 @@
                             Text="{loc:Translate Key='Специализации'}" />
 
                         <!--
-                            Обёртка задаёт цель нажатия не меньше 44 pt: сам чип остаётся
-                            компактным. Жест висит на обёртке, а не на рамке, иначе палец
-                            попадал бы в текст. Чип без описания тап игнорирует — решение
-                            принимает ViewModel, у неё же состояние выделения.
-                            Отступ только горизонтальный, 4. По вертикали чип заполняет цель
-                            с отступом 3: без него рамки стояли бы в 12 pt друг от друга —
-                            это и есть весь воздух цели, и ряд бейджей выглядел растянутым.
+                            Обёртка задаёт цель нажатия: 44 pt по ширине и 38 по высоте — сам
+                            чип остаётся компактным и центрируется в ней. Жест висит на обёртке,
+                            а не на рамке, иначе палец попадал бы в текст. Чип без описания тап
+                            игнорирует — решение принимает ViewModel, у неё же состояние
+                            выделения.
+                            38, а не 44 по вертикали: цель в 44 pt — это ровно 12 pt воздуха
+                            между рамками, и бейджи выглядели растянутыми. Шаг 38 оставляет
+                            6 pt зазора и не перекрывает соседние цели: два ряда читаются
+                            одним блоком.
                         -->
                         <FlexLayout BindableLayout.ItemsSource="{Binding Specializations}" Wrap="Wrap">
                             <BindableLayout.ItemTemplate>
@@ -143,7 +145,7 @@
                                     <Grid
                                         Margin="0,0,4,0"
                                         FlexLayout.Shrink="0"
-                                        MinimumHeightRequest="44"
+                                        MinimumHeightRequest="38"
                                         MinimumWidthRequest="44"
                                         SemanticProperties.Description="{Binding Name}"
                                         SemanticProperties.Hint="{Binding Description}">
@@ -151,13 +153,13 @@
                                             <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnSpecializationTapped" />
                                         </Grid.GestureRecognizers>
                                         <Border
-                                            Margin="0,3"
                                             Padding="8,4"
                                             BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
                                             HorizontalOptions="Center"
                                             Stroke="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
                                             StrokeShape="RoundRectangle 6"
-                                            StrokeThickness="0">
+                                            StrokeThickness="0"
+                                            VerticalOptions="Center">
                                             <Border.Triggers>
                                                 <!-- Выбранное состояние — рамка Primary: рядом ещё и текст описания. -->
                                                 <DataTrigger
