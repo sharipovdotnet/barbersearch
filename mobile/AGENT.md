@@ -1338,9 +1338,12 @@ in Core owns both base addresses.
   the choice, because the new answer brings new chip instances and the old reference would show a
   specialization that is no longer on the screen. The card keeps one specialization list, so the
   panel and the chips cannot disagree, and `BarberPage.xaml.cs` only passes `TappedEventArgs.Parameter`
-  to the command, as `OnPhotoTapped` passes the frame. The section order is untouched:
-  «Специализации» stays right after «О мастере» and before «Оплата», and the price list keeps its
-  deliberate mobile place above. No new key, colour, font, radius or icon enters the app. Tests add
+  to the command, as `OnPhotoTapped` passes the frame. The block sits right under «Работы» and
+  immediately before «Услуги», so the directions are read before the price: a deliberate
+  mobile-only placement, recorded here rather than left silent — the web keeps «О мастере»
+  between «Специализации» and the price list, while the phone has its own card order and this
+  slice only moves the badges inside it. No new key, colour, font, radius or icon enters the app.
+  Tests add
   6 cases (1767 total): the tap that opens a description (trimmed), the second tap that closes it,
   the switch that leaves only the new chip open, the static chip without a description that changes
   nothing, the reload that resets the choice, and the empty list that still hides the section.

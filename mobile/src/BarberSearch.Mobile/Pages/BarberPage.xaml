@@ -110,6 +110,83 @@
                     </VerticalStackLayout>
                 </Border>
 
+                <!--
+                    Специализации: название — чип, как у языков и способов оплаты, а описание
+                    из справочника открывается тапом и показывается под рядом. На телефоне
+                    hover нет, поэтому веб-подсказка заменена тапом; открыта одна подсказка.
+                -->
+                <Border
+                    Margin="0,0,0,12"
+                    Padding="16"
+                    IsVisible="{Binding HasSpecializations}"
+                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                    StrokeShape="RoundRectangle 10">
+                    <VerticalStackLayout>
+                        <Label
+                            Margin="0,0,0,8"
+                            FontFamily="GeistSemiBold"
+                            FontSize="16"
+                            Text="{loc:Translate Key='Специализации'}" />
+
+                        <!--
+                            Обёртка задаёт цель нажатия не меньше 44 pt: сам чип остаётся
+                            компактным и центрируется. Жест висит на обёртке, а не на рамке,
+                            иначе палец попадал бы в текст. Чип без описания тап игнорирует —
+                            решение принимает ViewModel, у неё же состояние выделения.
+                        -->
+                        <FlexLayout BindableLayout.ItemsSource="{Binding Specializations}" Wrap="Wrap">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BarberSpecializationOption">
+                                    <Grid
+                                        Margin="0,0,8,8"
+                                        FlexLayout.Shrink="0"
+                                        MinimumHeightRequest="44"
+                                        MinimumWidthRequest="44"
+                                        SemanticProperties.Description="{Binding Name}"
+                                        SemanticProperties.Hint="{Binding Description}">
+                                        <Grid.GestureRecognizers>
+                                            <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnSpecializationTapped" />
+                                        </Grid.GestureRecognizers>
+                                        <Border
+                                            Padding="8,4"
+                                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                                            HorizontalOptions="Center"
+                                            Stroke="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                                            StrokeShape="RoundRectangle 6"
+                                            StrokeThickness="0"
+                                            VerticalOptions="Center">
+                                            <Border.Triggers>
+                                                <!-- Выбранное состояние — рамка Primary: рядом ещё и текст описания. -->
+                                                <DataTrigger
+                                                    Binding="{Binding IsSelected}"
+                                                    TargetType="Border"
+                                                    Value="True">
+                                                    <Setter Property="StrokeThickness" Value="1" />
+                                                </DataTrigger>
+                                            </Border.Triggers>
+                                            <Label FontSize="12" Text="{Binding Name}" />
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </FlexLayout>
+
+                        <!-- Описание выбранной специализации: обычный видимый текст, читаемый при обходе. -->
+                        <Border
+                            Padding="8"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
+                            IsVisible="{Binding HasSelectedSpecializationDescription}"
+                            StrokeShape="RoundRectangle 6"
+                            StrokeThickness="0">
+                            <Label
+                                FontSize="12"
+                                LineBreakMode="WordWrap"
+                                Text="{Binding SelectedSpecializationDescription}"
+                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
+                        </Border>
+                    </VerticalStackLayout>
+                </Border>
+
                 <!-- Услуги: специализация заголовком группы, цена и длительность строкой. -->
                 <Border
                     Margin="0,0,0,12"
@@ -474,83 +551,6 @@
                                 </DataTemplate>
                             </BindableLayout.ItemTemplate>
                         </VerticalStackLayout>
-                    </VerticalStackLayout>
-                </Border>
-
-                <!--
-                    Специализации: название — чип, как у языков и способов оплаты, а описание
-                    из справочника открывается тапом и показывается под рядом. На телефоне
-                    hover нет, поэтому веб-подсказка заменена тапом; открыта одна подсказка.
-                -->
-                <Border
-                    Margin="0,0,0,12"
-                    Padding="16"
-                    IsVisible="{Binding HasSpecializations}"
-                    Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
-                    StrokeShape="RoundRectangle 10">
-                    <VerticalStackLayout>
-                        <Label
-                            Margin="0,0,0,8"
-                            FontFamily="GeistSemiBold"
-                            FontSize="16"
-                            Text="{loc:Translate Key='Специализации'}" />
-
-                        <!--
-                            Обёртка задаёт цель нажатия не меньше 44 pt: сам чип остаётся
-                            компактным и центрируется. Жест висит на обёртке, а не на рамке,
-                            иначе палец попадал бы в текст. Чип без описания тап игнорирует —
-                            решение принимает ViewModel, у неё же состояние выделения.
-                        -->
-                        <FlexLayout BindableLayout.ItemsSource="{Binding Specializations}" Wrap="Wrap">
-                            <BindableLayout.ItemTemplate>
-                                <DataTemplate x:DataType="vm:BarberSpecializationOption">
-                                    <Grid
-                                        Margin="0,0,8,8"
-                                        FlexLayout.Shrink="0"
-                                        MinimumHeightRequest="44"
-                                        MinimumWidthRequest="44"
-                                        SemanticProperties.Description="{Binding Name}"
-                                        SemanticProperties.Hint="{Binding Description}">
-                                        <Grid.GestureRecognizers>
-                                            <TapGestureRecognizer CommandParameter="{Binding .}" Tapped="OnSpecializationTapped" />
-                                        </Grid.GestureRecognizers>
-                                        <Border
-                                            Padding="8,4"
-                                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
-                                            HorizontalOptions="Center"
-                                            Stroke="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
-                                            StrokeShape="RoundRectangle 6"
-                                            StrokeThickness="0"
-                                            VerticalOptions="Center">
-                                            <Border.Triggers>
-                                                <!-- Выбранное состояние — рамка Primary: рядом ещё и текст описания. -->
-                                                <DataTrigger
-                                                    Binding="{Binding IsSelected}"
-                                                    TargetType="Border"
-                                                    Value="True">
-                                                    <Setter Property="StrokeThickness" Value="1" />
-                                                </DataTrigger>
-                                            </Border.Triggers>
-                                            <Label FontSize="12" Text="{Binding Name}" />
-                                        </Border>
-                                    </Grid>
-                                </DataTemplate>
-                            </BindableLayout.ItemTemplate>
-                        </FlexLayout>
-
-                        <!-- Описание выбранной специализации: обычный видимый текст, читаемый при обходе. -->
-                        <Border
-                            Padding="8"
-                            BackgroundColor="{AppThemeBinding Light={StaticResource Muted}, Dark={StaticResource MutedDark}}"
-                            IsVisible="{Binding HasSelectedSpecializationDescription}"
-                            StrokeShape="RoundRectangle 6"
-                            StrokeThickness="0">
-                            <Label
-                                FontSize="12"
-                                LineBreakMode="WordWrap"
-                                Text="{Binding SelectedSpecializationDescription}"
-                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                        </Border>
                     </VerticalStackLayout>
                 </Border>
 
