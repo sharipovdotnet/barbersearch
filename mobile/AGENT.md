@@ -315,9 +315,20 @@ in Core owns both base addresses.
   profile's specialization ids travel into the editor with the route, so an attached tag is not
   posted twice, and the duplicate path also covers a tag added from another device. The profile
   section no longer reads the specialization catalogue at all; its empty state says a tag will
-  appear with the first service. Tests add 3 cases and drop the 7 picker cases (1715 total):
-  attaching a new tag, skipping an attached one, the duplicate answer and a failed attach that
-  leaves the price list unchanged.
+  appear with the first service. Tests cover the attach path (attaching a new tag, skipping an
+  attached one, the duplicate answer and a failed attach that leaves the price list unchanged).
+  The block also follows the price list back: after «Скрыть»,
+  «Вернуть» and the return from «Добавить услугу» the section re-reads the card, compares its tags
+  with the active services and removes a tag whose last active service is gone or adds a tag of a
+  newly active service (`removeSpecialization.notFound` and `addSpecialization.duplicate` count as
+  already done). Hidden rows do not hold a tag — otherwise hiding the last service would never
+  remove it — while a tag with no service rows at all is left alone, because the web cabinet still
+  allows adding one by hand. The comparison is `BarberSpecializationSync`, a pure set difference;
+  a sync failure does not undo the service change and shows its own line, and a failed call is
+  retried by the next service action. Tests add 19 cases (1761 total): the pure difference
+  (active-only, the hidden-row removal, the manual-tag exemption, empty ids, repeated services and
+  first-appearance order), the hide/restore/add round trips in the section, and the duplicate and
+  failure paths.
 - **Search filters are the web's six, with one touch adaptation.** City, date, language,
   specialization, hair service and the additional-service substring travel in one request, only on
   «Найти», and the catalogs for the two selects come from `GET api/specializations` and

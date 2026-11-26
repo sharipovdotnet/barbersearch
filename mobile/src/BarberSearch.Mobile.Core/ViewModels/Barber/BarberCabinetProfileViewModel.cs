@@ -32,10 +32,17 @@ namespace BarberSearch.Mobile.Core.ViewModels.Barber;
 /// и они не конфликтуют: <c>DELETE</c> гасит видимость, <c>POST</c> возвращает её.
 /// </para>
 /// <para>
+/// Блок «Специализации» следует за прайсом: после скрытия, возврата и добавления услуги
+/// раздел сверяет теги с активными услугами (<see cref="BarberSpecializationSync"/>) и убирает
+/// или добавляет разницу. Скрытая строка тег не держит — иначе скрытие последней услуги
+/// направления никогда бы его не убрало, — а тег без единой услуги не трогается: его могли
+/// добавить вручную в веб-кабинете.
+/// </para>
+/// <para>
 /// Чтение карточки лечится автоповтором, записи — нет: <c>DELETE</c> и <c>POST</c> не
-/// повторяются вслепую, решение остаётся за человеком. Специализация появляется в профиле
-/// вместе с услугой: отдельного добавления из справочника в разделе больше нет, поэтому и
-/// ленивого чтения справочника специализаций здесь не осталось.
+/// повторяются вслепую, решение остаётся за человеком. Специализация появляется вместе с
+/// активной услугой и уходит вместе с последней: отдельного добавления из справочника в разделе
+/// больше нет, поэтому и ленивого чтения справочника специализаций здесь не осталось.
 /// </para>
 /// <para>
 /// Аватар — отдельный срез: карточка мастера отдаёт только одобренный и не скрытый кадр,
@@ -51,6 +58,8 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     private static string OtherServicesGroupTitle => Loc.T("Прочие услуги");
     private static string HideFailedText => Loc.T("Не удалось скрыть услугу. Попробуйте ещё раз.");
     private static string RestoreFailedText => Loc.T("Не удалось вернуть услугу. Попробуйте ещё раз.");
+    private static string SpecializationSyncFailedText =>
+        Loc.T("Не удалось обновить специализации. Попробуйте ещё раз.");
 
     private readonly IBarberProfileApi _profileApi;
     private readonly IAccountAvatarApi _avatarApi;
@@ -579,18 +588,51 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     /// </summary>
     /// <param name="cancellationToken">Токен отмены.</param>
     /// <returns>Задача чтения.</returns>
-    public async Task ActivateAsync(CancellationToken cancellationToken = default)
+    public Task ActivateAsync(CancellationToken cancellationToken = default) =>
+        ActivateCoreAsync(syncSpecializations: false, cancellationToken);
+
+    /// <summary>
+    /// Показывает раздел после добавления услуги: перечитывает карточку и сверяет специализации.
+    /// </summary>
+    /// <remarks>
+    /// Вызывается редактором услуги вместо <see cref="ActivateAsync"/>: редактор уже привязал
+    /// специализацию выбранной услуги, но общий набор тегов мог разойтись с прайсом, например
+    /// после скрытия последней услуги направления. Сверка одна на добавление, скрытие и возврат,
+    /// поэтому правило «специализация живёт, пока у неё есть активная услуга» не дублируется.
+    /// </remarks>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Задача чтения и сверки.</returns>
+    public async Task ActivateAfterServiceChangeAsync(
+        CancellationToken cancellationToken = default)
+    {
+        // Новая запись услуги начинает действие заново: прошлая ошибка записи больше не актуальна,
+        // а ошибку сверки, если она случится, выставит SyncSpecializationsAsync.
+        ActionError = null;
+
+        await ActivateCoreAsync(syncSpecializations: true, cancellationToken);
+    }
+
+    /// <summary>
+    /// Показывает раздел и, если просили, сверяет специализации с услугами.
+    /// </summary>
+    /// <param name="syncSpecializations">Сверять ли теги с прайсом после чтения.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Задача чтения.</returns>
+    private async Task ActivateCoreAsync(
+        bool syncSpecializations,
+        CancellationToken cancellationToken)
     {
         _isPageVisible = true;
 
-        var profileId = BarberProfileId;
-
-        if (profileId == Guid.Empty)
+        if (BarberProfileId == Guid.Empty)
         {
             return;
         }
 
-        await LoadAsync(silent: Profile is not null, cancellationToken);
+        await LoadAsync(
+            silent: Profile is not null,
+            cancellationToken,
+            syncSpecializations);
     }
 
     /// <summary>
@@ -704,7 +746,12 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         {
             await _profileApi.RemoveServiceAsync(profileId, item.HairServiceId, cancellationToken);
 
-            await LoadAsync(silent: true, cancellationToken);
+            // Скрытая строка остаётся в прайсе, поэтому сверка идёт по активным услугам: если
+            // это была последняя услуга специализации, её тег уйдёт из блока «Специализации».
+            await LoadAsync(
+                silent: true,
+                cancellationToken,
+                syncSpecializations: true);
         }
         catch (Exception exception)
         {
@@ -745,7 +792,12 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
                     item.DurationMinutes),
                 cancellationToken);
 
-            await LoadAsync(silent: true, cancellationToken);
+            // Возвращённая услуга снова активна: специализация, убранная при скрытии последней
+            // услуги направления, вернётся в блок «Специализации» этой же сверкой.
+            await LoadAsync(
+                silent: true,
+                cancellationToken,
+                syncSpecializations: true);
         }
         catch (Exception exception)
         {
@@ -868,10 +920,15 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     /// </summary>
     /// <param name="silent">Тихое обновление: уже показанная карточка не прячется.</param>
     /// <param name="cancellationToken">Токен отмены.</param>
+    /// <param name="syncSpecializations">
+    /// Сверить специализации с услугами перед показом: нужно после скрытия, возврата и добавления
+    /// услуги, где блок «Специализации» мог разойтись с прайсом.
+    /// </param>
     /// <returns>Вид сбоя: по нему решает цикл.</returns>
     private async Task<ApiFailureKind> LoadAsync(
         bool silent,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool syncSpecializations = false)
     {
         var profileId = BarberProfileId;
 
@@ -897,6 +954,11 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
         try
         {
             var profile = await _profileApi.GetOwnAsync(profileId, cancellationToken);
+
+            if (syncSpecializations)
+            {
+                profile = await SyncSpecializationsAsync(profile, cancellationToken);
+            }
 
             ApplyProfile(profile);
             await LoadAvatarAsync(cancellationToken);
@@ -949,6 +1011,99 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
             IsFirstLoading = false;
             IsRefreshing = false;
         }
+    }
+
+    /// <summary>
+    /// Добавляет недостающие специализации активных услуг и убирает те, что остались без них.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Сверка идёт по карточке, только что прочитанной с сервера, а не по локальному снимку:
+    /// так учитываются изменения с другого устройства. Скрытые строки прайса источником тегов не
+    /// считаются — специализация живёт, пока у неё есть хотя бы одна активная услуга, — но тег без
+    /// услуг вообще не трогается, потому что его могли добавить вручную в веб-кабинете.
+    /// </para>
+    /// <para>
+    /// Ожидаемые отказы идемпотентны: <c>404</c> при удалении и код <c>duplicate</c> при
+    /// добавлении значат, что цель уже достигнута другим путём. Любой другой отказ не отменяет
+    /// изменение услуги: раздел показывает свежую карточку и отдельную строку об ошибке сверки,
+    /// а блок остаётся таким, каким его вернул сервер.
+    /// </para>
+    /// </remarks>
+    /// <param name="profile">Карточка, прочитанная перед сверкой.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Карточка после сверки: свежая, если специализации менялись, иначе исходная.</returns>
+    private async Task<BarberProfileResponse> SyncSpecializationsAsync(
+        BarberProfileResponse profile,
+        CancellationToken cancellationToken)
+    {
+        var changes = BarberSpecializationSync.Compute(
+            profile.Services,
+            profile.Specializations);
+
+        if (changes.IsEmpty)
+        {
+            return profile;
+        }
+
+        var failed = false;
+
+        foreach (var specializationId in changes.Remove)
+        {
+            try
+            {
+                await _profileApi.RemoveSpecializationAsync(
+                    BarberProfileId,
+                    specializationId,
+                    cancellationToken);
+            }
+            catch (BarberSearchApiException exception)
+                when (exception.StatusCode == HttpStatusCode.NotFound)
+            {
+                // Тег уже убрали с другого устройства: второй раз удалять нечего.
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                failed = true;
+            }
+        }
+
+        foreach (var specializationId in changes.Add)
+        {
+            try
+            {
+                await _profileApi.AddSpecializationAsync(
+                    BarberProfileId,
+                    specializationId,
+                    cancellationToken);
+            }
+            catch (BarberSearchApiException exception)
+                when (exception.ErrorCodes.Contains("barberProfile.addSpecialization.duplicate"))
+            {
+                // Тег уже добавлен с другого устройства: профиль догнал состояние.
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                failed = true;
+            }
+        }
+
+        if (failed)
+        {
+            ActionError = SpecializationSyncFailedText;
+        }
+
+        // Перечитываем карточку, а не правим коллекцию руками: сервер — источник имён и описаний
+        // специализаций, а частичный успех сверки виден только в его ответе.
+        return await _profileApi.GetOwnAsync(BarberProfileId, cancellationToken);
     }
 
     /// <summary>
