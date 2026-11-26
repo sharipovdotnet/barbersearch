@@ -18,7 +18,7 @@ import {
   problemDetails,
   testBarberProfile,
 } from '@/test/msw/handlers'
-import { recordRequests } from '@/test/msw/requests'
+import { countRequests, recordRequests } from '@/test/msw/requests'
 import { server } from '@/test/msw/server'
 
 vi.mock('@/lib/image-prep', async (importOriginal) => {
@@ -110,17 +110,170 @@ function cloneProfile(profile: BarberProfile): BarberProfile {
   return JSON.parse(JSON.stringify(profile)) as BarberProfile
 }
 
-/** Свой профиль: GET отвечает текущим состоянием, мутации в тестах его меняют. */
-function mockOwnProfile(initial: BarberProfile = testBarberProfile) {
+/**
+ * Свой профиль: GET отвечает текущим состоянием, а мутации меняют его как сервер.
+ *
+ * `POST .../services` реактивирует существующую строку или добавляет новую из
+ * справочника, `DELETE .../services/{id}` скрывает её, теги специализаций
+ * добавляются и убираются одноимёнными запросами. Поэтому синхронизация тегов
+ * после мутации видит ровно то же состояние, что увидел бы реальный клиент.
+ */
+function mockOwnProfile(
+  initial: BarberProfile = testBarberProfile,
+  onServicePost?: (body: {
+    hairServiceId: string
+    price: number
+    durationMinutes: number
+  }) => void
+) {
   let current = cloneProfile(initial)
   let getCount = 0
+  let sequence = 0
+
+  function nextId(): string {
+    sequence += 1
+
+    return `00000000-0000-4000-8000-${String(sequence).padStart(12, '0')}`
+  }
+
+  function specializationName(specializationId: string): string {
+    const service = current.services.find(
+      (item) => item.specializationId === specializationId
+    )
+
+    if (service) {
+      return service.specializationName
+    }
+
+    if (specializationId === catalogueSpecialization.id) {
+      return catalogueSpecialization.name
+    }
+
+    return 'Специализация'
+  }
 
   server.use(
     http.get(PROFILE_URL, () => {
       getCount += 1
 
       return HttpResponse.json(current)
-    })
+    }),
+    http.post(`${PROFILE_URL}/services`, async ({ request }) => {
+      const input = (await request.json()) as {
+        hairServiceId: string
+        price: number
+        durationMinutes: number
+      }
+
+      onServicePost?.(input)
+
+      const exists = current.services.some(
+        (service) => service.hairServiceId === input.hairServiceId
+      )
+
+      if (exists) {
+        current = {
+          ...current,
+          services: current.services.map((service) =>
+            service.hairServiceId === input.hairServiceId
+              ? {
+                  ...service,
+                  isActive: true,
+                  price: input.price,
+                  durationMinutes: input.durationMinutes,
+                }
+              : service
+          ),
+        }
+      } else {
+        const catalogue =
+          input.hairServiceId === catalogueHairService.id
+            ? catalogueHairService
+            : null
+
+        current = {
+          ...current,
+          services: [
+            ...current.services,
+            {
+              barberServiceId: nextId(),
+              hairServiceId: input.hairServiceId,
+              name: catalogue?.name ?? 'Услуга',
+              category: catalogue?.category ?? 'Haircut',
+              specializationId: catalogue?.specializationId ?? '',
+              specializationName: specializationName(
+                catalogue?.specializationId ?? ''
+              ),
+              defaultDurationMinutes:
+                catalogue?.defaultDurationMinutes ?? input.durationMinutes,
+              price: input.price,
+              durationMinutes: input.durationMinutes,
+              isActive: true,
+            },
+          ],
+        }
+      }
+
+      return noContent()
+    }),
+    http.delete(`${PROFILE_URL}/services/:hairServiceId`, ({ params }) => {
+      const hairServiceId = params.hairServiceId as string
+
+      current = {
+        ...current,
+        services: current.services.map((service) =>
+          service.hairServiceId === hairServiceId
+            ? { ...service, isActive: false }
+            : service
+        ),
+      }
+
+      return noContent()
+    }),
+    http.post(
+      `${PROFILE_URL}/specializations/:specializationId`,
+      ({ params }) => {
+        const specializationId = params.specializationId as string
+
+        if (
+          current.specializations.some(
+            (item) => item.specializationId === specializationId
+          )
+        ) {
+          return noContent()
+        }
+
+        current = {
+          ...current,
+          specializations: [
+            ...current.specializations,
+            {
+              id: nextId(),
+              specializationId,
+              name: specializationName(specializationId),
+              description: null,
+            },
+          ],
+        }
+
+        return noContent()
+      }
+    ),
+    http.delete(
+      `${PROFILE_URL}/specializations/:specializationId`,
+      ({ params }) => {
+        const specializationId = params.specializationId as string
+
+        current = {
+          ...current,
+          specializations: current.specializations.filter(
+            (item) => item.specializationId !== specializationId
+          ),
+        }
+
+        return noContent()
+      }
+    )
   )
 
   return {
@@ -263,16 +416,11 @@ describe('BarberProfilePage: мутации', () => {
   })
 
   it('добавляет услугу: POST с hairServiceId, ценой и длительностью', async () => {
-    const profile = mockOwnProfile()
     let body: unknown = null
-
-    server.use(
-      http.post(`${PROFILE_URL}/services`, async ({ request }) => {
-        body = await request.json()
-
-        return noContent()
-      })
-    )
+    const profile = mockOwnProfile(testBarberProfile, (input) => {
+      body = input
+    })
+    const requests = recordRequests()
 
     renderPage()
     await waitForProfile()
@@ -307,9 +455,24 @@ describe('BarberProfilePage: мутации', () => {
       price: 2000,
       durationMinutes: 45,
     })
+    expect(
+      requests.filter(
+        (path) =>
+          path ===
+          `${PROFILE_URL}/specializations/${catalogueHairService.specializationId}`
+      )
+    ).toHaveLength(1)
+
+    const specializations = screen.getByRole('region', {
+      name: 'Специализации',
+    })
 
     await waitFor(() => {
-      expect(profile.getCount()).toBe(2)
+      expect(within(specializations).getAllByText('Барберинг')).toHaveLength(2)
+    })
+
+    await waitFor(() => {
+      expect(profile.getCount()).toBe(3)
     })
   })
 
@@ -359,24 +522,8 @@ describe('BarberProfilePage: мутации', () => {
   })
 
   it('скрывает услугу: DELETE, строка остаётся со статусом «Скрыта»', async () => {
-    const profile = mockOwnProfile()
-
-    server.use(
-      http.delete(`${PROFILE_URL}/services/:hairServiceId`, ({ params }) => {
-        const hairServiceId = params.hairServiceId as string
-
-        profile.setProfile({
-          ...profile.current(),
-          services: profile.current().services.map((service) =>
-            service.hairServiceId === hairServiceId
-              ? { ...service, isActive: false }
-              : service
-          ),
-        })
-
-        return noContent()
-      })
-    )
+    mockOwnProfile()
+    const requests = recordRequests()
 
     renderPage()
     await waitForProfile()
@@ -402,29 +549,37 @@ describe('BarberProfilePage: мутации', () => {
     await waitFor(() => {
       expect(within(serviceRow('Стрижка')).getByText('Скрыта')).toBeInTheDocument()
     })
+
+    expect(
+      requests.filter(
+        (path) =>
+          path ===
+          `${PROFILE_URL}/specializations/${testBarberProfile.services[0].specializationId}`
+      )
+    ).toHaveLength(1)
+
+    const specializations = screen.getByRole('region', {
+      name: 'Специализации',
+    })
+
+    await waitFor(() => {
+      expect(
+        within(specializations).queryByText('Барберинг')
+      ).not.toBeInTheDocument()
+    })
+    expect(
+      within(specializations).getByText(
+        'Специализаций нет. По тегам вас не найдут в фильтре поиска.'
+      )
+    ).toBeInTheDocument()
   })
 
   it('возвращает услугу: POST тем же hairServiceId', async () => {
-    const profile = mockOwnProfile()
     let body: unknown = null
-
-    server.use(
-      http.post(`${PROFILE_URL}/services`, async ({ request }) => {
-        body = await request.json()
-        const input = body as { hairServiceId: string }
-
-        profile.setProfile({
-          ...profile.current(),
-          services: profile.current().services.map((service) =>
-            service.hairServiceId === input.hairServiceId
-              ? { ...service, isActive: true }
-              : service
-          ),
-        })
-
-        return noContent()
-      })
-    )
+    mockOwnProfile(testBarberProfile, (input) => {
+      body = input
+    })
+    const requests = recordRequests()
 
     renderPage()
     await waitForProfile()
@@ -445,11 +600,25 @@ describe('BarberProfilePage: мутации', () => {
       durationMinutes: testBarberProfile.services[1].durationMinutes,
     })
 
+    expect(
+      requests.filter(
+        (path) =>
+          path ===
+          `${PROFILE_URL}/specializations/${testBarberProfile.services[1].specializationId}`
+      )
+    ).toHaveLength(1)
+
     await waitFor(() => {
       expect(
         within(serviceRow('Оформление бороды')).queryByText('Скрыта')
       ).not.toBeInTheDocument()
     })
+
+    expect(
+      await within(
+        screen.getByRole('region', { name: 'Специализации' })
+      ).findByText('Бритьё')
+    ).toBeInTheDocument()
   })
 
   it('добавляет и убирает специализацию по справочнику', async () => {
@@ -512,6 +681,273 @@ describe('BarberProfilePage: мутации', () => {
     expect(await screen.findByText('Специализация убрана.')).toBeInTheDocument()
     expect(new URL(removeUrl).pathname).toBe(
       `${PROFILE_URL}/specializations/${testBarberProfile.specializations[0].specializationId}`
+    )
+  })
+})
+
+describe('BarberProfilePage: синхронизация специализаций', () => {
+  it('скрывает одну из двух услуг специализации: тег остаётся', async () => {
+    const base = cloneProfile(testBarberProfile)
+    const profile = mockOwnProfile({
+      ...base,
+      services: [
+        base.services[0],
+        {
+          ...base.services[0],
+          barberServiceId: '12121212-1212-4212-8212-121212121212',
+          hairServiceId: '34343434-3434-4434-8434-343434343434',
+          name: 'Фейд',
+          price: 1200,
+          durationMinutes: 40,
+        },
+      ],
+    })
+    const requests = recordRequests()
+
+    renderPage()
+    await waitForProfile()
+
+    await userEvent.click(
+      within(serviceRow('Стрижка')).getByRole('button', { name: 'Скрыть' })
+    )
+    await userEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Скрыть',
+      })
+    )
+
+    expect(await screen.findByText('Услуга скрыта.')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(within(serviceRow('Стрижка')).getByText('Скрыта')).toBeInTheDocument()
+    })
+
+    // Вторая активная услуга держит специализацию: diff пуст, DELETE тега нет.
+    expect(
+      requests.filter((path) =>
+        path.startsWith(`${PROFILE_URL}/specializations/`)
+      )
+    ).toEqual([])
+    expect(
+      within(screen.getByRole('region', { name: 'Специализации' })).getByText(
+        'Барберинг'
+      )
+    ).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(profile.getCount()).toBe(3)
+    })
+  })
+
+  it('ручная специализация без услуг переживает скрытие, возврат и добавление', async () => {
+    const base = cloneProfile(testBarberProfile)
+    const manualTag = {
+      id: 'cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd',
+      specializationId: 'abababab-abab-4bab-8bab-abababababab',
+      name: 'Массаж',
+      description: null,
+    }
+    const profile = mockOwnProfile({
+      ...base,
+      specializations: [...base.specializations, manualTag],
+    })
+    const requests = recordRequests()
+
+    function expectManualTag(): void {
+      expect(
+        within(
+          screen.getByRole('region', { name: 'Специализации' })
+        ).getByText('Массаж')
+      ).toBeInTheDocument()
+      expect(
+        requests.filter(
+          (path) =>
+            path ===
+            `${PROFILE_URL}/specializations/${manualTag.specializationId}`
+        )
+      ).toEqual([])
+    }
+
+    renderPage()
+    await waitForProfile()
+
+    await userEvent.click(
+      within(serviceRow('Стрижка')).getByRole('button', { name: 'Скрыть' })
+    )
+    await userEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Скрыть',
+      })
+    )
+
+    expect(await screen.findByText('Услуга скрыта.')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(within(serviceRow('Стрижка')).getByText('Скрыта')).toBeInTheDocument()
+    })
+    expectManualTag()
+
+    await userEvent.click(
+      within(serviceRow('Стрижка')).getByRole('button', { name: 'Вернуть' })
+    )
+
+    expect(
+      await screen.findByText('Услуга снова в прайсе.')
+    ).toBeInTheDocument()
+    expectManualTag()
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Добавить услугу' })
+    )
+
+    fireEvent.change(await screen.findByLabelText('Услуга'), {
+      target: { value: catalogueHairService.id },
+    })
+    fireEvent.change(screen.getByLabelText('Цена, ₽'), {
+      target: { value: '2000' },
+    })
+    await userEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Добавить',
+      })
+    )
+
+    expect(await screen.findByText('Услуга добавлена.')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(profile.getCount()).toBe(7)
+    })
+    expectManualTag()
+  })
+
+  it('ошибка DELETE специализации после «Скрыть»: услуга скрыта, секция показывает ошибку', async () => {
+    mockOwnProfile()
+    const deleteServiceRequests = countRequests(
+      `${PROFILE_URL}/services/${testBarberProfile.services[0].hairServiceId}`
+    )
+
+    server.use(
+      http.delete(`${PROFILE_URL}/specializations/:specializationId`, () =>
+        HttpResponse.json(problemDetails(500), { status: 500 })
+      )
+    )
+
+    renderPage()
+    await waitForProfile()
+
+    await userEvent.click(
+      within(serviceRow('Стрижка')).getByRole('button', { name: 'Скрыть' })
+    )
+    await userEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Скрыть',
+      })
+    )
+
+    expect(await screen.findByText('Услуга скрыта.')).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(within(serviceRow('Стрижка')).getByText('Скрыта')).toBeInTheDocument()
+    })
+
+    expect(
+      within(screen.getByRole('region', { name: 'Услуги' })).getByRole('alert')
+    ).toHaveTextContent(
+      'Не удалось обновить специализации. Попробуйте ещё раз.'
+    )
+    // Сбой синхронизации не повторяет уже успешную мутацию услуги.
+    expect(deleteServiceRequests()).toBe(1)
+  })
+
+  it('409 duplicate при синхронизации после «Вернуть» не показывается как ошибка', async () => {
+    const profile = mockOwnProfile()
+    const requests = recordRequests()
+
+    server.use(
+      http.post(`${PROFILE_URL}/specializations/:specializationId`, () =>
+        HttpResponse.json(
+          problemDetails(409, {
+            errorCodes: ['barberProfile.addSpecialization.duplicate'],
+          }),
+          { status: 409 }
+        )
+      )
+    )
+
+    renderPage()
+    await waitForProfile()
+
+    await userEvent.click(
+      within(serviceRow('Оформление бороды')).getByRole('button', {
+        name: 'Вернуть',
+      })
+    )
+
+    expect(
+      await screen.findByText('Услуга снова в прайсе.')
+    ).toBeInTheDocument()
+
+    expect(
+      screen.queryByText(
+        'Не удалось обновить специализации. Попробуйте ещё раз.'
+      )
+    ).not.toBeInTheDocument()
+    expect(
+      requests.filter(
+        (path) =>
+          path ===
+          `${PROFILE_URL}/specializations/${testBarberProfile.services[1].specializationId}`
+      )
+    ).toHaveLength(1)
+
+    await waitFor(() => {
+      expect(profile.getCount()).toBe(3)
+    })
+  })
+
+  it('пустой diff: синхронизация читает карточку, но не трогает специализации', async () => {
+    const base = cloneProfile(testBarberProfile)
+    const profile = mockOwnProfile({
+      ...base,
+      specializations: [
+        ...base.specializations,
+        {
+          id: 'efefefef-efef-4efe-8efe-efefefefefef',
+          specializationId: catalogueHairService.specializationId,
+          name: catalogueSpecialization.name,
+          description: null,
+        },
+      ],
+    })
+    const requests = recordRequests()
+
+    renderPage()
+    await waitForProfile()
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Добавить услугу' })
+    )
+
+    fireEvent.change(await screen.findByLabelText('Услуга'), {
+      target: { value: catalogueHairService.id },
+    })
+    fireEvent.change(screen.getByLabelText('Цена, ₽'), {
+      target: { value: '2000' },
+    })
+    await userEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Добавить',
+      })
+    )
+
+    expect(await screen.findByText('Услуга добавлена.')).toBeInTheDocument()
+
+    // Синхронизация всё равно перечитывает карточку (GET), но diff пуст.
+    await waitFor(() => {
+      expect(profile.getCount()).toBe(3)
+    })
+    expect(requests.filter((path) => path.includes('/specializations/'))).toEqual(
+      []
     )
   })
 })

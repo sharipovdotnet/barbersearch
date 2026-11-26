@@ -4,6 +4,7 @@ import {
   describeBarberProfileFailure,
   type BarberProfileFailure,
 } from '@/lib/barber-profile-create'
+import { diffBarberSpecializations } from '@/lib/barber-specialization-sync'
 import type { Language, PaymentMethod } from '@/lib/barber-profile-labels'
 import type { BarberProfile } from '@/lib/catalog'
 import { mutateWithCsrf } from '@/lib/csrf'
@@ -124,6 +125,83 @@ export async function removeBarberSpecialization(
   await mutateWithCsrf<void>(
     `/barber-profiles/${id}/specializations/${specializationId}`,
     { method: 'DELETE' }
+  )
+}
+
+/** Итог синхронизации тегов: текст ошибки уже локализован. */
+export type BarberSpecializationSyncResult =
+  | { ok: true }
+  | { ok: false; message: string }
+
+/**
+ * Приводит теги профиля в соответствие с активными услугами.
+ *
+ * Diff считается по свежему `GET`, а не по пропсам страницы: после мутации
+ * услуги они устарели. Сбой синхронизации не отменяет уже случившееся действие
+ * с услугой и не повторяет его — вызывающий код лишь показывает отдельную
+ * ошибку. «Тег уже есть» (`409`) и «тега уже нет» (`404`) — гонка с другим
+ * клиентом, а не отказ; `addSpecialization.specializationNotFound` — настоящая
+ * ошибка и не глотается.
+ */
+export async function syncBarberSpecializations(
+  barberProfileId: string
+): Promise<BarberSpecializationSyncResult> {
+  let failed = false
+
+  try {
+    const profile = await fetchOwnBarberProfile(barberProfileId)
+    const { add, remove } = diffBarberSpecializations(
+      profile.services,
+      profile.specializations
+    )
+
+    for (const specializationId of remove) {
+      try {
+        await removeBarberSpecialization(barberProfileId, specializationId)
+      } catch (cause) {
+        if (!isSpecializationAlreadyRemoved(cause)) {
+          failed = true
+        }
+      }
+    }
+
+    for (const specializationId of add) {
+      try {
+        await addBarberSpecialization(barberProfileId, specializationId)
+      } catch (cause) {
+        if (!isSpecializationAlreadyAdded(cause)) {
+          failed = true
+        }
+      }
+    }
+  } catch {
+    // Даже перечитать карточку не удалось: показываем ту же ошибку синхронизации.
+    failed = true
+  }
+
+  return failed
+    ? {
+        ok: false,
+        message: t('Не удалось обновить специализации. Попробуйте ещё раз.'),
+      }
+    : { ok: true }
+}
+
+/** Тег уже убрали из другого клиента: повторный `DELETE` — не отказ. */
+function isSpecializationAlreadyRemoved(cause: unknown): boolean {
+  return (
+    cause instanceof ApiError &&
+    (cause.status === 404 ||
+      cause.hasCode('barberProfile.removeSpecialization.notFound'))
+  )
+}
+
+/** Тег уже добавили из другого клиента: повторный `POST` — не отказ. */
+function isSpecializationAlreadyAdded(cause: unknown): boolean {
+  return (
+    cause instanceof ApiError &&
+    (cause.status === 409 ||
+      cause.hasCode('barberProfile.addSpecialization.duplicate'))
   )
 }
 

@@ -23,7 +23,9 @@ import {
   addBarberService,
   describeBarberProfileError,
   removeBarberService,
+  syncBarberSpecializations,
   updateBarberService,
+  type BarberSpecializationSyncResult,
 } from '@/lib/barber-profile'
 import { SERVICE_CATEGORY_LABELS } from '@/lib/barber-profile-labels'
 import type { BarberProfileService } from '@/lib/catalog'
@@ -48,6 +50,10 @@ import {
  * Специализации нужны только для заголовков `optgroup`: в справочнике десятки услуг,
  * и группа подсказывает, к чему относится строка. Ошибка любого справочника живёт
  * внутри диалога и не прячет уже загруженный прайс.
+ *
+ * После «Скрыть», «Вернуть» и «Добавить услугу» теги специализаций синхронизируются
+ * с активными услугами (`syncBarberSpecializations`): сбой синхронизации не отменяет
+ * уже сохранённое действие с услугой, поэтому показывается отдельной строкой.
  */
 
 type ServiceDialog =
@@ -146,12 +152,31 @@ export function BarberProfileServices({
         price: service.price,
         durationMinutes: service.durationMinutes,
       })
-      onChanged(t('Услуга снова в прайсе.'))
     } catch (cause) {
       setListError(describeBarberProfileError(cause).message)
-    } finally {
       setRestoringId(null)
+      return
     }
+
+    // Услуга уже вернулась: сбой синхронизации тегов её не отменяет.
+    const sync = await syncBarberSpecializations(barberProfileId)
+
+    if (!sync.ok) {
+      setListError(sync.message)
+    }
+
+    setRestoringId(null)
+    onChanged(t('Услуга снова в прайсе.'))
+  }
+
+  /** Ошибка синхронизации после «Скрыть»: показываем и перечитываем прайс. */
+  function handleHidden(sync: BarberSpecializationSyncResult): void {
+    if (!sync.ok) {
+      setListError(sync.message)
+    }
+
+    onChanged(t('Услуга скрыта.'))
+    closeDialog()
   }
 
   const available = catalogue.filter(
@@ -197,6 +222,7 @@ export function BarberProfileServices({
                     setDialog({ kind: 'price', service })
                   }}
                   onHide={() => {
+                    setListError(null)
                     setDialog({ kind: 'hide', service })
                   }}
                   onRestore={() => {
@@ -235,6 +261,7 @@ export function BarberProfileServices({
                 void loadCatalogue()
               }}
               onClose={closeDialog}
+              onSyncError={setListError}
               onAdded={() => {
                 onChanged(t('Услуга добавлена.'))
                 closeDialog()
@@ -263,10 +290,7 @@ export function BarberProfileServices({
               barberProfileId={barberProfileId}
               service={dialog.service}
               onClose={closeDialog}
-              onHidden={() => {
-                onChanged(t('Услуга скрыта.'))
-                closeDialog()
-              }}
+              onHidden={handleHidden}
             />
           </DialogContent>
         )}
@@ -368,6 +392,7 @@ function AddServiceDialog({
   error,
   onRetry,
   onClose,
+  onSyncError,
   onAdded,
 }: {
   barberProfileId: string
@@ -377,6 +402,7 @@ function AddServiceDialog({
   error: string | null
   onRetry: () => void
   onClose: () => void
+  onSyncError: (message: string) => void
   onAdded: () => void
 }) {
   const { t } = useI18n()
@@ -415,11 +441,21 @@ function AddServiceDialog({
         price: parsedPrice,
         durationMinutes: parsedDuration,
       })
-      onAdded()
     } catch (cause) {
       setSubmitError(describeBarberProfileError(cause).message)
       setIsPending(false)
+      return
     }
+
+    // Услуга уже добавлена: диалог не предлагает повторить добавление, а ошибка
+    // синхронизации тегов остаётся видимой в секции услуг после его закрытия.
+    const sync = await syncBarberSpecializations(barberProfileId)
+
+    if (!sync.ok) {
+      onSyncError(sync.message)
+    }
+
+    onAdded()
   }
 
   return (
@@ -722,7 +758,7 @@ function HideServiceDialog({
   barberProfileId: string
   service: BarberProfileService
   onClose: () => void
-  onHidden: () => void
+  onHidden: (sync: BarberSpecializationSyncResult) => void
 }) {
   const { t } = useI18n()
   const [isPending, setIsPending] = useState(false)
@@ -738,11 +774,17 @@ function HideServiceDialog({
 
     try {
       await removeBarberService(barberProfileId, service.hairServiceId)
-      onHidden()
     } catch (cause) {
       setError(describeBarberProfileError(cause).message)
       setIsPending(false)
+      return
     }
+
+    // Услуга уже скрыта: сбой синхронизации тегов её не возвращает и не повторяет
+    // `DELETE` — секция покажет отдельную ошибку и всё равно перечитает прайс.
+    const sync = await syncBarberSpecializations(barberProfileId)
+
+    onHidden(sync)
   }
 
   return (
