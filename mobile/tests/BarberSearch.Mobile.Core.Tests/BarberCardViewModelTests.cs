@@ -944,6 +944,132 @@ public sealed class BarberCardViewModelTests
     }
 
     [Fact]
+    public async Task InitializeAsync_WithoutSpecializations_HidesSection()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(specializations: []));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        Assert.False(harness.ViewModel.HasSpecializations);
+        Assert.False(harness.ViewModel.HasSelectedSpecializationDescription);
+    }
+
+    [Fact]
+    public async Task ToggleSpecialization_WithDescription_SelectsChipAndShowsDescription()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(specializations:
+        [
+            Specialization("Барберинг", "  Мужские стрижки, борода и бритьё.  "),
+            Specialization("Борода", null),
+        ]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        harness.ViewModel.ToggleSpecializationCommand.Execute(harness.ViewModel.Specializations[0]);
+
+        Assert.True(harness.ViewModel.Specializations[0].IsSelected);
+        Assert.True(harness.ViewModel.HasSelectedSpecializationDescription);
+        Assert.Equal(
+            "Мужские стрижки, борода и бритьё.",
+            harness.ViewModel.SelectedSpecializationDescription);
+    }
+
+    [Fact]
+    public async Task ToggleSpecialization_SecondTap_ClearsSelectionAndDescription()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(specializations:
+        [
+            Specialization("Барберинг", "Мужские стрижки, борода и бритьё."),
+        ]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        var chip = harness.ViewModel.Specializations[0];
+
+        harness.ViewModel.ToggleSpecializationCommand.Execute(chip);
+        harness.ViewModel.ToggleSpecializationCommand.Execute(chip);
+
+        Assert.False(chip.IsSelected);
+        Assert.False(harness.ViewModel.HasSelectedSpecializationDescription);
+        Assert.Null(harness.ViewModel.SelectedSpecializationDescription);
+    }
+
+    [Fact]
+    public async Task ToggleSpecialization_OtherItem_OpensOnlyTheNewOne()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(specializations:
+        [
+            Specialization("Барберинг", "Мужские стрижки, борода и бритьё."),
+            Specialization("Окрашивание", "Блонд и тонирование."),
+        ]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        var first = harness.ViewModel.Specializations[0];
+        var second = harness.ViewModel.Specializations[1];
+
+        harness.ViewModel.ToggleSpecializationCommand.Execute(first);
+        harness.ViewModel.ToggleSpecializationCommand.Execute(second);
+
+        Assert.False(first.IsSelected);
+        Assert.True(second.IsSelected);
+        Assert.Equal("Блонд и тонирование.", harness.ViewModel.SelectedSpecializationDescription);
+    }
+
+    [Fact]
+    public async Task ToggleSpecialization_WithoutDescription_ChangesNothing()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(specializations:
+        [
+            Specialization("Барберинг", "Мужские стрижки, борода и бритьё."),
+            Specialization("Борода", null),
+        ]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        var described = harness.ViewModel.Specializations[0];
+        var plain = harness.ViewModel.Specializations[1];
+
+        harness.ViewModel.ToggleSpecializationCommand.Execute(described);
+        harness.ViewModel.ToggleSpecializationCommand.Execute(plain);
+
+        // Чип без описания статичен: открытая подсказка прежнего остаётся, пустой не появляется.
+        Assert.False(plain.IsSelected);
+        Assert.True(described.IsSelected);
+        Assert.Equal(
+            "Мужские стрижки, борода и бритьё.",
+            harness.ViewModel.SelectedSpecializationDescription);
+    }
+
+    [Fact]
+    public async Task RetryLoadCommand_AfterSelection_ResetsSelectedDescription()
+    {
+        using var harness = new Harness();
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(specializations:
+        [
+            Specialization("Барберинг", "Мужские стрижки, борода и бритьё."),
+        ]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        harness.ViewModel.ToggleSpecializationCommand.Execute(harness.ViewModel.Specializations[0]);
+
+        Assert.True(harness.ViewModel.HasSelectedSpecializationDescription);
+
+        await harness.ViewModel.RetryLoadCommand.ExecuteAsync(null);
+
+        // Повторная загрузка приносит новые экземпляры пунктов, и старое выделение не живёт.
+        Assert.False(harness.ViewModel.HasSelectedSpecializationDescription);
+        Assert.Null(harness.ViewModel.SelectedSpecializationDescription);
+        Assert.DoesNotContain(harness.ViewModel.Specializations, option => option.IsSelected);
+    }
+
+    [Fact]
     public async Task InitializeAsync_PaymentMethods_FillChipsInServerOrder()
     {
         using var harness = new Harness();
