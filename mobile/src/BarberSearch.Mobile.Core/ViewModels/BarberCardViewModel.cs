@@ -120,6 +120,16 @@ public sealed partial class BarberCardViewModel : ObservableObject
     private BookingFailureKind _failureKind;
     private bool _sessionExpired;
 
+    /// <summary>
+    /// Специализация с открытой подсказкой; <c>null</c> — все подсказки закрыты.
+    /// </summary>
+    /// <remarks>
+    /// Одно поле вместо перебора коллекции: открыта ровно одна подсказка, и прежний пункт
+    /// снимается по этой ссылке. Загрузка профиля поле очищает — новый профиль приходит с
+    /// новыми экземплярами пунктов, и старая ссылка показывала бы чужое описание.
+    /// </remarks>
+    private BarberSpecializationOption? _selectedSpecialization;
+
     // Границы календаря в календарных датах салона; DatePicker получает их же в DateTime.
     private DateOnly _minDate;
     private DateOnly _maxDate;
@@ -342,6 +352,11 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// <summary>
     /// Специализации из справочника в порядке сервера.
     /// </summary>
+    /// <remarks>
+    /// Названия показываются бейджами-чипами, а описание открывается тапом: hover на телефоне
+    /// нет, поэтому веб-подсказка адаптирована под палец. Открыт максимум один пункт — см.
+    /// <see cref="ToggleSpecializationCommand"/>.
+    /// </remarks>
     public ObservableCollection<BarberSpecializationOption> Specializations { get; } = [];
 
     /// <summary>
@@ -500,6 +515,18 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// Есть ли чем заполнить «Специализации».
     /// </summary>
     public bool HasSpecializations => Specializations.Count > 0;
+
+    /// <summary>
+    /// Описание открытой специализации для панели под рядом чипов; <c>null</c> — панели нет.
+    /// </summary>
+    public string? SelectedSpecializationDescription => _selectedSpecialization?.HasDescription == true
+        ? _selectedSpecialization.Description!.Trim()
+        : null;
+
+    /// <summary>
+    /// Видна ли панель описания под рядом чипов.
+    /// </summary>
+    public bool HasSelectedSpecializationDescription => SelectedSpecializationDescription is not null;
 
     /// <summary>
     /// Есть ли способы оплаты.
@@ -828,6 +855,48 @@ public sealed partial class BarberCardViewModel : ObservableObject
         ResetBookingState();
 
         await LoadSlotsAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Открывает или закрывает описание специализации: на телефоне тап заменяет веб-hover.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Открыта ровно одна подсказка: тап по выбранному чипу закрывает её, тап по другому
+    /// переключает, снимая выделение с прежнего. Пункт без описания статичен — тап по нему
+    /// ничего не меняет и ничего не показывает: пустая подсказка хуже её отсутствия.
+    /// </para>
+    /// <para>
+    /// Описание берётся из того же <see cref="BarberSpecializationOption"/>, поэтому второго
+    /// списка описаний нет: чип и панель всегда говорят об одном пункте.
+    /// </para>
+    /// </remarks>
+    /// <param name="specialization">Чип, по которому нажали.</param>
+    [RelayCommand]
+    private void ToggleSpecialization(BarberSpecializationOption? specialization)
+    {
+        if (specialization is null || !specialization.HasDescription)
+        {
+            return;
+        }
+
+        // Повторный тап по открытому пункту закрывает подсказку, а не открывает её заново.
+        var close = ReferenceEquals(specialization, _selectedSpecialization);
+
+        if (_selectedSpecialization is not null)
+        {
+            _selectedSpecialization.IsSelected = false;
+            _selectedSpecialization = null;
+        }
+
+        if (!close)
+        {
+            specialization.IsSelected = true;
+            _selectedSpecialization = specialization;
+        }
+
+        OnPropertyChanged(nameof(SelectedSpecializationDescription));
+        OnPropertyChanged(nameof(HasSelectedSpecializationDescription));
     }
 
     /// <summary>
@@ -1179,6 +1248,10 @@ public sealed partial class BarberCardViewModel : ObservableObject
         Photos.Clear();
         LanguageChips.Clear();
         AboutLists.Clear();
+
+        // Новый профиль приходит с новыми экземплярами пунктов: старое выделение снимается,
+        // иначе панель описания показывала бы специализацию, которой на экране уже нет.
+        _selectedSpecialization = null;
         Specializations.Clear();
         PaymentChips.Clear();
 
@@ -1757,6 +1830,8 @@ public sealed partial class BarberCardViewModel : ObservableObject
         OnPropertyChanged(nameof(Bio));
         OnPropertyChanged(nameof(HasBio));
         OnPropertyChanged(nameof(HasSpecializations));
+        OnPropertyChanged(nameof(SelectedSpecializationDescription));
+        OnPropertyChanged(nameof(HasSelectedSpecializationDescription));
         OnPropertyChanged(nameof(HasPayments));
         OnPropertyChanged(nameof(LatePolicyText));
         OnPropertyChanged(nameof(HasLatePolicy));

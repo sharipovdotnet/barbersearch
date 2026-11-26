@@ -195,6 +195,22 @@ public partial class BarberPage : ContentPage, IQueryAttributable
     }
 
     /// <summary>
+    /// Передаёт тап по чипу специализации во ViewModel: там решается, что открыть и закрыть.
+    /// </summary>
+    /// <remarks>
+    /// На телефоне hover нет, поэтому веб-подсказка открывается тапом. Решение об открытии,
+    /// переключении и закрытии принимает ViewModel: страница только передаёт пункт, как
+    /// <see cref="OnPhotoTapped"/> передаёт кадр.
+    /// </remarks>
+    private void OnSpecializationTapped(object? sender, TappedEventArgs e)
+    {
+        if (e.Parameter is BarberSpecializationOption specialization)
+        {
+            _viewModel.ToggleSpecializationCommand.Execute(specialization);
+        }
+    }
+
+    /// <summary>
     /// Возвращает карточку к заголовку «Отзывы» после смены страницы.
     /// </summary>
     private void OnReviewsPageChanged(object? sender, EventArgs e) =>

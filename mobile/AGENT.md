@@ -1313,6 +1313,45 @@ in Core owns both base addresses.
   alone, the query opening every matching group, the restored expansion after clearing, and the
   query leaving the choice and the duration untouched.
 
+- **A specialization is a badge, and its description opens on a tap.** The card used to print every
+  specialization as a name with its catalogue description underneath, always visible, which turned
+  the block into a wall of text; the web now renders the names as badges and puts the description in
+  a hover tooltip, and the phone follows the web structure with a touch input model instead of the
+  hover one. Each name is a chip in a wrapping `FlexLayout` — `Muted`/`MutedDark` background,
+  `Padding="8,4"`, `RoundRectangle 6`, 12 pt — exactly like the language and payment chips of the
+  same card, and the description is no longer visible by itself. Only the gap and the target differ:
+  the wrapper's margin is 4 pt horizontally and none vertically, and its height is 38 rather than 44,
+  because a 44 pt target around a 32 pt chip would be 12 pt of bare air between two rows and the
+  block read as stretched. With the 38 pt step two rows stand 6 pt apart, the targets do not overlap,
+  and the chip keeps the height of the language and payment chips.
+  Hover does not exist on a phone, so a tap replaces it: the tapped chip opens a `Muted` panel with
+  the description directly under the row of chips, a second tap on the same chip closes it, and a tap
+  on another chip moves it — at most one description is open. A chip whose catalogue entry has no
+  description is static: the tap changes nothing, no empty panel appears, and `HasDescription` still
+  decides. The selected chip gets a visible state built only from the existing tokens — a 1 pt
+  `Primary`/`PrimaryDark` frame through a `DataTrigger` on `IsSelected` — and the description text
+  beside it is the second, non-colour signal. Every chip sits inside a `Grid` whose target is 44 pt
+  wide and 38 pt tall, so the target is a thumb target while the chip itself stays compact and
+  centered; the gesture hangs on that wrapper rather than on the frame, and the wrapper carries the
+  name as `SemanticProperties.Description` and the description as `SemanticProperties.Hint`, so
+  TalkBack reads both without a tap (an empty `hint` on a chip without a description) while the panel
+  is an ordinary visible `Label` that the reading order reaches. The state lives in Core:
+  `BarberSpecializationOption` is an `ObservableObject` with `IsSelected` — the slot chip does the
+  same — and `ToggleSpecializationCommand` on the card clears the previous chip and updates
+  `HasSelectedSpecializationDescription`/`SelectedSpecializationDescription`; a profile reload clears
+  the choice, because the new answer brings new chip instances and the old reference would show a
+  specialization that is no longer on the screen. The card keeps one specialization list, so the
+  panel and the chips cannot disagree, and `BarberPage.xaml.cs` only passes `TappedEventArgs.Parameter`
+  to the command, as `OnPhotoTapped` passes the frame. The block sits right under «Работы» and
+  immediately before «Услуги», so the directions are read before the price: a deliberate
+  mobile-only placement, recorded here rather than left silent — the web keeps «О мастере»
+  between «Специализации» and the price list, while the phone has its own card order and this
+  slice only moves the badges inside it. No new key, colour, font, radius or icon enters the app.
+  Tests add
+  6 cases (1767 total): the tap that opens a description (trimmed), the second tap that closes it,
+  the switch that leaves only the new chip open, the static chip without a description that changes
+  nothing, the reload that resets the choice, and the empty list that still hides the section.
+
 ## 6. What the backend still lacks
 
 The mobile MVP is blocked by two backend changes (`backend/`) that do not exist yet:
