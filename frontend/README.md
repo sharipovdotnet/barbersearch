@@ -1454,18 +1454,17 @@ needs no session and no request, and opens by a direct link.
   article 18.1 of 152-ФЗ: eleven sections — general provisions, legal grounds, data categories,
   purposes and retention, processing order, cookie, transfers, security measures, the subject's
   rights, changes and the operator's details. It is a lazy chunk; `#cookies` is a public anchor
-  used by the notice, the footer and the registration form.
-- **One source of truth for cookies.** `COOKIE_REGISTRY` in `src/lib/legal.ts` lists every cookie
-  the service sets — session, refresh, antiforgery, the «Запомнить меня» hint and the notice's own
-  acknowledgement — with purpose, lifetime and attributes. The policy renders that array, so a new
-  cookie cannot appear in code without appearing in the document.
-- **The consent record.** `PRIVACY_POLICY_VERSION` equals `PRIVACY_POLICY_DATE` (`2026-11-11`) and
+  used by the notice and the registration form.
+- **No technical cookie registry.** Section 6 explains which categories of cookies are needed,
+  why, and on what legal basis; it deliberately does not publish cookie names, lifetimes or
+  attributes. The footer links only the policy, and the notice links the `#cookies` anchor.
+- **The consent record.** `PRIVACY_POLICY_VERSION` equals `PRIVACY_POLICY_DATE` (`2026-11-18`) and
   the backend's `PrivacyPolicy.Version`; the registration form sends it and the server stores it
   with the UTC time and the IP. §2.2 of the policy states what is recorded, §4.1 that the record is
-  stored with the account. Editing the policy text bumps both constants and the server constant —
-  otherwise registrations would start failing with `auth.register.consentVersion`. The
-  2026-11-11 edition also names the profile photo in §3 and its retention in §4; older records
-  keep the edition they signed.
+  stored with the account. A substantive edit of the policy text bumps both constants and the
+  server constant — otherwise registrations would start failing with
+  `auth.register.consentVersion`. The 2026-11-18 edition also names the profile photo in §3 and its
+  retention in §4; older records keep the edition they signed.
 - **The notice** (`src/components/cookie-notice.tsx`) is informational, not a consent banner: the
   service sets only strictly necessary first-party cookies, so there is no «Отказаться» button and
   no cookie wall. It is a bar under the header with one «Понятно» action and a link to

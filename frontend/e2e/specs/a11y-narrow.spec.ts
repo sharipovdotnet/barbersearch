@@ -49,7 +49,7 @@ test.describe('axe: 320 px, публичный профиль', () => {
     )
   })
 
-  test('политика обработки данных: перечень cookie на 320', async ({ page }) => {
+  test('политика обработки данных на 320', async ({ page }) => {
     await page.goto('/privacy')
     await expect(
       page.getByRole('heading', {
@@ -58,7 +58,7 @@ test.describe('axe: 320 px, публичный профиль', () => {
       })
     ).toBeVisible()
 
-    // Длинные имена cookie и реквизиты Оператора переносятся, а не расширяют страницу.
+    // Длинные реквизиты Оператора переносятся, а не расширяют страницу.
     const overflow = await page.evaluate(
       () =>
         document.documentElement.scrollWidth -
