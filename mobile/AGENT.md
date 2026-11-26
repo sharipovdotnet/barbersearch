@@ -1319,7 +1319,10 @@ in Core owns both base addresses.
   a hover tooltip, and the phone follows the web structure with a touch input model instead of the
   hover one. Each name is a chip in a wrapping `FlexLayout` — `Muted`/`MutedDark` background,
   `Padding="8,4"`, `RoundRectangle 6`, 12 pt — exactly like the language and payment chips of the
-  same card, and the description is no longer visible by itself. Hover does not exist on a phone, so
+  same card, and the description is no longer visible by itself. Only the gap is tighter than the
+  neighbour chips': the wrapper's margin is 4 pt horizontally and none vertically, because the 44 pt
+  target already leaves 12 pt of air between two rows and a second vertical margin spread the block
+  out on the phone. Hover does not exist on a phone, so
   a tap replaces it: the tapped chip opens a `Muted` panel with the description directly under the
   row of chips, a second tap on the same chip closes it, and a tap on another chip moves it — at most
   one description is open. A chip whose catalogue entry has no description is static: the tap

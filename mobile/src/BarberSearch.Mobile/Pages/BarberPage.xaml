@@ -133,12 +133,15 @@
                             компактным и центрируется. Жест висит на обёртке, а не на рамке,
                             иначе палец попадал бы в текст. Чип без описания тап игнорирует —
                             решение принимает ViewModel, у неё же состояние выделения.
+                            Отступ только горизонтальный, 4: цель в 44 pt уже даёт 12 pt
+                            воздуха по вертикали между рядами, и второй вертикальный отступ
+                            раздувал бы блок.
                         -->
                         <FlexLayout BindableLayout.ItemsSource="{Binding Specializations}" Wrap="Wrap">
                             <BindableLayout.ItemTemplate>
                                 <DataTemplate x:DataType="vm:BarberSpecializationOption">
                                     <Grid
-                                        Margin="0,0,8,8"
+                                        Margin="0,0,4,0"
                                         FlexLayout.Shrink="0"
                                         MinimumHeightRequest="44"
                                         MinimumWidthRequest="44"
