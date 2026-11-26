@@ -306,24 +306,28 @@ in Core owns both base addresses.
   API order, the category badge on the card and in the cabinet, and both grouping builders —
   headings in first-appearance order, rows kept in source order, interleaved services collected
   under one heading, the blank-specialization tail, and the cabinet's hidden services in API order.
-- **A specialization is derived from the services, not managed on its own.** The cabinet's
-  «Специализации» block only lists them: neither «Добавить специализацию» nor «Убрать» exists.
-  When the master adds a catalogue service, the editor first attaches the service's
+- **A specialization is derived from the services, not managed on its own.** Neither client has
+  a «Специализации» block any more: the web cabinet's card was removed together with its
+  add/remove control, and the phone's read-only card is gone too, so the price list is the only
+  place where a master sees the directions. When the master adds a catalogue service, the editor
+  first attaches the service's
   `SpecializationId` if the profile does not have it (`POST …/specializations`), then adds the
   service; a `duplicate` answer counts as already attached, while any other failure keeps the
   service out of the price list, so a service can never be listed under a missing tag. The
   profile's specialization ids travel into the editor with the route, so an attached tag is not
   posted twice, and the duplicate path also covers a tag added from another device. The profile
-  section no longer reads the specialization catalogue at all; its empty state says a tag will
-  appear with the first service. Tests cover the attach path (attaching a new tag, skipping an
-  attached one, the duplicate answer and a failed attach that leaves the price list unchanged).
-  The block also follows the price list back: after «Скрыть»,
+  section does not read the specialization catalogue at all: the `Specializations` collection in
+  the cabinet ViewModel exists only for those editor ids. Tests cover the attach path (attaching a
+  new tag, skipping an attached one, the duplicate answer and a failed attach that leaves the
+  price list unchanged).
+  The price list also drives the tags back: after «Скрыть»,
   «Вернуть» and the return from «Добавить услугу» the section re-reads the card, compares its tags
   with the active services and removes a tag whose last active service is gone or adds a tag of a
   newly active service (`removeSpecialization.notFound` and `addSpecialization.duplicate` count as
   already done). Hidden rows do not hold a tag — otherwise hiding the last service would never
-  remove it — while a tag with no service rows at all is left alone, because the web cabinet still
-  allows adding one by hand. The comparison is `BarberSpecializationSync`, a pure set difference;
+  remove it — while a tag with no service rows at all is left alone: the API may still return one
+  (added before the block was removed or by another client), and neither client can recreate it by
+  hand. The comparison is `BarberSpecializationSync`, a pure set difference;
   a sync failure does not undo the service change and shows its own line, and a failed call is
   retried by the next service action. Tests add 19 cases (1761 total): the pure difference
   (active-only, the hidden-row removal, the manual-tag exemption, empty ids, repeated services and

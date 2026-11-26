@@ -225,8 +225,13 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     public ObservableCollection<BarberCabinetServiceGroup> ServiceGroups { get; } = [];
 
     /// <summary>
-    /// Специализации мастера.
+    /// Специализации мастера из ответа карточки.
     /// </summary>
+    /// <remarks>
+    /// Блока «Специализации» на экране больше нет: теги ведутся по прайсу. Коллекция остаётся
+    /// источником идентификаторов для редактора услуги — он не должен повторно прикреплять тег,
+    /// который у профиля уже есть.
+    /// </remarks>
     public ObservableCollection<BarberSpecializationItem> Specializations { get; } = [];
 
     /// <summary>
@@ -344,11 +349,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     /// В прайсе есть строки.
     /// </summary>
     public bool HasServices => Services.Count > 0;
-
-    /// <summary>
-    /// У мастера есть специализации.
-    /// </summary>
-    public bool HasSpecializations => Specializations.Count > 0;
 
     /// <summary>
     /// В портфолио есть фотографии.
@@ -1311,7 +1311,6 @@ public sealed partial class BarberCabinetProfileViewModel : ObservableObject, IB
     private void NotifyCollectionState()
     {
         OnPropertyChanged(nameof(HasServices));
-        OnPropertyChanged(nameof(HasSpecializations));
         OnPropertyChanged(nameof(HasPhotos));
         OnPropertyChanged(nameof(CanAddPhoto));
         OnPropertyChanged(nameof(IsPhotoLimitReached));

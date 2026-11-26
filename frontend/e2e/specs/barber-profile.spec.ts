@@ -6,14 +6,14 @@ import { BarberProfilePage } from '../pages/barber-profile-page'
 /**
  * `/barber/profile` — чтение (§5.9).
  *
- * Отдельный барбер `profileBarber`: его профиль подтверждён, но прайс и
- * специализации пусты. Витринного барбера здесь не трогаем — на нём держатся
- * брони, отзывы и счётчики других спек.
+ * Отдельный барбер `profileBarber`: его профиль подтверждён, но прайс пуст.
+ * Витринного барбера здесь не трогаем — на нём держатся брони, отзывы и
+ * счётчики других спек.
  */
 test.use({ storageState: storageStatePath('profileBarber') })
 
 test.describe('профиль барбера', () => {
-  test('форма заполнена из API, прайс и специализации пусты', async ({ page }) => {
+  test('форма заполнена из API, прайс пуст', async ({ page }) => {
     const profile = new BarberProfilePage(page)
 
     await profile.goto()
@@ -23,9 +23,7 @@ test.describe('профиль барбера', () => {
       page.getByRole('heading', { name: 'Профиль', level: 1 })
     ).toBeVisible()
     await expect(
-      page.getByText(
-        'Карточка, которую видят клиенты: услуги, цены и специализации.'
-      )
+      page.getByText('Карточка, которую видят клиенты: услуги и цены.')
     ).toBeVisible()
 
     // Поля приходят из `GET /api/barber-profiles/{id}`, а не из кэша публичной
@@ -42,7 +40,8 @@ test.describe('профиль барбера', () => {
 
     await expect(profile.emptyServices).toBeVisible()
     await expect(profile.servicesList).toHaveCount(0)
-    await expect(profile.emptySpecializations).toBeVisible()
+    // Блок «Специализации» убран: теги ведутся по прайсу, вручную их не добавить.
+    await expect(profile.specializationsSection).toHaveCount(0)
 
     // Подтверждённый и активный профиль: клиентская ссылка ведёт на публичную карточку.
     await expect(profile.publicLink).toHaveAttribute(

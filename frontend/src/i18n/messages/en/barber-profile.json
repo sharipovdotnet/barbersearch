@@ -1,6 +1,6 @@
 {
-  "Карточка, которую видят клиенты: услуги, цены и специализации.": "The card clients see: services, prices and specializations.",
-  "Карточка, услуги и специализации доступны барберу после входа. Вход по email и паролю.": "The card, services and specializations are available to a barber after signing in. Sign in with your email and password.",
+  "Карточка, которую видят клиенты: услуги и цены.": "The card clients see: services and prices.",
+  "Карточка и услуги доступны барберу после входа. Вход по email и паролю.": "The card and services are available to a barber after signing in. Sign in with your email and password.",
   "Профиль на проверке. Заполняйте карточку — она появится в поиске после подтверждения администратором.": "Your profile is under review. Keep filling it in — it will appear in search after an administrator verifies it.",
   "Открыть, как видят клиенты": "Open as clients see it",
   "Карточка": "Card",
@@ -25,14 +25,7 @@
   "Скрыть услугу?": "Hide this service?",
   "Услуга исчезнет из карточки и поиска. Записи, где она была, останутся в истории.": "The service will disappear from your card and search. Bookings that included it stay in your history.",
 
-  "Не удалось загрузить справочник специализаций.": "Could not load the specializations catalogue.",
-  "Специализаций нет. По тегам вас не найдут в фильтре поиска.": "No specializations yet. Without tags, clients cannot find you in the search filter.",
-  "Убрать специализацию {name}": "Remove specialization {name}",
-  "Выберите специализацию": "Select a specialization",
   "Справочник специализаций пуст.": "The specializations catalogue is empty.",
-  "Все специализации из справочника уже выбраны.": "All catalogue specializations are already selected.",
-  "Специализация добавлена.": "Specialization added.",
-  "Специализация убрана.": "Specialization removed.",
 
   "Грейд: {grade}": "Grade: {grade}",
   "Грейд назначает администратор": "The grade is assigned by an administrator",

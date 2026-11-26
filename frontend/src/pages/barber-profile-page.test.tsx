@@ -370,11 +370,11 @@ describe('BarberProfilePage: чтение', () => {
     expect(
       within(serviceRow('Оформление бороды')).getByText('Бритьё')
     ).toBeInTheDocument()
+
+    // Блок «Специализации» убран из профиля: теги ведутся по прайсу, а не вручную.
     expect(
-      within(screen.getByRole('region', { name: 'Специализации' })).getByText(
-        'Барберинг'
-      )
-    ).toBeInTheDocument()
+      screen.queryByRole('region', { name: 'Специализации' })
+    ).not.toBeInTheDocument()
 
     // Справочники не тянутся вместе со страницей.
     expect(requests).not.toContain('/api/hair-services')
@@ -463,14 +463,6 @@ describe('BarberProfilePage: мутации', () => {
       )
     ).toHaveLength(1)
 
-    const specializations = screen.getByRole('region', {
-      name: 'Специализации',
-    })
-
-    await waitFor(() => {
-      expect(within(specializations).getAllByText('Барберинг')).toHaveLength(2)
-    })
-
     await waitFor(() => {
       expect(profile.getCount()).toBe(3)
     })
@@ -557,21 +549,6 @@ describe('BarberProfilePage: мутации', () => {
           `${PROFILE_URL}/specializations/${testBarberProfile.services[0].specializationId}`
       )
     ).toHaveLength(1)
-
-    const specializations = screen.getByRole('region', {
-      name: 'Специализации',
-    })
-
-    await waitFor(() => {
-      expect(
-        within(specializations).queryByText('Барберинг')
-      ).not.toBeInTheDocument()
-    })
-    expect(
-      within(specializations).getByText(
-        'Специализаций нет. По тегам вас не найдут в фильтре поиска.'
-      )
-    ).toBeInTheDocument()
   })
 
   it('возвращает услугу: POST тем же hairServiceId', async () => {
@@ -613,75 +590,6 @@ describe('BarberProfilePage: мутации', () => {
         within(serviceRow('Оформление бороды')).queryByText('Скрыта')
       ).not.toBeInTheDocument()
     })
-
-    expect(
-      await within(
-        screen.getByRole('region', { name: 'Специализации' })
-      ).findByText('Бритьё')
-    ).toBeInTheDocument()
-  })
-
-  it('добавляет и убирает специализацию по справочнику', async () => {
-    const profile = mockOwnProfile()
-    let addUrl = ''
-    let removeUrl = ''
-
-    server.use(
-      http.post(
-        `${PROFILE_URL}/specializations/:specializationId`,
-        ({ request }) => {
-          addUrl = request.url
-
-          return noContent()
-        }
-      ),
-      http.delete(
-        `${PROFILE_URL}/specializations/:specializationId`,
-        ({ request }) => {
-          removeUrl = request.url
-
-          return noContent()
-        }
-      )
-    )
-
-    renderPage()
-    await waitForProfile()
-
-    const select = screen.getByLabelText('Специализация')
-
-    fireEvent.focus(select)
-
-    expect(
-      await screen.findByRole('option', { name: 'Барберинг' })
-    ).toBeInTheDocument()
-
-    fireEvent.change(select, {
-      target: { value: catalogueSpecialization.id },
-    })
-    await userEvent.click(screen.getByRole('button', { name: 'Добавить' }))
-
-    expect(
-      await screen.findByText('Специализация добавлена.')
-    ).toBeInTheDocument()
-    expect(new URL(addUrl).pathname).toBe(
-      `${PROFILE_URL}/specializations/${catalogueSpecialization.id}`
-    )
-
-    await waitFor(() => {
-      expect(profile.getCount()).toBe(2)
-    })
-
-    await userEvent.click(
-      screen.getByRole('button', {
-        name: 'Убрать специализацию Барберинг',
-      })
-    )
-
-    expect(await screen.findByText('Специализация убрана.')).toBeInTheDocument()
-    expect(new URL(removeUrl).pathname).toBe(
-      `${PROFILE_URL}/specializations/${testBarberProfile.specializations[0].specializationId}`
-    )
   })
 })
 
@@ -728,96 +636,10 @@ describe('BarberProfilePage: синхронизация специализаци
         path.startsWith(`${PROFILE_URL}/specializations/`)
       )
     ).toEqual([])
-    expect(
-      within(screen.getByRole('region', { name: 'Специализации' })).getByText(
-        'Барберинг'
-      )
-    ).toBeInTheDocument()
 
     await waitFor(() => {
       expect(profile.getCount()).toBe(3)
     })
-  })
-
-  it('ручная специализация без услуг переживает скрытие, возврат и добавление', async () => {
-    const base = cloneProfile(testBarberProfile)
-    const manualTag = {
-      id: 'cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd',
-      specializationId: 'abababab-abab-4bab-8bab-abababababab',
-      name: 'Массаж',
-      description: null,
-    }
-    const profile = mockOwnProfile({
-      ...base,
-      specializations: [...base.specializations, manualTag],
-    })
-    const requests = recordRequests()
-
-    function expectManualTag(): void {
-      expect(
-        within(
-          screen.getByRole('region', { name: 'Специализации' })
-        ).getByText('Массаж')
-      ).toBeInTheDocument()
-      expect(
-        requests.filter(
-          (path) =>
-            path ===
-            `${PROFILE_URL}/specializations/${manualTag.specializationId}`
-        )
-      ).toEqual([])
-    }
-
-    renderPage()
-    await waitForProfile()
-
-    await userEvent.click(
-      within(serviceRow('Стрижка')).getByRole('button', { name: 'Скрыть' })
-    )
-    await userEvent.click(
-      within(screen.getByRole('alertdialog')).getByRole('button', {
-        name: 'Скрыть',
-      })
-    )
-
-    expect(await screen.findByText('Услуга скрыта.')).toBeInTheDocument()
-
-    await waitFor(() => {
-      expect(within(serviceRow('Стрижка')).getByText('Скрыта')).toBeInTheDocument()
-    })
-    expectManualTag()
-
-    await userEvent.click(
-      within(serviceRow('Стрижка')).getByRole('button', { name: 'Вернуть' })
-    )
-
-    expect(
-      await screen.findByText('Услуга снова в прайсе.')
-    ).toBeInTheDocument()
-    expectManualTag()
-
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Добавить услугу' })
-    )
-
-    fireEvent.change(await screen.findByLabelText('Услуга'), {
-      target: { value: catalogueHairService.id },
-    })
-    fireEvent.change(screen.getByLabelText('Цена, ₽'), {
-      target: { value: '2000' },
-    })
-    await userEvent.click(
-      within(screen.getByRole('dialog')).getByRole('button', {
-        name: 'Добавить',
-      })
-    )
-
-    expect(await screen.findByText('Услуга добавлена.')).toBeInTheDocument()
-
-    await waitFor(() => {
-      expect(profile.getCount()).toBe(7)
-    })
-    expectManualTag()
   })
 
   it('ошибка DELETE специализации после «Скрыть»: услуга скрыта, секция показывает ошибку', async () => {
