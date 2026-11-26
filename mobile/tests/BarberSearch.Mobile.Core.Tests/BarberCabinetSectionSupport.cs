@@ -267,7 +267,7 @@ internal static class BarberCabinetData
     /// <param name="isVerified">Профиль подтверждён.</param>
     /// <param name="avatarUrl">Аватар карточки: только одобренный и не скрытый кадр.</param>
     /// <param name="services">Прайс.</param>
-    /// <param name="specializations">Специализации.</param>
+    /// <param name="specializations">Специализации; по умолчанию тег услуги по умолчанию.</param>
     /// <param name="additionalServices">Дополнительные услуги.</param>
     /// <param name="certificates">Сертификаты и обучение.</param>
     /// <param name="achievements">Достижения.</param>
@@ -313,7 +313,7 @@ internal static class BarberCabinetData
             isVerified,
             services ?? [BarberCabinetFixtures.Service()],
             [BarberCabinetFixtures.Salon()],
-            specializations ?? [],
+            specializations ?? [ProfileSpecialization(BarberCabinetFixtures.ServiceSpecializationId)],
             additionalServices ?? [],
             photos ?? []);
 

@@ -264,6 +264,387 @@ public sealed class BarberCabinetProfileViewModelTests
     }
 
     [Fact]
+    public async Task HideServiceAsync_LastActiveService_RemovesSpecialization()
+    {
+        var harness = new Harness();
+        var state = BarberCabinetData.Profile(
+            services: [BarberCabinetFixtures.Service()],
+            specializations:
+            [
+                BarberCabinetData.ProfileSpecialization(
+                    BarberCabinetFixtures.ServiceSpecializationId),
+            ]);
+
+        harness.Profile.Own = _ => Task.FromResult(state);
+        harness.Profile.RemoveService = (_, _) =>
+        {
+            state = state with
+            {
+                Services = [BarberCabinetFixtures.Service() with { IsActive = false }],
+            };
+
+            return Task.CompletedTask;
+        };
+        harness.Profile.RemoveSpecialization = (_, specializationId) =>
+        {
+            state = state with
+            {
+                Specializations = state.Specializations
+                    .Where(item => item.SpecializationId != specializationId)
+                    .ToArray(),
+            };
+
+            return Task.CompletedTask;
+        };
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+
+        Assert.Single(viewModel.Specializations);
+
+        await viewModel.HideServiceCommand.ExecuteAsync(viewModel.Services[0]);
+
+        var removal = Assert.Single(harness.Profile.SpecializationRemovals);
+
+        Assert.Equal(BarberCabinetFixtures.ServiceSpecializationId, removal.SpecializationId);
+        Assert.Empty(viewModel.Specializations);
+        Assert.False(viewModel.HasSpecializations);
+        Assert.Null(viewModel.ActionError);
+        Assert.False(viewModel.IsMutating);
+
+        // Первое чтение, карточка после скрытия и карточка после снятия тега.
+        Assert.Equal(3, harness.Profile.OwnCalls);
+    }
+
+    [Fact]
+    public async Task HideServiceAsync_OtherActiveServiceKeepsSpecialization()
+    {
+        var harness = new Harness();
+        var state = BarberCabinetData.Profile(
+            services:
+            [
+                ServiceFor(BarberCabinetFixtures.HairServiceId, BarberCabinetFixtures.ServiceSpecializationId),
+                ServiceFor(BarberCabinetData.SecondHairServiceId, BarberCabinetFixtures.ServiceSpecializationId),
+            ],
+            specializations:
+            [
+                BarberCabinetData.ProfileSpecialization(
+                    BarberCabinetFixtures.ServiceSpecializationId),
+            ]);
+
+        harness.Profile.Own = _ => Task.FromResult(state);
+        harness.Profile.RemoveService = (_, hairServiceId) =>
+        {
+            state = state with
+            {
+                Services = state.Services
+                    .Select(service => service.HairServiceId == hairServiceId
+                        ? service with { IsActive = false }
+                        : service)
+                    .ToArray(),
+            };
+
+            return Task.CompletedTask;
+        };
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+        var item = viewModel.Services.First(
+            service => service.HairServiceId == BarberCabinetFixtures.HairServiceId);
+
+        await viewModel.HideServiceCommand.ExecuteAsync(item);
+
+        // Вторая активная услуга того же направления держит специализацию в блоке.
+        Assert.Empty(harness.Profile.SpecializationRemovals);
+        Assert.Single(viewModel.Specializations);
+        Assert.Equal(2, harness.Profile.OwnCalls);
+    }
+
+    [Fact]
+    public async Task RestoreServiceAsync_MissingSpecialization_AddsItBack()
+    {
+        var harness = new Harness();
+        var state = BarberCabinetData.Profile(
+            services:
+            [
+                ServiceFor(
+                    BarberCabinetFixtures.HairServiceId,
+                    BarberCabinetFixtures.ServiceSpecializationId,
+                    isActive: false),
+            ],
+            specializations: []);
+
+        harness.Profile.Own = _ => Task.FromResult(state);
+        harness.Profile.AddService = (_, request) =>
+        {
+            state = state with
+            {
+                Services = state.Services
+                    .Select(service => service.HairServiceId == request.HairServiceId
+                        ? service with { IsActive = true }
+                        : service)
+                    .ToArray(),
+            };
+
+            return Task.CompletedTask;
+        };
+        harness.Profile.AddSpecialization = (_, specializationId) =>
+        {
+            state = state with
+            {
+                Specializations =
+                [
+                    .. state.Specializations,
+                    new BarberProfileSpecializationResponse(
+                        Guid.CreateVersion7(),
+                        specializationId,
+                        "Фейд",
+                        null),
+                ],
+            };
+
+            return Task.CompletedTask;
+        };
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+
+        Assert.Empty(viewModel.Specializations);
+
+        await viewModel.RestoreServiceCommand.ExecuteAsync(viewModel.Services[0]);
+
+        var addition = Assert.Single(harness.Profile.SpecializationAdds);
+
+        Assert.Equal(BarberCabinetFixtures.ServiceSpecializationId, addition.SpecializationId);
+        Assert.Single(viewModel.Specializations);
+        Assert.True(viewModel.HasSpecializations);
+        Assert.Null(viewModel.ActionError);
+        Assert.Equal(3, harness.Profile.OwnCalls);
+    }
+
+    [Fact]
+    public async Task ActivateAfterServiceChangeAsync_MissingSpecialization_AddsIt()
+    {
+        var harness = new Harness();
+        var state = BarberCabinetData.Profile(
+            services: [BarberCabinetFixtures.Service()],
+            specializations: []);
+
+        harness.Profile.Own = _ => Task.FromResult(state);
+        harness.Profile.AddSpecialization = (_, specializationId) =>
+        {
+            state = state with
+            {
+                Specializations =
+                [
+                    .. state.Specializations,
+                    new BarberProfileSpecializationResponse(
+                        Guid.CreateVersion7(),
+                        specializationId,
+                        "Фейд",
+                        null),
+                ],
+            };
+
+            return Task.CompletedTask;
+        };
+
+        await harness.ViewModel.ActivateAfterServiceChangeAsync();
+
+        var addition = Assert.Single(harness.Profile.SpecializationAdds);
+
+        Assert.Equal(BarberCabinetFixtures.ServiceSpecializationId, addition.SpecializationId);
+        Assert.Single(harness.ViewModel.Specializations);
+        Assert.Equal(2, harness.Profile.OwnCalls);
+    }
+
+    [Fact]
+    public async Task HideServiceAsync_ManualSpecializationWithoutServices_IsKept()
+    {
+        var harness = new Harness();
+        var state = BarberCabinetData.Profile(
+            services: [BarberCabinetFixtures.Service()],
+            specializations:
+            [
+                BarberCabinetData.ProfileSpecialization(
+                    BarberCabinetFixtures.ServiceSpecializationId),
+                BarberCabinetData.ProfileSpecialization(BarberCabinetData.SpecializationId, "Борода"),
+            ]);
+
+        harness.Profile.Own = _ => Task.FromResult(state);
+        harness.Profile.RemoveService = (_, _) =>
+        {
+            state = state with
+            {
+                Services = [BarberCabinetFixtures.Service() with { IsActive = false }],
+            };
+
+            return Task.CompletedTask;
+        };
+        harness.Profile.RemoveSpecialization = (_, specializationId) =>
+        {
+            state = state with
+            {
+                Specializations = state.Specializations
+                    .Where(item => item.SpecializationId != specializationId)
+                    .ToArray(),
+            };
+
+            return Task.CompletedTask;
+        };
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+
+        await viewModel.HideServiceCommand.ExecuteAsync(viewModel.Services[0]);
+
+        // Тег «Борода» добавлен вручную и услуг не имеет: сверка его не трогает.
+        Assert.Equal(
+            BarberCabinetData.SpecializationId,
+            Assert.Single(viewModel.Specializations).SpecializationId);
+        Assert.Equal(
+            BarberCabinetFixtures.ServiceSpecializationId,
+            Assert.Single(harness.Profile.SpecializationRemovals).SpecializationId);
+    }
+
+    [Fact]
+    public async Task HideServiceAsync_SyncFailure_ShowsActionErrorAndKeepsServerState()
+    {
+        var harness = new Harness();
+        var state = BarberCabinetData.Profile(
+            services: [BarberCabinetFixtures.Service()],
+            specializations:
+            [
+                BarberCabinetData.ProfileSpecialization(
+                    BarberCabinetFixtures.ServiceSpecializationId),
+            ]);
+
+        harness.Profile.Own = _ => Task.FromResult(state);
+        harness.Profile.RemoveService = (_, _) =>
+        {
+            state = state with
+            {
+                Services = [BarberCabinetFixtures.Service() with { IsActive = false }],
+            };
+
+            return Task.CompletedTask;
+        };
+        harness.Profile.RemoveSpecialization = (_, _) =>
+            Task.FromException(new HttpRequestException("offline"));
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+
+        await viewModel.HideServiceCommand.ExecuteAsync(viewModel.Services[0]);
+
+        // Услуга уже скрыта: сбой сверки не отменяет действие, но и не молчит.
+        Assert.Equal(
+            "Не удалось обновить специализации. Попробуйте ещё раз.",
+            viewModel.ActionError);
+        Assert.True(viewModel.Services[0].IsHidden);
+        Assert.Single(viewModel.Specializations);
+        Assert.False(viewModel.IsMutating);
+    }
+
+    [Fact]
+    public async Task RestoreServiceAsync_DuplicateSpecialization_IsNotAnError()
+    {
+        var harness = new Harness();
+        var state = BarberCabinetData.Profile(
+            services:
+            [
+                ServiceFor(
+                    BarberCabinetFixtures.HairServiceId,
+                    BarberCabinetFixtures.ServiceSpecializationId,
+                    isActive: false),
+            ],
+            specializations: []);
+
+        harness.Profile.Own = _ => Task.FromResult(state);
+        harness.Profile.AddService = (_, request) =>
+        {
+            state = state with
+            {
+                Services = state.Services
+                    .Select(service => service.HairServiceId == request.HairServiceId
+                        ? service with { IsActive = true }
+                        : service)
+                    .ToArray(),
+            };
+
+            return Task.CompletedTask;
+        };
+        harness.Profile.AddSpecialization = (_, specializationId) =>
+        {
+            // Тег уже добавлен с другого устройства: сервер отвечает duplicate, карточка его знает.
+            state = state with
+            {
+                Specializations =
+                [
+                    .. state.Specializations,
+                    new BarberProfileSpecializationResponse(
+                        Guid.CreateVersion7(),
+                        specializationId,
+                        "Фейд",
+                        null),
+                ],
+            };
+
+            return Task.FromException(
+                BarberCabinetApiError.Create(
+                    HttpStatusCode.Conflict,
+                    "barberProfile.addSpecialization.duplicate"));
+        };
+
+        await harness.ViewModel.ActivateAsync();
+
+        var viewModel = harness.ViewModel;
+
+        await viewModel.RestoreServiceCommand.ExecuteAsync(viewModel.Services[0]);
+
+        Assert.Null(viewModel.ActionError);
+        Assert.Single(viewModel.Specializations);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_DoesNotSyncSpecializations()
+    {
+        var harness = new Harness();
+        var state = BarberCabinetData.Profile(
+            services: [BarberCabinetFixtures.Service() with { IsActive = false }],
+            specializations:
+            [
+                BarberCabinetData.ProfileSpecialization(
+                    BarberCabinetFixtures.ServiceSpecializationId),
+            ]);
+
+        harness.Profile.Own = _ => Task.FromResult(state);
+
+        await harness.ViewModel.ActivateAsync();
+
+        // Простое открытие раздела ничего не пишет: сверка — только после действий с услугой.
+        Assert.Empty(harness.Profile.SpecializationRemovals);
+        Assert.Single(harness.ViewModel.Specializations);
+    }
+
+    private static BarberProfileServiceResponse ServiceFor(
+        Guid hairServiceId,
+        Guid specializationId,
+        bool isActive = true) =>
+        BarberCabinetFixtures.Service() with
+        {
+            BarberServiceId = Guid.CreateVersion7(),
+            HairServiceId = hairServiceId,
+            IsActive = isActive,
+            SpecializationId = specializationId,
+        };
+
+    [Fact]
     public async Task ActivateAsync_TransportFailure_RetriesUntilLoaded()
     {
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

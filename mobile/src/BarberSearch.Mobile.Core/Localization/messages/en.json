@@ -734,6 +734,7 @@
   "Не удалось загрузить каталог услуг.": "Could not load the service catalog.",
   "Не удалось загрузить расписание.": "Could not load the schedule.",
   "Не удалось изменить цену визита.": "Could not change the visit price.",
+  "Не удалось обновить специализации. Попробуйте ещё раз.": "Could not update the specializations. Try again.",
   "Не удалось обновить часть записей.": "Could not update some of the bookings.",
   "Не удалось отметить неявку.": "Could not mark the no-show.",
   "Не удалось подтвердить запись.": "Could not confirm the booking.",

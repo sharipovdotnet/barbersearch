@@ -279,7 +279,17 @@ public partial class BarberServiceEditorPage : ContentPage, IQueryAttributable
 
         if (_owner is { } owner)
         {
-            await owner.ActivateAsync();
+            // Добавление могло изменить набор специализаций не только у выбранной услуги,
+            // поэтому раздел сверяет блок «Специализации» с прайсом; правка цены ничего
+            // не добавляет и не убирает — ей достаточно обычного перечитывания.
+            if (_viewModel.IsAddMode)
+            {
+                await owner.ActivateAfterServiceChangeAsync();
+            }
+            else
+            {
+                await owner.ActivateAsync();
+            }
         }
 
         await Shell.Current.GoToAsync("..");
