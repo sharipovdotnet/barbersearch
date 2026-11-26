@@ -1,10 +1,10 @@
 import { expect, type Locator, type Page } from '@playwright/test'
 
 /**
- * `/barber/profile` — свой профиль барбера: карточка, прайс и специализации.
+ * `/barber/profile` — свой профиль барбера: карточка и прайс.
  *
  * Один экран на один агрегат: отдельного маршрута для услуг нет. Поэтому здесь
- * три раздела и три диалога (добавление, цена, скрытие), а действия строки
+ * два раздела и три диалога (добавление, цена, скрытие), а действия строки
  * называются так же, как их видит барбер: «Изменить цену», «Скрыть», «Вернуть».
  *
  * Скрытие — `alertdialog` с тем же словом, что и кнопка строки, поэтому
@@ -235,25 +235,6 @@ export class BarberProfilePage {
     )
   }
 
-  get emptySpecializations(): Locator {
-    return this.specializationsSection.getByText('Специализаций нет.', {
-      exact: false,
-    })
-  }
-
-  get specializationSelect(): Locator {
-    return this.specializationsSection.getByLabel('Специализация', {
-      exact: true,
-    })
-  }
-
-  get addSpecializationButton(): Locator {
-    return this.specializationsSection.getByRole('button', {
-      name: 'Добавить',
-      exact: true,
-    })
-  }
-
   /**
    * Ждём карточку из API, а не скелетон: поле имени заполнено, разделы на месте.
    * Скелетон тоже `role="status"`, поэтому одного `role="status"` недостаточно.
@@ -262,6 +243,5 @@ export class BarberProfilePage {
     await expect(this.heading).toBeVisible()
     await expect(this.displayName).toHaveValue(/\S/)
     await expect(this.servicesSection).toBeVisible()
-    await expect(this.specializationsSection).toBeVisible()
   }
 }

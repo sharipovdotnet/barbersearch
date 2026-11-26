@@ -64,7 +64,7 @@ translate the same source differently, or (`--strict`) when Russian UI text bypa
 | `/barber/onboarding` | creates the barber profile of a `Barber` who has none: every field of the create request, Russian validation, session refresh after `201` |
 | `/barber/schedule` | barber schedule: weekly template, date exceptions (day off or custom hours) and time offs |
 | `/barber/salons` | «Мои салоны»: linked places with their kind and moderation status (approved / pending / rejected + reason, «Не в каталоге» for an unlisted place), «Создать салон» for a barber with a profile (a listed place goes to admin review, an unlisted one is active at once), owner address/contacts edits, picker for an existing salon |
-| `/barber/profile` | own profile: the card form (grade read-only), the price list with active and hidden services (category, specialization, add, change the price, hide, restore), «Фотографии» (upload, caption, order, hide/restore, delete, up to ten) and specializations; «hiding» a service keeps the row for the booking history |
+| `/barber/profile` | own profile: the card form (grade read-only), the price list with active and hidden services (category, specialization, add, change the price, hide, restore) and «Фотографии» (upload, caption, order, hide/restore, delete, up to ten); specializations have no block and follow the price list; «hiding» a service keeps the row for the booking history |
 | `/barber/import` | «Перенести записи»: two sources. A `.ics` calendar file — one file up to 2 MB, parsed in the browser, single and recurring events with `RRULE`/`RDATE`/`EXDATE`, `VTIMEZONE`, a 7/30/90-day window, a per-event preview with edits and selection up to 50, a deterministic idempotency key from the event `UID`, guests-only bookings (`customerId: null`), `409` → nearest free slots and `429` → a one-minute pause. A pasted list from Google Docs or a spreadsheet — up to 50 lines, tab/semicolon/pipe separated, line-by-line parse of date, time, name, phone, service and salon with per-row errors and inline fixes. Both: sequential guest bookings with progress, partial success and retry of failed rows |
 | `/barber/notifications` | reminder inbox: the bell in the cabinet heading opens it; unread badge («1» in the fixtures), visit and morning-digest rows, reminder settings and the optional Telegram link |
 | `/become-a-barber` | request for the barber role: public copy, the customer's form or status, links for a barber and an admin |
@@ -907,9 +907,10 @@ that the card appears in search after confirmation.
 
 What changed: the barber can now fix the name, experience, «О себе» and late policy, add a
 service with its own price and duration, change that price later, hide a service and bring it
-back, and add or remove specializations. The service and specialization catalogues are loaded
-lazily together — the first open of «Добавить услугу» is the only catalogue request — and a
-failed catalogue does not hide the price list that is already on screen. The «Услуга» select
+back. Specializations have no block of their own: the tags follow the price list (a tag exists
+while an active service of that direction does). The service and specialization catalogues are
+loaded lazily together — the first open of «Добавить услугу» is the only catalogue request — and
+a failed catalogue does not hide the price list that is already on screen. The «Услуга» select
 groups the catalogue by specialization (`<optgroup>`, groups alphabetically and rows in API
 order), and a service whose specialization is missing from the public list stays in the
 trailing «Прочие услуги» group instead of disappearing.
@@ -922,9 +923,10 @@ sets `is_active = false`, the row stays with the «Скрыта» badge and a «
 public card stops showing it. Bringing it back is the same `POST .../services` with the same
 `hairServiceId`: the hidden row is reactivated and the new price and duration are written.
 Specializations are the opposite: they take part in no booking join and carry no history, so
-removing one is a real delete. The UI announces every write («Услуга добавлена.», «Цена
-обновлена.», «Услуга скрыта.», «Услуга снова в прайсе.», «Специализация добавлена.»,
-«Специализация убрана.») and re-reads the card quietly instead of patching it.
+removing one is a real delete — the price-list sync uses that when the last active service of a
+direction disappears. The UI announces every write («Услуга добавлена.», «Цена
+обновлена.», «Услуга скрыта.», «Услуга снова в прайсе.») and re-reads the card quietly instead of
+patching it.
 
 On a phone the four cabinet links would not fit in one row, so `BarberCabinetNav` is a 2×2
 grid of 44 px cells below `sm`; the notification bell stays a utility in the heading, not a
@@ -932,10 +934,9 @@ fifth section. Inputs, navigation, «Сохранить», «Добавить у
 44 px on narrow screens, the page has no horizontal scroll at 320, and axe covers it at 1280
 and 320.
 
-- `src/pages/barber-profile-page.tsx` — gates, header, announcements, the three sections.
+- `src/pages/barber-profile-page.tsx` — gates, header, announcements, the two sections.
 - `src/components/barber/barber-profile-form.tsx` — the shared create/edit form.
-- `src/components/barber/barber-profile-services.tsx`, `barber-profile-specializations.tsx` —
-  the price list with its three dialogs and the tags with the lazy catalogue select.
+- `src/components/barber/barber-profile-services.tsx` — the price list with its three dialogs.
 - `src/hooks/use-barber-profile.ts` — `useBarberProfile` (public, cache-first) and
   `useOwnBarberProfile` (always fresh, abort + version, quiet reload after a write).
 - `src/lib/barber-profile.ts` — own-card read, six mutations, error copy;

@@ -325,16 +325,13 @@ test.describe('axe: профиль барбера', () => {
   // проверяет и разделы с пустыми состояниями, а не только форму.
   test.use({ storageState: storageStatePath('profileBarber') })
 
-  test('/barber/profile: карточка, пустой прайс и специализации', async ({
-    page,
-  }) => {
+  test('/barber/profile: карточка и пустой прайс', async ({ page }) => {
     const profile = new BarberProfilePage(page)
 
     await profile.goto()
     // Ждём загруженную форму, а не скелетон: скелетон тоже `role="status"`.
     await profile.waitForReady()
     await expect(profile.emptyServices).toBeVisible()
-    await expect(profile.emptySpecializations).toBeVisible()
 
     await expectNoBlockingViolations(page, '/barber/profile', test.info())
   })

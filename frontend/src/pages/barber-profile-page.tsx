@@ -12,7 +12,6 @@ import {
 import { BarberProfileForm } from '@/components/barber/barber-profile-form'
 import { BarberProfilePhotos } from '@/components/barber/barber-profile-photos'
 import { BarberProfileServices } from '@/components/barber/barber-profile-services'
-import { BarberProfileSpecializations } from '@/components/barber/barber-profile-specializations'
 import { SessionUnavailable } from '@/components/session-unavailable'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
@@ -30,7 +29,7 @@ import { isPlainClick, navigate } from '@/lib/router'
 import { cn } from '@/lib/utils'
 
 /**
- * Профиль барбера: карточка, прайс услуг и специализации.
+ * Профиль барбера: карточка и прайс услуг.
  *
  * Один экран на один агрегат (§3.1): отдельные маршруты для услуг не заводятся.
  * Запрос уходит только после гейтов сессии, роли и привязанного профиля — иначе
@@ -67,7 +66,7 @@ export function BarberProfilePage() {
           <SignInGate
             title={t('Войдите, чтобы открыть профиль')}
             description={t(
-              'Карточка, услуги и специализации доступны барберу после входа. Вход по email и паролю.'
+              'Карточка и услуги доступны барберу после входа. Вход по email и паролю.'
             )}
             redirectTo={BARBER_PROFILE_PATH}
           />
@@ -122,9 +121,7 @@ function BarberProfileScreen({
             {t('Профиль')}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {t(
-              'Карточка, которую видят клиенты: услуги, цены и специализации.'
-            )}
+            {t('Карточка, которую видят клиенты: услуги и цены.')}
           </p>
         </div>
         <BarberUnreadBell />
@@ -279,12 +276,6 @@ function BarberProfileScreen({
           <BarberProfileServices
             barberProfileId={barberProfileId}
             services={profile.services}
-            onChanged={handleChanged}
-          />
-
-          <BarberProfileSpecializations
-            barberProfileId={barberProfileId}
-            specializations={profile.specializations}
             onChanged={handleChanged}
           />
         </>
