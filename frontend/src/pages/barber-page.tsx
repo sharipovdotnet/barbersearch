@@ -83,9 +83,9 @@ export function BarberPage({ id }: { id: string }) {
             <div className="space-y-6 lg:col-span-2">
               <BarberSlots profile={profile} />
               <BarberAbout profile={profile} />
+              <BarberSpecializations profile={profile} />
               <BarberServices profile={profile} />
               <BarberReviews profile={profile} />
-              <BarberSpecializations profile={profile} />
               <BarberSalons profile={profile} />
             </div>
 

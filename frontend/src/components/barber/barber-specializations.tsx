@@ -1,9 +1,24 @@
+import { Badge, badgeVariants } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { BarberSectionHeading } from '@/components/barber/barber-section'
 import type { BarberProfile } from '@/lib/catalog'
+import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 
-/** Специализации с описаниями. Пустой блок не показываем: заголовок без данных — шум. */
+/**
+ * Специализации: название — бейдж, описание — во всплывающей подсказке.
+ *
+ * Триггер подсказки — `TooltipTrigger` (Base UI рендерит `<button>`), поэтому
+ * описание открывается и наведением, и фокусом с клавиатуры, а не только
+ * мышью. Без описания бейдж не интерактивен. Пустой блок не показываем:
+ * заголовок без данных — шум.
+ */
 export function BarberSpecializations({ profile }: { profile: BarberProfile }) {
   const { t } = useI18n()
 
@@ -19,23 +34,37 @@ export function BarberSpecializations({ profile }: { profile: BarberProfile }) {
         </BarberSectionHeading>
 
         <CardContent>
-          <ul className="divide-y">
-            {profile.specializations.map((specialization) => (
-              <li
-                key={specialization.id}
-                className="space-y-1 py-3 first:pt-0 last:pb-0"
-              >
-                <p className="font-medium break-words">
-                  {specialization.name}
-                </p>
-                {specialization.description && (
-                  <p className="text-sm leading-relaxed break-words text-muted-foreground">
-                    {specialization.description}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
+          <TooltipProvider>
+            <ul className="flex flex-wrap gap-2">
+              {profile.specializations.map((specialization) => {
+                const description = specialization.description?.trim() ?? ''
+
+                return (
+                  <li key={specialization.id}>
+                    {description === '' ? (
+                      <Badge variant="secondary">
+                        {specialization.name}
+                      </Badge>
+                    ) : (
+                      <Tooltip>
+                        <TooltipTrigger
+                          className={cn(
+                            badgeVariants({ variant: 'secondary' }),
+                            'cursor-help'
+                          )}
+                        >
+                          {specialization.name}
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-72 text-sm leading-relaxed">
+                          {description}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </TooltipProvider>
         </CardContent>
       </Card>
     </section>

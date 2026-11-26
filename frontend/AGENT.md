@@ -275,7 +275,7 @@ frontend/                              ← workspace root, NOT the git root
     │   │   ├── barber-salon-card.tsx   «Мои салоны» card: type, moderation or «Не в каталоге», rejection reason, owner edits and «Барберы салона»
     │   │   ├── barber-salon-dialog.tsx owner create/edit wrapper over the shared salon form
     │   │   ├── salon-barbers-dialog.tsx  owner composition: attached barbers, search, attach, detach
-    │   │   ├── barber-specializations.tsx  names and descriptions; hidden when empty
+    │   │   ├── barber-specializations.tsx  names as badges; description in a tooltip on hover and keyboard focus; hidden when empty
     │   │   ├── barber-section.tsx      shared section heading (h2) for the cards
     │   │   └── barber-state.tsx        skeleton, error and not-found states
     │   ├── salon/                     ← shared salon fields for the admin dialog and the owner dialog
@@ -668,6 +668,15 @@ Russian strings in JSX (421 outside `t()`). `npm run test:e2e` was **not** rerun
 `frontend/e2e/**` for a separate agent); the slice only adds `GET`/`POST`/`DELETE` calls on the
 existing barber profile screen and one `role="alert"` line, and no visible row, label or route
 changes, so the E2E locators are unaffected.
+
+**Verification snapshot, 2026-11-27 (barber specializations between about and services).**
+`npm run lint` — 0 warnings / 0 errors (554 files, 116 rules); `npm test` — 1700 tests in 156 files,
+green; `npm run build` — 2696 modules, entry `index-*.js` 389.88 kB (gzip 127.78 kB), CSS
+`index-*.css` 91.31 kB (gzip 15.58 kB), lazy `barber-page-*.js` 36.07 kB (gzip 9.61 kB);
+`npm run check:i18n -- --strict` — 1790 `t()` strings, 2103 translations, 0 missing, 0 conflicts,
+0 visible Russian strings in JSX (421 outside `t()`). `npm run test:e2e` was **not** rerun (the
+backend was not running); the block only moved on the public profile, and its new `role="tooltip"`
+content is inside the existing section, so no E2E locator changed.
 
 ### 5.1 API proxy
 
