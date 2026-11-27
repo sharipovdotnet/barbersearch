@@ -249,7 +249,7 @@ frontend/                              ← workspace root, NOT the git root
     │   │   ├── review-status-badge.tsx «Опубликован» / «На модерации»
     │   │   └── barber-request-card.tsx  «Стать барбером»: status or CTA, own loading/error
     │   ├── barber/                    ← public /barbers/{id}; the page only composes them
-    │   │   ├── barber-slots.tsx        date/service/place controls, slot radios, empty state, booking panel host
+    │   │   ├── barber-slots.tsx        date/service/place controls (services grouped by specialization), slot radios, empty state, booking panel host
     │   │   ├── barber-slot-options.tsx shared slot chips/radios for the profile and the cabinet
     │   │   ├── barber-booking.tsx      summary, sign-in gate, note, submit, confirmation, errors
     │   │   ├── barber-booking-dialog.tsx  «Записать клиента»: client search, service, salon, date, slots
@@ -362,6 +362,7 @@ frontend/                              ← workspace root, NOT the git root
         ├── barber-path.ts             ← /barbers/{id} parsing/building, GUID check
         ├── barber-profile-labels.ts   ← ServiceCategory/Language/PaymentMethod/DayOfWeek labels
         ├── barber-profile.ts          ← own profile read/update, service and specialization writes, error copy
+        ├── barber-service-groups.ts   ← the card's service select: one optgroup per specialization, pure
         ├── barber-services-order.ts   ← public price list order: category → specialization → name, pure
         ├── barber-search.ts           ← GET /barbers: filters, item DTO, page size 12
         ├── barber-schedule.ts         ← own schedule DTO, reads/writes, week helpers, UTC dates
@@ -687,6 +688,17 @@ was not running); the E2E layer follows the change: `e2e/pages/barber-profile-pa
 tag/select getters and `waitForReady` no longer waits for the section, `barber-profile.spec.ts`
 asserts the section is absent and the new subtitle, and `a11y.spec.ts` scans the screen without the
 empty-tags state.
+
+**Verification snapshot, 2026-11-28 (the card's «Свободное время» groups services by
+specialization).** `npm run lint` — 0 warnings / 0 errors (555 files, 116 rules); `npm test` —
+1706 tests, green; `npm run build` — `tsc -b` + vite, 2696 modules, entry `index-*.js` 389.88 kB
+(gzip 127.77 kB), CSS `index-*.css` 91.23 kB, lazy `barber-page-*.js` 36.56 kB (gzip 9.74 kB);
+`npm run check:i18n -- --strict` — 1783 `t()` strings, 2096 translations, 0 missing, 0 conflicts,
+0 visible Russian strings in JSX (421 outside `t()`). The slice adds no visible copy: the group
+labels are specialization names from the API, and «Любая услуга» still opens the select outside
+the groups. `npm run test:e2e` was **not** rerun (the backend was not running); the E2E layer
+selects the service option by label, and wrapping the same options in `<optgroup>` does not
+change it.
 
 ### 5.1 API proxy
 

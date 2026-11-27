@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useBarberSlots } from '@/hooks/use-barber-slots'
+import { groupBarberServices } from '@/lib/barber-service-groups'
 import type {
   BarberProfile,
   BarberProfileSalon,
@@ -113,6 +114,10 @@ function BarberSlotsSection({
 }) {
   const { t } = useI18n()
   const services = profile.services.filter((service) => service.isActive)
+  // Плоский список не подсказывает, к какой специализации относится строка:
+  // группы по специализациям легче просмотреть. Активные услуги отобраны выше —
+  // helper не решает, что показывать.
+  const serviceGroups = groupBarberServices(services)
   const [salonId, setSalonId] = useState(initialSalonId)
   const [hairServiceId, setHairServiceId] = useState<string | null>(null)
   const salon = salons.find((item) => item.salonId === salonId) ?? salons[0]
@@ -240,13 +245,20 @@ function BarberSlotsSection({
                 onChange={(event) => handleServiceChange(event.target.value)}
               >
                 <option value="">{t('Любая услуга')}</option>
-                {services.map((service) => (
-                  <option
-                    key={service.barberServiceId}
-                    value={service.hairServiceId}
+                {serviceGroups.map((group) => (
+                  <optgroup
+                    key={group.specializationId}
+                    label={group.specializationName}
                   >
-                    {service.name}
-                  </option>
+                    {group.services.map((service) => (
+                      <option
+                        key={service.barberServiceId}
+                        value={service.hairServiceId}
+                      >
+                        {service.name}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>
