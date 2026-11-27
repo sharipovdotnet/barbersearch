@@ -636,7 +636,6 @@ internal sealed class Runner
             barberServiceId = _context.Manifest.ContendedBooking.BarberServiceId,
             salonId = _context.Manifest.ContendedBooking.SalonId,
             startAt = slot.StartAt,
-            endAt = slot.EndAt,
             idempotencyKey,
             customerNote = (string?)null
         };

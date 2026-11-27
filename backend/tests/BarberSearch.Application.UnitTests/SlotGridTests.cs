@@ -5,13 +5,13 @@ using Xunit;
 namespace BarberSearch.Application.UnitTests;
 
 /// <summary>
-/// Чистая сетка слотов <see cref="SlotGrid"/>: границы рабочего дня, шаг, отпуска и переход
-/// на летнее время.
+/// Чистая сетка слотов <see cref="SlotGrid"/>: границы рабочего дня, шаг, свободные окна
+/// после отпусков и занятости и переход на летнее время.
 /// </summary>
 /// <remarks>
-/// Функция не знает ни «сейчас», ни броней: прошедшие и занятые слоты отсекает вызывающий.
+/// Функция не знает ни «сейчас», ни чужих сценариев: прошедшие слоты отсекает вызывающий.
 /// Здесь проверяется только то, что сетка обязана дать одинаково и публичным слотам,
-/// и чтению слотов переноса визита.
+/// и чтению слотов переноса визита, и ручной записи барбера.
 /// </remarks>
 public class SlotGridTests
 {
@@ -26,6 +26,7 @@ public class SlotGridTests
             new TimeOnly(9, 0),
             new TimeOnly(18, 0),
             30,
+            [],
             []);
 
         Assert.Equal(18, slots.Count);
@@ -40,7 +41,14 @@ public class SlotGridTests
     [Fact]
     public void Legal_WithUnknownTimeZone_ReturnsNoSlots()
     {
-        var slots = SlotGrid.Legal(Date, "Not/AZone", new TimeOnly(9, 0), new TimeOnly(18, 0), 30, []);
+        var slots = SlotGrid.Legal(
+            Date,
+            "Not/AZone",
+            new TimeOnly(9, 0),
+            new TimeOnly(18, 0),
+            30,
+            [],
+            []);
 
         Assert.Empty(slots);
     }
@@ -48,7 +56,14 @@ public class SlotGridTests
     [Fact]
     public void Legal_WithNonPositiveDuration_ReturnsNoSlots()
     {
-        var slots = SlotGrid.Legal(Date, "Europe/Berlin", new TimeOnly(9, 0), new TimeOnly(18, 0), 0, []);
+        var slots = SlotGrid.Legal(
+            Date,
+            "Europe/Berlin",
+            new TimeOnly(9, 0),
+            new TimeOnly(18, 0),
+            0,
+            [],
+            []);
 
         Assert.Empty(slots);
     }
@@ -65,6 +80,7 @@ public class SlotGridTests
             new TimeOnly(0, 0),
             new TimeOnly(6, 0),
             60,
+            [],
             []);
 
         Assert.Equal(
@@ -96,7 +112,8 @@ public class SlotGridTests
             new TimeOnly(9, 0),
             new TimeOnly(18, 0),
             30,
-            timeOffs);
+            timeOffs,
+            []);
 
         Assert.DoesNotContain(
             slots,
@@ -110,5 +127,221 @@ public class SlotGridTests
             slots,
             slot => slot.StartAt == new DateTimeOffset(2026, 12, 1, 14, 0, 0, TimeSpan.Zero));
         Assert.Equal(14, slots.Count);
+    }
+
+    /// <summary>
+    /// Занятая бронь делит день на два свободных окна: следующая часовая услуга начинается
+    /// ровно в конце брони (12:30), а не на «круглом» часе от открытия, и последний старт
+    /// примыкает к закрытию (17:00), хотя шаг от 12:30 туда не попадает.
+    /// </summary>
+    /// <remarks>
+    /// Время в тесте задано в UTC, а работа — в Берлине: 11:00–11:30Z — это 12:00–12:30
+    /// местного времени зимой (CET, UTC+1).
+    /// </remarks>
+    [Fact]
+    public void Legal_AfterBusyInterval_StartsNextSlotAtItsEnd()
+    {
+        var busyStart = new DateTimeOffset(2026, 12, 1, 11, 0, 0, TimeSpan.Zero);
+        var busyEnd = new DateTimeOffset(2026, 12, 1, 11, 30, 0, TimeSpan.Zero);
+        var busy = new[] { new BusyInterval(busyStart, busyEnd) };
+
+        var slots = SlotGrid.Legal(
+            Date,
+            "Europe/Berlin",
+            new TimeOnly(10, 0),
+            new TimeOnly(18, 0),
+            60,
+            [],
+            busy);
+
+        // 12:30 и 17:00 по Берлину.
+        Assert.Contains(
+            slots,
+            slot => slot.StartAt == new DateTimeOffset(2026, 12, 1, 11, 30, 0, TimeSpan.Zero));
+        Assert.Contains(
+            slots,
+            slot => slot.StartAt == new DateTimeOffset(2026, 12, 1, 16, 0, 0, TimeSpan.Zero));
+
+        // Свободное окно до брони по-прежнему начинается с открытия — 10:00 по Берлину.
+        Assert.Contains(
+            slots,
+            slot => slot.StartAt == new DateTimeOffset(2026, 12, 1, 9, 0, 0, TimeSpan.Zero));
+        Assert.DoesNotContain(slots, slot => slot.StartAt == busyStart);
+        Assert.DoesNotContain(
+            slots,
+            slot => slot.StartAt < busyEnd && busyStart < slot.EndAt);
+    }
+
+    /// <summary>
+    /// Свободное окно короче длительности не даёт ни одного слота: ставить визит, который
+    /// не помещается между бронью и открытием, нельзя.
+    /// </summary>
+    [Fact]
+    public void Legal_FreeWindowShorterThanDuration_ProducesNoSlots()
+    {
+        // 10:00–11:00Z — это 11:00–12:00 по Берлину; окно 10:00–11:00 местного короче
+        // двухчасового визита, поэтому первый слот появляется только после брони.
+        var busy = new[]
+        {
+            new BusyInterval(
+                new DateTimeOffset(2026, 12, 1, 10, 0, 0, TimeSpan.Zero),
+                new DateTimeOffset(2026, 12, 1, 11, 0, 0, TimeSpan.Zero))
+        };
+
+        var slots = SlotGrid.Legal(
+            Date,
+            "Europe/Berlin",
+            new TimeOnly(10, 0),
+            new TimeOnly(18, 0),
+            120,
+            [],
+            busy);
+
+        Assert.Equal(3, slots.Count);
+        Assert.DoesNotContain(
+            slots,
+            slot => slot.StartAt < new DateTimeOffset(2026, 12, 1, 11, 0, 0, TimeSpan.Zero));
+        Assert.Contains(
+            slots,
+            slot => slot.StartAt == new DateTimeOffset(2026, 12, 1, 11, 0, 0, TimeSpan.Zero));
+    }
+
+    /// <summary>
+    /// Пересекающиеся отпуск и занятость сливаются в одно препятствие: внутри объединённого
+    /// интервала нет ни одного старта, даже если он свободен по отдельности.
+    /// </summary>
+    [Fact]
+    public void Legal_MergesOverlappingTimeOffAndBusy()
+    {
+        // Отпуск 12:00–13:00 и бронь 12:30–13:30 по Берлину: итоговый запрет 12:00–13:30.
+        var mergedStart = new DateTimeOffset(2026, 12, 1, 11, 0, 0, TimeSpan.Zero);
+        var mergedEnd = new DateTimeOffset(2026, 12, 1, 12, 30, 0, TimeSpan.Zero);
+        var timeOffs = new[]
+        {
+            new TimeOffInterval(
+                mergedStart,
+                new DateTimeOffset(2026, 12, 1, 12, 0, 0, TimeSpan.Zero))
+        };
+        var busy = new[]
+        {
+            new BusyInterval(
+                new DateTimeOffset(2026, 12, 1, 11, 30, 0, TimeSpan.Zero),
+                mergedEnd)
+        };
+
+        var slots = SlotGrid.Legal(
+            Date,
+            "Europe/Berlin",
+            new TimeOnly(10, 0),
+            new TimeOnly(18, 0),
+            60,
+            timeOffs,
+            busy);
+
+        Assert.DoesNotContain(
+            slots,
+            slot => slot.StartAt < mergedEnd && mergedStart < slot.EndAt);
+
+        // 10:00 по Берлину — до запрета; 13:30 — сразу после объединённого интервала.
+        Assert.Contains(
+            slots,
+            slot => slot.StartAt == new DateTimeOffset(2026, 12, 1, 9, 0, 0, TimeSpan.Zero));
+        Assert.Contains(
+            slots,
+            slot => slot.StartAt == new DateTimeOffset(2026, 12, 1, 12, 30, 0, TimeSpan.Zero));
+    }
+
+    /// <summary>
+    /// Ручная запись не обязана совпадать с сеткой: 12:07 по Берлину помещается в рабочий
+    /// день, поэтому <see cref="SlotGrid.Fit"/> принимает время и считает конец в поясе салона.
+    /// </summary>
+    [Fact]
+    public void Fit_OffGridStartInsideFreeWindow_Fits()
+    {
+        var startAt = new DateTimeOffset(2026, 12, 1, 11, 7, 0, TimeSpan.Zero);
+
+        var fit = SlotGrid.Fit(
+            Date,
+            "Europe/Berlin",
+            new TimeOnly(10, 0),
+            new TimeOnly(18, 0),
+            60,
+            [],
+            [],
+            startAt,
+            out var slot);
+
+        Assert.Equal(SlotFit.Fits, fit);
+        Assert.NotNull(slot);
+        Assert.Equal(startAt, slot.StartAt);
+        Assert.Equal(new DateTimeOffset(2026, 12, 1, 12, 7, 0, TimeSpan.Zero), slot.EndAt);
+    }
+
+    [Fact]
+    public void Fit_InsideBusyInterval_ReturnsOverlap()
+    {
+        var busy = new[]
+        {
+            new BusyInterval(
+                new DateTimeOffset(2026, 12, 1, 11, 0, 0, TimeSpan.Zero),
+                new DateTimeOffset(2026, 12, 1, 11, 30, 0, TimeSpan.Zero))
+        };
+
+        var fit = SlotGrid.Fit(
+            Date,
+            "Europe/Berlin",
+            new TimeOnly(10, 0),
+            new TimeOnly(18, 0),
+            60,
+            [],
+            busy,
+            new DateTimeOffset(2026, 12, 1, 11, 10, 0, TimeSpan.Zero),
+            out var slot);
+
+        Assert.Equal(SlotFit.Overlap, fit);
+        Assert.Null(slot);
+    }
+
+    [Fact]
+    public void Fit_OutsideWorkingHours_ReturnsOutsideSchedule()
+    {
+        var fit = SlotGrid.Fit(
+            Date,
+            "Europe/Berlin",
+            new TimeOnly(10, 0),
+            new TimeOnly(18, 0),
+            60,
+            [],
+            [],
+            new DateTimeOffset(2026, 12, 1, 8, 30, 0, TimeSpan.Zero),
+            out var slot);
+
+        Assert.Equal(SlotFit.OutsideSchedule, fit);
+        Assert.Null(slot);
+    }
+
+    [Fact]
+    public void Fit_InsideTimeOff_ReturnsOutsideSchedule()
+    {
+        var timeOffs = new[]
+        {
+            new TimeOffInterval(
+                new DateTimeOffset(2026, 12, 1, 11, 0, 0, TimeSpan.Zero),
+                new DateTimeOffset(2026, 12, 1, 12, 0, 0, TimeSpan.Zero))
+        };
+
+        var fit = SlotGrid.Fit(
+            Date,
+            "Europe/Berlin",
+            new TimeOnly(10, 0),
+            new TimeOnly(18, 0),
+            30,
+            timeOffs,
+            [],
+            new DateTimeOffset(2026, 12, 1, 11, 10, 0, TimeSpan.Zero),
+            out var slot);
+
+        Assert.Equal(SlotFit.OutsideSchedule, fit);
+        Assert.Null(slot);
     }
 }

@@ -1,4 +1,5 @@
 using System.Reflection;
+using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.Bookings.CreateBooking;
 using BarberSearch.Application.UnitTests.Fakes;
 using BarberSearch.Contracts.Bookings.CreateBooking;
@@ -6,6 +7,7 @@ using BarberSearch.Domain;
 using BarberSearch.Domain.BarberProfiles;
 using BarberSearch.Domain.BarberServices;
 using BarberSearch.Domain.Bookings;
+using BarberSearch.Domain.Salons;
 using BarberSearch.Domain.Users;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -20,12 +22,22 @@ namespace BarberSearch.Application.UnitTests;
 /// </summary>
 public class BookingCreateTests
 {
-    private static readonly Guid SalonId = Guid.CreateVersion7();
+    private static readonly Salon Salon = CreateSalon();
+    private static readonly Guid SalonId = Salon.Id;
 
     /// <summary>
     /// «Сейчас» для тестов окна брони: фиксированные часы вместо системных.
     /// </summary>
     private static readonly DateTimeOffset Now = new(2026, 10, 22, 12, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
+    /// Начало по умолчанию: неделя вперёд, 13:00 по Берлину (CET) — легальный старт
+    /// получасовой сетки 09:00–18:00.
+    /// </summary>
+    private static readonly DateTimeOffset DefaultStartAt = Now.AddDays(7);
+
+    /// <summary>Локальная дата салона для <see cref="DefaultStartAt"/>.</summary>
+    private static readonly DateOnly DefaultStartDate = new(2026, 10, 29);
 
     [Fact]
     public async Task Create_BlankIdempotencyKey_ReturnsDomainValidationBeforeLookup()
@@ -228,8 +240,7 @@ public class BookingCreateTests
         var request = CreateRequest(context.Profile.Id, context.Service.Id, "shared-key");
         var secondRequest = request with
         {
-            StartAt = request.StartAt.AddHours(1),
-            EndAt = request.EndAt.AddHours(1)
+            StartAt = request.StartAt.AddHours(1)
         };
 
         var firstHandler = CreateHandler(context, Guid.CreateVersion7());
@@ -268,21 +279,219 @@ public class BookingCreateTests
     }
 
     /// <summary>
-    /// Поле <c>Price</c> удалено из контракта в R-33: чтобы не обещать клиенту неработающую цену,
-    /// ни публичного свойства, ни параметра конструктора с таким именем быть не должно. За цену
-    /// брони по-прежнему отвечает <c>BarberService.Price</c>.
+    /// Конец визита выводит сервер из <c>BarberService.DurationMinutes</c>: клиент задаёт
+    /// только начало, поэтому «тридцать минут по цене сорока пяти» не проходят.
     /// </summary>
     [Fact]
-    public void CreateBookingRequest_HasNoPriceProperty()
+    public async Task Create_EndIsDerivedFromServiceDuration()
+    {
+        var context = CreateContext(durationMinutes: 45);
+
+        // 13:30 по Берлину — легальный старт сетки с шагом 45 минут от 09:00.
+        var startAt = new DateTimeOffset(2026, 10, 29, 12, 30, 0, TimeSpan.Zero);
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "duration-key") with
+        {
+            StartAt = startAt
+        };
+        var handler = CreateHandler(context);
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(request),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var booking = Assert.Single(context.Bookings.Bookings);
+        Assert.Equal(startAt, booking.StartAt);
+        Assert.Equal(45, (booking.EndAt - booking.StartAt).TotalMinutes);
+        Assert.Equal(startAt.AddMinutes(45), booking.EndAt);
+    }
+
+    /// <summary>
+    /// Публичный путь требует точного совпадения со стартом сетки: 13:07 помещается
+    /// в рабочий день, но не является началом слота, поэтому запись отклоняется.
+    /// </summary>
+    [Fact]
+    public async Task Create_PublicOffGridStart_ReturnsNotASlot()
+    {
+        var context = CreateContext();
+
+        // 13:07 по Берлину: внутри 09:00–18:00, но между стартами 13:00 и 13:30.
+        var startAt = new DateTimeOffset(2026, 10, 29, 12, 7, 0, TimeSpan.Zero);
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "off-grid-key") with
+        {
+            StartAt = startAt
+        };
+        var handler = CreateHandler(context);
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(request),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.CONFLICT, result.Error.Errors[0].Type);
+        Assert.Equal("booking.create.startAt.notASlot", result.Error.Errors[0].Code);
+        Assert.Equal(0, context.Bookings.AddCalls);
+    }
+
+    /// <summary>
+    /// Начало внутри отпуска не «занимает» слот, а находится вне расписания: клиент
+    /// получает тот же код, что и для выходного, а не «время занято».
+    /// </summary>
+    [Fact]
+    public async Task Create_PublicStartAtInTimeOff_ReturnsOutsideSchedule()
+    {
+        var timeOff = new TimeOffInterval(
+            new DateTimeOffset(2026, 10, 29, 11, 30, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 10, 29, 12, 30, 0, TimeSpan.Zero));
+        var context = CreateContext(timeOffs: [timeOff]);
+        var handler = CreateHandler(context);
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "time-off-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(request),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.CONFLICT, result.Error.Errors[0].Type);
+        Assert.Equal("booking.create.startAt.outsideSchedule", result.Error.Errors[0].Code);
+        Assert.Equal(0, context.Bookings.AddCalls);
+    }
+
+    /// <summary>
+    /// Выходной барбера — тоже «вне расписания»: контекст дня говорит, что дня нет,
+    /// и до сетки дело не доходит.
+    /// </summary>
+    [Fact]
+    public async Task Create_PublicStartOnDayOff_ReturnsOutsideSchedule()
+    {
+        var context = CreateContext(isWorkingDay: false);
+        var handler = CreateHandler(context);
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "day-off-key");
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(request),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.CONFLICT, result.Error.Errors[0].Type);
+        Assert.Equal("booking.create.startAt.outsideSchedule", result.Error.Errors[0].Code);
+        Assert.Equal(0, context.Bookings.AddCalls);
+    }
+
+    /// <summary>
+    /// Ручная запись барбера не обязана попадать в шаг сетки: клиент мог прийти к 13:07,
+    /// и визит помещается в рабочий день. Конец по-прежнему считает сервер.
+    /// </summary>
+    [Fact]
+    public async Task CreateByBarber_OffGridStartThatFits_CreatesBooking()
+    {
+        var context = CreateContext();
+        var handler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: context.Profile.Id);
+        var startAt = new DateTimeOffset(2026, 10, 29, 12, 7, 0, TimeSpan.Zero);
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "barber-off-grid-key") with
+        {
+            StartAt = startAt
+        };
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(
+                request,
+                ConfirmImmediately: true,
+                GuestFirstName: "Ivan",
+                GuestPhone: "+7 999 123-45-67"),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var booking = Assert.Single(context.Bookings.Bookings);
+        Assert.Equal(startAt, booking.StartAt);
+        Assert.Equal(30, (booking.EndAt - booking.StartAt).TotalMinutes);
+        Assert.Equal(BookingStatus.Confirmed, booking.Status);
+    }
+
+    /// <summary>
+    /// Ручная запись проверяет занятость, даже если начало не совпадает с сеткой:
+    /// 13:07 пересекается с визитом 13:00–13:30 и получает отдельный код «время занято».
+    /// </summary>
+    [Fact]
+    public async Task CreateByBarber_StartThatOverlaps_ReturnsOverlap()
+    {
+        var context = CreateContext();
+        var existing = Booking.Create(
+            context.UserId,
+            context.Profile.Id,
+            context.Service.Id,
+            SalonId,
+            DefaultStartAt,
+            DefaultStartAt.AddMinutes(30),
+            context.Service.Price,
+            "manual-overlap-existing-key").Value;
+        context.Bookings.Add(existing);
+        var handler = CreateHandler(
+            context,
+            userId: Guid.CreateVersion7(),
+            barberProfileId: context.Profile.Id);
+        var request = CreateRequest(
+            context.Profile.Id,
+            context.Service.Id,
+            "manual-overlap-key") with
+        {
+            StartAt = DefaultStartAt.AddMinutes(7)
+        };
+
+        var result = await handler.Handle(
+            new CreateBookingCommand(
+                request,
+                ConfirmImmediately: true,
+                GuestFirstName: "Ivan",
+                GuestPhone: "+7 999 123-45-67"),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.CONFLICT, result.Error.Errors[0].Type);
+        Assert.Equal("booking.create.startAt.overlap", result.Error.Errors[0].Code);
+        Assert.Equal(0, context.Bookings.AddCalls);
+    }
+
+    /// <summary>
+    /// Ни цены, ни конца визита клиент не задаёт: поле <c>Price</c> удалено в R-33, а
+    /// <c>EndAt</c> — вместе с переходом на длительность услуги. Контракт не должен даже
+    /// предлагать такие свойства или параметры конструктора, иначе старый клиент решит,
+    /// что ими можно управлять. За цену отвечает <c>BarberService.Price</c>, за конец —
+    /// <c>BarberService.DurationMinutes</c>.
+    /// </summary>
+    [Fact]
+    public void CreateBookingRequest_HasNoPriceOrEndAtProperty()
     {
         var properties = typeof(CreateBookingRequest).GetProperties(
             BindingFlags.Public | BindingFlags.Instance);
         Assert.DoesNotContain(properties, property => property.Name == "Price");
+        Assert.DoesNotContain(properties, property => property.Name == "EndAt");
 
         var constructor = Assert.Single(typeof(CreateBookingRequest).GetConstructors());
         Assert.DoesNotContain(
             constructor.GetParameters(),
             parameter => parameter.Name == "Price");
+        Assert.DoesNotContain(
+            constructor.GetParameters(),
+            parameter => parameter.Name == "EndAt");
     }
 
     [Fact]
@@ -296,7 +505,7 @@ public class BookingCreateTests
             context.Service.Id,
             SalonId,
             request.StartAt,
-            request.EndAt,
+            request.StartAt.AddMinutes(context.Service.DurationMinutes),
             context.Service.Price,
             request.IdempotencyKey).Value;
 
@@ -394,7 +603,7 @@ public class BookingCreateTests
             context.Service.Id,
             SalonId,
             request.StartAt,
-            request.EndAt,
+            request.StartAt.AddMinutes(context.Service.DurationMinutes),
             context.Service.Price,
             "existing-key").Value;
         context.Bookings.Add(existing);
@@ -424,7 +633,7 @@ public class BookingCreateTests
             context.Service.Id,
             SalonId,
             request.StartAt,
-            request.EndAt,
+            request.StartAt.AddMinutes(context.Service.DurationMinutes),
             context.Service.Price,
             "cancelled-key").Value;
         Assert.True(cancelled.Cancel().IsSuccess);
@@ -490,8 +699,7 @@ public class BookingCreateTests
             context.Service.Id,
             "past-key") with
         {
-            StartAt = startAt,
-            EndAt = startAt.AddMinutes(30)
+            StartAt = startAt
         };
 
         var result = await handler.Handle(
@@ -509,15 +717,19 @@ public class BookingCreateTests
     public async Task Create_StartAtWithinClockTolerance_Succeeds()
     {
         var context = CreateContext();
-        var handler = CreateHandler(context);
-        var startAt = Now.AddMinutes(-Constants.BOOKING_START_TOLERANCE_MINUTES);
+
+        // 13:30 по Берлину — легальный старт получасовой сетки. «Сейчас» ставится на пять
+        // минут позже, поэтому начало ровно на границе допуска, но всё ещё не в прошлом.
+        var startAt = new DateTimeOffset(2026, 10, 22, 12, 30, 0, TimeSpan.Zero);
+        var handler = CreateHandler(
+            context,
+            now: startAt.AddMinutes(Constants.BOOKING_START_TOLERANCE_MINUTES));
         var request = CreateRequest(
             context.Profile.Id,
             context.Service.Id,
             "tolerance-key") with
         {
-            StartAt = startAt,
-            EndAt = startAt.AddMinutes(30)
+            StartAt = startAt
         };
 
         var result = await handler.Handle(
@@ -541,8 +753,7 @@ public class BookingCreateTests
             context.Service.Id,
             "far-key") with
         {
-            StartAt = startAt,
-            EndAt = startAt.AddMinutes(30)
+            StartAt = startAt
         };
 
         var result = await handler.Handle(
@@ -566,8 +777,7 @@ public class BookingCreateTests
             context.Service.Id,
             "horizon-key") with
         {
-            StartAt = startAt,
-            EndAt = startAt.AddMinutes(30)
+            StartAt = startAt
         };
 
         var result = await handler.Handle(
@@ -588,8 +798,7 @@ public class BookingCreateTests
             context.Service.Id,
             "started-key") with
         {
-            StartAt = startAt,
-            EndAt = startAt.AddMinutes(30)
+            StartAt = startAt
         };
         var existing = Booking.Create(
             context.UserId,
@@ -597,7 +806,7 @@ public class BookingCreateTests
             context.Service.Id,
             SalonId,
             request.StartAt,
-            request.EndAt,
+            request.StartAt.AddMinutes(context.Service.DurationMinutes),
             context.Service.Price,
             request.IdempotencyKey).Value;
         context.Bookings.Add(existing);
@@ -816,6 +1025,10 @@ public class BookingCreateTests
         var other = CreateProfileWithService(200m);
         Assert.True(other.Profile.AddSalon(SalonId).IsSuccess);
         context.Profiles.Add(other.Profile);
+        context.Profiles.SlotContexts[other.Profile.Id] = CreateSlotContext(
+            other.Profile.Id,
+            other.Service.Id,
+            other.Service.HairServiceId);
 
         var firstHandler = CreateHandler(
             context,
@@ -1183,27 +1396,35 @@ public class BookingCreateTests
         Guid barberProfileId,
         Guid serviceId,
         string idempotencyKey)
-    {
-        var startAt = Now.AddDays(7);
-
-        return new CreateBookingRequest(
+        => new(
             barberProfileId,
             serviceId,
             SalonId,
-            startAt,
-            startAt.AddMinutes(30),
+            DefaultStartAt,
             idempotencyKey,
             null);
-    }
 
     private static TestContext CreateContext(
         decimal price = 1500m,
         bool active = true,
         bool salonExists = true,
-        bool worksAtSalon = true)
+        bool worksAtSalon = true,
+        int durationMinutes = 30,
+        bool isWorkingDay = true,
+        IReadOnlyList<TimeOffInterval>? timeOffs = null)
     {
         var profiles = new FakeBarberProfileRepository();
-        var (profile, service) = CreateProfileWithService(price, active);
+        var (profile, service) = CreateProfileWithService(price, active, durationMinutes);
+
+        // Создание брони читает контекст дня: без него любой запрос отвечает 404.
+        // Расписание совпадает с сеткой из документации: 09:00–18:00 по Берлину.
+        profiles.SlotContext = CreateSlotContext(
+            profile.Id,
+            service.Id,
+            service.HairServiceId,
+            durationMinutes,
+            isWorkingDay,
+            timeOffs);
         profiles.Add(profile);
 
         if (worksAtSalon)
@@ -1215,7 +1436,9 @@ public class BookingCreateTests
 
         if (salonExists)
         {
-            salons.AddExisting(SalonId);
+            // Создание брони читает салон целиком (нужен TimeZoneId), поэтому одного
+            // признака существования мало: в фейке должна быть настоящая строка салона.
+            salons.AddSalon(Salon);
         }
 
         return new TestContext(
@@ -1228,9 +1451,40 @@ public class BookingCreateTests
             service);
     }
 
+    private static Salon CreateSalon(string timeZoneId = "Europe/Berlin")
+        => Salon.Create(
+            name: "Booking Salon",
+            address: "Teststrasse 1",
+            city: "Berlin",
+            country: "Germany",
+            timeZoneId: timeZoneId,
+            latitude: 52.5200,
+            longitude: 13.4050).Value;
+
+    private static BarberSlotContext CreateSlotContext(
+        Guid barberProfileId,
+        Guid barberServiceId,
+        Guid hairServiceId,
+        int durationMinutes = 30,
+        bool isWorkingDay = true,
+        IReadOnlyList<TimeOffInterval>? timeOffs = null)
+        => new(
+            barberProfileId,
+            SalonId,
+            "Europe/Berlin",
+            DefaultStartDate,
+            isWorkingDay,
+            new TimeOnly(9, 0),
+            new TimeOnly(18, 0),
+            durationMinutes,
+            barberServiceId,
+            hairServiceId,
+            timeOffs ?? []);
+
     private static (BarberProfile Profile, BarberService Service) CreateProfileWithService(
         decimal price,
-        bool active = true)
+        bool active = true,
+        int durationMinutes = 30)
     {
         var profile = BarberProfile.Create(
             Guid.CreateVersion7(),
@@ -1245,7 +1499,7 @@ public class BookingCreateTests
             null,
             null).Value;
 
-        Assert.True(profile.AddService(Guid.CreateVersion7(), price, 30).IsSuccess);
+        Assert.True(profile.AddService(Guid.CreateVersion7(), price, durationMinutes).IsSuccess);
 
         var service = profile.Services.Single();
 

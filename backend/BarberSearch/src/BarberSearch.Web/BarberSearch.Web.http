@@ -145,8 +145,9 @@ Accept: application/json
 ###
 
 # Бронь. Клиент берётся из токена. Повтор с тем же idempotencyKey вернёт уже созданную
-# бронь, а не вторую. startAt обязан попадать в окно [сейчас − 5 минут; сейчас + 90 дней],
-# а длительность — не превышать 1440 минут (R-04), поэтому дату ниже правь под текущую.
+# бронь, а не вторую. startAt обязан попадать в окно [сейчас − 5 минут; сейчас + 90 дней]
+# и совпадать со свободным слотом услуги; окончание сервер считает сам из
+# BarberService.DurationMinutes, поэтому endAt в теле больше нет (R-04). Дату правь под текущую.
 POST {{host}}/api/bookings
 Content-Type: application/json
 
@@ -155,7 +156,6 @@ Content-Type: application/json
   "barberServiceId": "{{barberServiceId}}",
   "salonId": "{{salonId}}",
   "startAt": "2026-12-01T10:00:00+00:00",
-  "endAt": "2026-12-01T10:30:00+00:00",
   "idempotencyKey": "demo-key-1",
   "customerNote": "First visit"
 }

@@ -40,16 +40,15 @@ public sealed class BookingFlowTests
         await app.AuthenticateAsync(email);
 
         var start = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(30).AddHours(10), TimeSpan.Zero);
-        var end = start.AddMinutes(30);
 
-        using var first = await CreateBookingAsync(app.Client, barber, start, end);
+        using var first = await CreateBookingAsync(app.Client, barber, start);
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
 
         var created = await first.Content.ReadFromJsonAsync<CreatedResourceResponse>();
         Assert.NotNull(created);
         Assert.NotEqual(Guid.Empty, created.Id);
 
-        using var conflict = await CreateBookingAsync(app.Client, barber, start, end);
+        using var conflict = await CreateBookingAsync(app.Client, barber, start);
         Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
 
         var conflictBody = await conflict.Content.ReadAsStringAsync();
@@ -61,15 +60,14 @@ public sealed class BookingFlowTests
 
         // Отменённая бронь больше не держит слот: частичный предикат exclusion-ограничения
         // пропускает только Pending/Confirmed.
-        using var rebooked = await CreateBookingAsync(app.Client, barber, start, end);
+        using var rebooked = await CreateBookingAsync(app.Client, barber, start);
         Assert.Equal(HttpStatusCode.Created, rebooked.StatusCode);
     }
 
     private static Task<HttpResponseMessage> CreateBookingAsync(
         HttpClient client,
         SeededBarber barber,
-        DateTimeOffset start,
-        DateTimeOffset end)
+        DateTimeOffset start)
         => client.PostAsJsonAsync(
             "api/bookings",
             new CreateBookingRequest(
@@ -77,7 +75,6 @@ public sealed class BookingFlowTests
                 barber.Service.Id,
                 barber.Salon.Id,
                 start,
-                end,
                 $"integration-{Guid.NewGuid():N}",
                 "integration test"));
 }

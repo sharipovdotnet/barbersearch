@@ -259,7 +259,7 @@ public sealed class PushClientSurfaceTests
         await app.AuthenticateAsync(email);
         app.Client.DefaultRequestHeaders.Add(SurfaceHeader, "app");
 
-        var startAt = DateTimeOffset.UtcNow.AddDays(2);
+        var startAt = FutureStart(2);
         await CreateBookingAsync(app, barber, startAt);
 
         // Самозапись из приложения: экран уже подтвердил бронь, клиентского push нет.
@@ -298,7 +298,7 @@ public sealed class PushClientSurfaceTests
         var push = new PushTestData(app);
         await push.SeedDeviceTokenAsync(customerId, "integration-device-token");
 
-        var startAt = DateTimeOffset.UtcNow.AddDays(2);
+        var startAt = FutureStart(2);
         var bookingId = await CreateBookingAsync(app, barber, startAt);
 
         var row = Assert.Single(await push.GetNotificationsAsync(customerId));
@@ -384,6 +384,13 @@ public sealed class PushClientSurfaceTests
     private static string CustomerEmail(string scenario)
         => $"push-surface-{scenario}-{Guid.NewGuid():N}@barbersearch.test";
 
+    /// <summary>
+    /// Фиксированный час в будущем: сетка слотов строится в поясе салона (Europe/Berlin),
+    /// поэтому произвольное время суток могло бы не совпасть со стартом слота.
+    /// </summary>
+    private static DateTimeOffset FutureStart(int days)
+        => DateTimeOffset.UtcNow.Date.AddDays(days).AddHours(10);
+
     private static async Task<Guid> CreateBookingAsync(
         TestApp app,
         SeededBarber barber,
@@ -396,7 +403,6 @@ public sealed class PushClientSurfaceTests
                 barber.Service.Id,
                 barber.Salon.Id,
                 startAt,
-                startAt.AddMinutes(30),
                 $"push-surface-{Guid.NewGuid():N}",
                 "integration test"));
 

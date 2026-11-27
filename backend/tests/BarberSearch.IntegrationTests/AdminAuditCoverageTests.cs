@@ -270,7 +270,7 @@ public sealed class AdminAuditCoverageTests
 
         // Окно бронирования считается от «сейчас»: тест создаёт бронь через API, поэтому
         // начало обязано быть в будущем, а не фиксированной датой среза.
-        var startAt = DateTimeOffset.UtcNow.AddDays(10);
+        var startAt = DateTimeOffset.UtcNow.Date.AddDays(10).AddHours(10);
 
         Guid bookingId;
 
@@ -281,7 +281,6 @@ public sealed class AdminAuditCoverageTests
                        barber.Service.Id,
                        barber.Salon.Id,
                        startAt,
-                       startAt.AddMinutes(30),
                        $"audit-create-{Guid.NewGuid():N}",
                        null)))
         {
@@ -444,7 +443,7 @@ public sealed class AdminAuditCoverageTests
         var idempotencyKey = $"audit-payload-key-{Guid.NewGuid():N}";
         var customerNote = "customer-note-must-not-appear";
 
-        var startAt = DateTimeOffset.UtcNow.AddDays(10);
+        var startAt = DateTimeOffset.UtcNow.Date.AddDays(10).AddHours(10);
 
         Guid bookingId;
 
@@ -455,7 +454,6 @@ public sealed class AdminAuditCoverageTests
                        barber.Service.Id,
                        barber.Salon.Id,
                        startAt,
-                       startAt.AddMinutes(30),
                        idempotencyKey,
                        customerNote)))
         {

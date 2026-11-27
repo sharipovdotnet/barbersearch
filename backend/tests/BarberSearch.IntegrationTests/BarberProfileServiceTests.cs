@@ -54,7 +54,7 @@ public sealed class BarberProfileServiceTests
         await app.AuthenticateAsync(barber.User.Email.Value);
 
         // Бронь создаётся до скрытия услуги: у сидового барбера записей нет.
-        var startAt = DateTimeOffset.UtcNow.AddDays(3);
+        var startAt = DateTimeOffset.UtcNow.Date.AddDays(3).AddHours(10);
         using (var createBooking = await app.Client.PostAsJsonAsync(
                    "api/barber/bookings",
                    new CreateBarberBookingRequest(
@@ -65,7 +65,6 @@ public sealed class BarberProfileServiceTests
                        BarberServiceId: barber.Service.Id,
                        SalonId: barber.Salon.Id,
                        StartAt: startAt,
-                       EndAt: startAt.AddMinutes(30),
                        IdempotencyKey: $"hidden-service-{Guid.NewGuid():N}",
                        CustomerNote: null)))
         {

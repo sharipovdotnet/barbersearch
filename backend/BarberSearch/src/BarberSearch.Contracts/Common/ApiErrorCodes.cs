@@ -336,6 +336,35 @@ public static class ApiErrorCodes
         public const string CreateCustomerNotFound = "booking.create.customerNotFound";
 
         /// <summary>
+        /// Начало визита не совпадает ни с одним свободным слотом услуги; <c>409</c>,
+        /// <c>invalidField = "startAt"</c>.
+        /// </summary>
+        /// <remarks>
+        /// Длительность визита теперь задаёт услуга (<c>BarberService.DurationMinutes</c>),
+        /// поэтому клиент выбирает только начало. Время, которого нет в
+        /// <c>GET api/barbers/{id}/slots</c>, означает устаревший или подделанный запрос:
+        /// записать мимо сетки нельзя, иначе в дне мастера появится щель, которую
+        /// больше никто не займёт.
+        /// </remarks>
+        public const string CreateStartAtNotASlot = "booking.create.startAt.notASlot";
+
+        /// <summary>
+        /// Начало визита вне рабочего дня мастера: выходной, часы до открытия или после
+        /// закрытия, отпуск; <c>409</c>, <c>invalidField = "startAt"</c>.
+        /// </summary>
+        public const string CreateStartAtOutsideSchedule = "booking.create.startAt.outsideSchedule";
+
+        /// <summary>
+        /// Начало визита пересекается с активной бронью другого клиента; <c>409</c>,
+        /// <c>invalidField = "startAt"</c>.
+        /// </summary>
+        /// <remarks>
+        /// Предварительная проверка в обработчике; последняя линия — exclusion-ограничение
+        /// <c>ex_bookings_no_overlap</c> и его код <c>booking.add.overlap</c>.
+        /// </remarks>
+        public const string CreateStartAtOverlap = "booking.create.startAt.overlap";
+
+        /// <summary>
         /// Бронь уже нельзя перенести: статус не <c>Pending</c>/<c>Confirmed</c> либо визит
         /// уже начался; <c>409</c>.
         /// </summary>

@@ -87,7 +87,6 @@ public class BarberBookingsController : ApiController
             request.BarberServiceId,
             request.SalonId,
             request.StartAt,
-            request.EndAt,
             request.IdempotencyKey,
             request.CustomerNote);
 

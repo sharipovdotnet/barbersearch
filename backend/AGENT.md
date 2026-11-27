@@ -4,8 +4,8 @@
 > Code state: **15 projects**. The slice history (R-01…R-54 and later stages) lives in the
 > commit and PR history. §9.13 lists the open minor issues only; the closed history is in
 > `CODE-REVIEW.md`.
-> Tests: **716 domain + 1204 application + 462 infrastructure** unit tests, all green locally
-> (2026-11-24); the whole integration project **366 tests** is green on a local PostgreSQL 16
+> Tests: **716 domain + 1219 application + 462 infrastructure** unit tests, all green locally
+> (2026-11-28); the whole integration project **371 tests** is green on a local PostgreSQL 16
 > via `BARBERSEARCH_TEST_POSTGRES` (the VSTest testhost cannot open its parent process handle
 > in this sandbox, so `dotnet test` runs with `-p:BaseOutputPath=<temp>`, §5.2).
 > `dotnet ef migrations has-pending-model-changes` reports no pending changes.
@@ -576,8 +576,8 @@ dotnet exec XunitRunner.dll <absolute path to BarberSearch.Application.UnitTests
 dotnet exec XunitRunner.dll <absolute path to BarberSearch.Infrastructure.UnitTests.dll>
 ```
 
-Актуальный baseline на 2026-11-24 (срез «категория → специализация»): domain **716**,
-application **1204**, infrastructure **462**, integration **366** — всего **2748**, все зелёные
+Актуальный baseline на 2026-11-28 (срез «запись по свободным окнам»): domain **716**,
+application **1219**, infrastructure **462**, integration **371** — всего **2768**, все зелёные
 на локальной PostgreSQL.
 История прогонов по срезам и
 негативные проверки живут в описании PR: отдельного `HANDOFF.md` в репозитории нет.
@@ -1017,8 +1017,11 @@ The rules below were pushed to the application layer because the aggregate canno
    owns only the "now"-free part — the maximum duration
    (`booking.create.period.tooLong`, `Constants.MAX_BOOKING_DURATION_MINUTES`). Absolute
    `DateTimeOffset` comparison makes the salon time zone irrelevant; the tolerance absorbs
-   client/server clock skew. Deriving `EndAt` from `BarberService.DurationMinutes` is still a
-   separate slice. **Closed 2026-10-22 (R-04).**
+   client/server clock skew. Since the slot-packing slice (2026-11-28) the end is no longer
+   client-supplied at all: `CreateBookingHandler` derives it from
+   `BarberService.DurationMinutes` and creates the booking only at a start the availability
+   calculator offers, so this window check runs on a start the server has already validated.
+   **Closed 2026-10-22 (R-04); end derivation closed 2026-11-28.**
 6. **"What time is it now?"** — the domain does not take a clock. Technical audit stamps
    (`Entity.CreatedAt` / `Entity.UpdatedAt`, `User.RecordLogin` → `LastLoginAt`) are written with
    the system clock (`DateTimeOffset.UtcNow`) on purpose: no domain invariant reads them, so a
@@ -1045,7 +1048,7 @@ The rules below were pushed to the application layer because the aggregate canno
 |---|---|
 | Solution | ✅ 15 проектов; Debug/Release — 0 ошибок, 0 предупреждений |
 | Domain | ✅ 30 типов; бизнес-правила без исключений (§7.5); domain events открыты (§12.6) |
-| Tests | ✅ 629 domain + 1099 application + 456 infrastructure + 347 integration (2531 total); unit-проекты зелёные локально (2026-11-17), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
+| Tests | ✅ 716 domain + 1219 application + 462 infrastructure + 371 integration (2768 total); unit-проекты зелёные локально (2026-11-28), integration — локально на PostgreSQL (`BARBERSEARCH_TEST_POSTGRES`) или в CI |
 | Application | ✅ 170 обработчиков (124 command + 46 query), 22 абстракции репозиториев, `AddApplication()`; валидация в домене, кроме `IPasswordPolicy` (R-10) |
 | Contracts | ✅ 53 request-записи; response-DTO и `PagedResponse<T>`; публичные коды — `ApiErrorCodes` (R-28) |
 | Infrastructure | ✅ 27 конфигураций, 22 репозитория, `IUnitOfWork`, 27 таблиц; 5 FK `NOT VALID`, `ex_bookings_no_overlap`, `ex_barber_salons_primary_per_profile`, `citext`/`ux_specializations_name`, `xmin` у 16 сущностей, `audit_log` (R-34) с allowlist из девяти типов — `User`, `BarberProfile`, `PortfolioPhoto` (`portfolio_photo`), `BarberService` (`barber_service`), `Review`, `Salon`, `HairService`, `Specialization`, `Booking` (у брони `Status`/`BarberNote`/`CancellationReason`/`StartAt`/`EndAt`/`Price`, создание не пишется; у фото портфолио — профиль, `url`, подпись, порядок, публикация, блокировка и `moderationStatus`, создание пишется, до десяти кадров на профиль; у `User` — `Email` (скалярное свойство с конвертером `Email.Value ↔ string`, а не owned-тип: иначе EF теряет снимок старого адреса при замене инстанса, D4) и `AvatarUrl`/`AvatarModerationStatus` вместе с прежним `IsAvatarBlocked`; у салона пишутся `ModerationStatus`, а также `Kind`/`IsListed` — они задаются при создании и попадают в `values` строки `salon.created`, но не `OwnerUserId`/`RejectionReason`; у профиля — `Bio`/`LatePolicy` (#96; `displayName` не пишется: owned-тип, EF теряет снимок старого значения при замене инстанса), у прайса — профиль, услуга каталога, цена, длительность и `isActive`, создание пишется); `barber_requests` в allowlist **не входит** (смена роли уже пишется как `user.updated`, а город/«о себе» — PII); `bookings.*` без FK сознательно; `email_outbox` (§19) без FK и без аудита; `push_device_tokens` и `push_notifications` — обе с FK на `users` `ON DELETE CASCADE`, без аудита (§20) |
@@ -2264,12 +2267,31 @@ default) and does not get a `400`. Before creating the booking the handler
 reads the service through `IBarberProfileRepository.GetServiceAsync` (narrow `barber_services`
 query, no aggregate load), requires `BarberService.BarberProfileId == request.BarberProfileId`
 and `IsActive`; otherwise `404` (`barberProfile.service.notFound` /
-`booking.create.serviceInactive`). **Reference integrity (R-02):** `ISalonRepository.ExistsAsync`
-must find `request.SalonId` (`booking.create.salonNotFound`) and
+`booking.create.serviceInactive`). **Reference integrity (R-02):** the handler loads the salon with
+`ISalonRepository.GetByIdAsync` (`booking.create.salonNotFound`) and
 `IBarberProfileRepository.HasSalonAsync` must find the `(barber_profile_id, salon_id)` row
 (`booking.create.salonNotAssigned`); both checks run before the insert in the same transaction.
-`EndAt` is still taken from the request; duration-derived `EndAt` was deliberately **not**
-introduced in this slice.
+Since 2026-11-28 `EndAt` is **derived from `BarberService.DurationMinutes`** and the request
+carries only `StartAt` — see «Slot packing» below.
+
+**Slot packing and server-derived `EndAt` (2026-11-28).** `CreateBookingRequest` and
+`CreateBarberBookingRequest` no longer carry `endAt`: the end is `BarberService.DurationMinutes`
+measured in salon-local time, so «book 30 minutes and occupy four hours» is not expressible and
+an old client that still sends `endAt` is ignored by `System.Text.Json` (R-33 precedent).
+`SlotGrid.Legal` builds a day from **free windows** — working day minus time offs minus active
+bookings (`BusyInterval`) — and inside each window emits starts stepping by the duration from
+the window's start plus one flush against its end. That is what packs the barber's day: the
+first offered start is right after the previous client, the last one ends right before the next,
+and a 60-minute service after a 12:00–12:30 booking gets 12:30 instead of 13:00. The public path
+(`ConfirmImmediately = false`) requires `StartAt` to equal an offered start exactly
+(`409 booking.create.startAt.notASlot`); the manual barber path accepts any fitting start (a
+client who walked in at 10:07) but still rejects schedule/time-off
+(`409 booking.create.startAt.outsideSchedule`) and overlaps (`409 booking.create.startAt.overlap`).
+The exclusion constraint remains the last line (`booking.add.overlap`). Reschedule reuses the
+same calculator with the duration stored in the booking, and reads without the booking itself.
+A day the barber does not work has no offered slots and creation answers
+`booking.create.startAt.outsideSchedule`, so a barber must have a working schedule before a
+booking can be created.
 
 **Booking window (2026-10-22, R-04).** `CreateBookingHandler` now rejects a `StartAt` earlier
 than `now − 5 minutes` (`400 booking.create.startAt.inPast`) or later than
@@ -2277,11 +2299,10 @@ than `now − 5 minutes` (`400 booking.create.startAt.inPast`) or later than
 The check uses `TimeProvider`, runs after the idempotency-key lookup (a replay returns the
 existing booking even after its start has passed) and compares absolute `DateTimeOffset`
 instants, so the salon time zone does not change the outcome and the 5-minute tolerance only
-absorbs client/server clock skew. `Booking.Create` caps the client-supplied interval at 1440
-minutes (`booking.create.period.tooLong`). Constants: `BOOKING_HORIZON_DAYS`,
-`BOOKING_START_TOLERANCE_MINUTES`, `MAX_BOOKING_DURATION_MINUTES` in `Domain/Constants.cs`.
-`EndAt` is still taken from the request; deriving it from `BarberService.DurationMinutes`
-remains a separate slice.
+absorbs client/server clock skew. `Booking.Create` caps the interval at 1440 minutes
+(`booking.create.period.tooLong`), which is now a server-computed value. Constants:
+`BOOKING_HORIZON_DAYS`, `BOOKING_START_TOLERANCE_MINUTES`, `MAX_BOOKING_DURATION_MINUTES` in
+`Domain/Constants.cs`.
 
 **Optimistic concurrency (2026-10-22, R-05).** Every aggregate entity — the seven roots and the
 seven child rows — is mapped with a shadow `uint xmin` row-version
@@ -2777,8 +2798,11 @@ Conventions:
   booking.add.overlap` from the exclusion constraint; cancelled/completed/no-show rows do not
   block. Inserts are serialised per barber by a transaction-scoped advisory lock so the GiST check
   cannot deadlock under 50-way contention; a defensive `40P01` path returns
-  `409 booking.add.deadlock`. `EndAt` still comes from the request; since 2026-10-22 the handler
-  rejects a `StartAt` outside `[now − 5 minutes; now + 90 days]` (`400
+  `409 booking.add.deadlock`. Since 2026-11-28 the request carries no `endAt` at all: the end is
+  derived from `BarberService.DurationMinutes` and `startAt` must be a free slot of that service
+  (`409 booking.create.startAt.notASlot` / `.outsideSchedule` / `booking.add.overlap`); the
+  manual barber path allows any fitting minute. Since 2026-10-22 the handler also rejects a
+  `StartAt` outside `[now − 5 minutes; now + 90 days]` (`400
   booking.create.startAt.inPast` / `.tooFar`) and `Booking.Create` caps the interval at 1440
   minutes (`booking.create.period.tooLong`, R-04).
 - **Registration consent (2026-11-03, #42).** `POST api/auth/register` takes `consentVersion`,
@@ -3323,7 +3347,11 @@ Read endpoints (added 2026-10-19):
   service was requested and otherwise come from the same `barber_services` row that produced
   `durationMinutes`, so the client can pass `barberServiceId` straight to a booking.
   `TimeOff` intervals and active (`Pending`/`Confirmed`) bookings are subtracted; cancelled,
-  completed and no-show bookings do not block; slots in the past are omitted. Unknown
+  completed and no-show bookings do not block; slots in the past are omitted. Since 2026-11-28 the
+  grid is built per **free window** (working day minus time offs minus active bookings) and the
+  starts inside a window step by the duration from the window's start plus one flush against its
+  end, so the first offered start touches the previous client and the last one touches the next —
+  a gap-free day is preferred over a fixed grid anchored at opening time. Unknown
   profile/salon/service is `404`, missing date is `400`. A missing or unresolvable
   `Salon.TimeZoneId` (historical data only — writes now validate it in `Salon.Create` /
   `UpdateLocation`) is `409` (`barberSlots.timeZone.missing` / `.unknown`) and an error-level log,
