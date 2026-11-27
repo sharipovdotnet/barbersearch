@@ -290,10 +290,11 @@ in Core owns both base addresses.
   and the headings read top to bottom as groups; an alphabetical list would scatter one direction
   across the section. The sort copies the input and returns a new list, so the caller's order is
   never mutated, and the full tie-breaking makes the price list independent of the API's row
-  order — it cannot jump between two reads of the same profile. The «Свободное время» `Picker`
-  deliberately keeps the API order: it and the price list share the same `BarberServiceOption`
-  instances, so only the card list is re-ordered, exactly as the web keeps its select in API
-  order while its card sorts. The cabinet's list keeps its API order, matching
+  order — it cannot jump between two reads of the same profile. The rows of the «Свободное время»
+  service filter keep the API order: the filter and the price list share the same
+  `BarberServiceOption` instances, so only the card list is re-ordered, exactly as the web keeps the
+  options of its slot select in API order while its card sorts. The cabinet's list keeps its API
+  order, matching
   `barber-profile-services.tsx`, and keeps hidden services in their groups; hidden services stay
   out of the public price list. The port mirrors
   `frontend/src/lib/barber-services-order.ts` (`sortBarberServices`) and the web's
@@ -306,6 +307,28 @@ in Core owns both base addresses.
   API order, the category badge on the card and in the cabinet, and both grouping builders —
   headings in first-appearance order, rows kept in source order, interleaved services collected
   under one heading, the blank-specialization tail, and the cabinet's hidden services in API order.
+- **The card's «Услуга» filter is grouped by specialization on its own screen.** MAUI's `Picker` has
+  no `<optgroup>`, so «Свободное время» no longer holds a native select: the field is a 44 pt
+  `Border` showing `ServiceFieldText` — the selected service's name, or «Любая услуга» before any
+  choice, where the old `Picker` looked empty — and a tap opens the `barber-card-service-select`
+  Shell page over the card. The page receives the `BarberCardViewModel` as a route object, so a row
+  calls `SelectServiceAsync` (the same code the removed `Picker` handler used, so the slots are
+  re-requested with the new `hairServiceId`) and pops; the back gesture changes nothing, and the
+  card stays on the stack, so its date, salon and selected slot survive the return. «Любая услуга»
+  sits above the groups and is `ServiceOptions[0]`, not a fresh instance: `SelectServiceAsync`
+  compares by reference and ignores `null`. The groups reproduce `groupBarberServices` from
+  `frontend/src/lib/barber-service-groups.ts` (web PR #206): alphabetical by specialization name in
+  the Russian collation, specialization id as the tiebreaker, API order inside a group, and a
+  trailing «Прочие услуги» group for services without a specialization;
+  `BarberServiceFilterGroups.Build` is a pure function that skips the synthetic «Любая услуга» and
+  never mutates its input. Inactive services never reach it, because `ApplyProfile` already filters
+  `IsActive`. «Услуга», «Любая услуга» and «Прочие услуги» already existed, so no new key, colour,
+  font, radius or package enters the app. Tests add 15 cases (1782 total): the pure
+  grouping (alphabetical order, a name tie broken by id, same names on different specializations,
+  API order inside a group, the «Любая услуга» skip, the blank-specialization tail, an empty input
+  and a non-mutating build), the field text before and after a choice, the selection that
+  re-requests slots with the new `hairServiceId`, the «Любая услуга» that drops it, the reload that
+  rebuilds the groups and resets the choice, and the inactive service kept out of the groups.
 - **A specialization is derived from the services, not managed on its own.** Neither client has
   a «Специализации» block any more: the web cabinet's card was removed together with its
   add/remove control, and the phone's read-only card is gone too, so the price list is the only

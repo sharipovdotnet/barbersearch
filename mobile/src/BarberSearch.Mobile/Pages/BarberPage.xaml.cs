@@ -30,6 +30,7 @@ public partial class BarberPage : ContentPage, IQueryAttributable
     private Guid? _barberId;
     private bool _queryApplied;
     private bool _isAppeared;
+    private bool _isNavigating;
 
     /// <summary>
     /// Область «страница видна»: из неё растёт автоповтор, пока экран на виду.
@@ -132,13 +133,34 @@ public partial class BarberPage : ContentPage, IQueryAttributable
     }
 
     /// <summary>
-    /// Передаёт выбранную услугу во ViewModel: от неё зависит шаг сетки.
+    /// Открывает экран выбора услуги.
     /// </summary>
-    private async void OnServiceChanged(object? sender, EventArgs e)
+    /// <remarks>
+    /// В MAUI у <c>Picker</c> нет <c>optgroup</c>, поэтому «Услуга» — поле с переходом на
+    /// <see cref="BarberCardServiceSelectPage"/>. Экран получает ту же ViewModel, чтобы выбранная
+    /// строка сразу применялась к карточке и перезапрашивала слоты. Пока переход идёт,
+    /// повторный тап игнорируется.
+    /// </remarks>
+    /// <param name="sender">Жест тапа по полю услуги.</param>
+    /// <param name="e">Пустые аргументы жеста.</param>
+    private async void OnServiceFilterTapped(object? sender, TappedEventArgs e)
     {
-        if (sender is Picker picker)
+        if (_isNavigating)
         {
-            await _viewModel.SelectServiceAsync(picker.SelectedItem as BarberServiceOption);
+            return;
+        }
+
+        _isNavigating = true;
+
+        try
+        {
+            await Shell.Current.GoToAsync(
+                BarberCardServiceSelectPage.Route,
+                new Dictionary<string, object> { ["owner"] = _viewModel });
+        }
+        finally
+        {
+            _isNavigating = false;
         }
     }
 

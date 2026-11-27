@@ -40,6 +40,8 @@ public sealed class BarberCardViewModelTests
     private static readonly Guid ColoringBarberServiceId = Guid.Parse("9e100000-0000-4000-8000-000000000007");
     private static readonly Guid SecondHaircutBarberServiceId = Guid.Parse("9e100000-0000-4000-8000-000000000008");
     private static readonly Guid ServiceSpecializationId = Guid.Parse("9e100000-0000-4000-8000-0000000000e8");
+    private static readonly Guid BeardSpecializationId = Guid.Parse("9e100000-0000-4000-8000-0000000000e9");
+    private static readonly Guid HaircutSpecializationId = Guid.Parse("9e100000-0000-4000-8000-0000000000ea");
     private static readonly Guid CreatedId = Guid.Parse("9e100000-0000-4000-8000-00000000000a");
 
     private static readonly DateTimeOffset Now = new(2026, 11, 14, 22, 0, 0, TimeSpan.Zero);
@@ -417,6 +419,160 @@ public sealed class BarberCardViewModelTests
         Assert.Equal(
             ["Стрижка", "Фейд"],
             harness.ViewModel.ServiceGroups.Select(group => group.Title));
+    }
+
+    [Fact]
+    public async Task ServiceFieldText_NoSelection_ShowsAnyServiceThenSelectedName()
+    {
+        using var harness = new Harness();
+
+        // До загрузки профиля выбора нет: поле читается как первый пункт селекта веба.
+        Assert.Null(harness.ViewModel.SelectedService);
+        Assert.Equal("Любая услуга", harness.ViewModel.ServiceFieldText);
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        // Начальное состояние карточки — «Любая услуга», а не пустое поле.
+        Assert.Same(harness.ViewModel.AnyServiceOption, harness.ViewModel.SelectedService);
+        Assert.Equal("Любая услуга", harness.ViewModel.ServiceFieldText);
+
+        await harness.ViewModel.SelectServiceAsync(harness.ViewModel.ServiceOptions[1]);
+
+        Assert.Equal("E2E Стрижка", harness.ViewModel.ServiceFieldText);
+    }
+
+    [Fact]
+    public async Task SelectServiceAsync_SelectedService_UpdatesFieldTextAndRequestsSlots()
+    {
+        using var harness = new Harness();
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        await harness.ViewModel.SelectServiceAsync(harness.ViewModel.ServiceOptions[1]);
+
+        Assert.Equal("E2E Стрижка", harness.ViewModel.ServiceFieldText);
+        Assert.Equal(HairServiceId, harness.Api.SlotsCalls[^1].HairServiceId);
+    }
+
+    [Fact]
+    public async Task SelectServiceAsync_AnyServiceOption_RequestsSlotsWithoutHairServiceId()
+    {
+        using var harness = new Harness();
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        var viewModel = harness.ViewModel;
+
+        // Экран выбора возвращает именно этот пункт: он же лежит первым в ServiceOptions.
+        Assert.Same(viewModel.ServiceOptions[0], viewModel.AnyServiceOption);
+        Assert.Null(viewModel.AnyServiceOption.HairServiceId);
+
+        await viewModel.SelectServiceAsync(viewModel.ServiceOptions[1]);
+        Assert.Equal(HairServiceId, harness.Api.SlotsCalls[^1].HairServiceId);
+
+        await viewModel.SelectServiceAsync(viewModel.AnyServiceOption);
+
+        // Возврат к «Любой услуге» — снова запрос без hairServiceId, а сетка не бронируема.
+        Assert.Null(harness.Api.SlotsCalls[^1].HairServiceId);
+        Assert.Same(viewModel.AnyServiceOption, viewModel.SelectedService);
+        Assert.Equal("Любая услуга", viewModel.ServiceFieldText);
+    }
+
+    [Fact]
+    public async Task RetryLoadCommand_ReloadedProfile_RebuildsFilterGroupsAndResetsSelection()
+    {
+        using var harness = new Harness();
+
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(services:
+        [
+            Service(
+                BarberServiceId,
+                HairServiceId,
+                "Фейд",
+                2400m,
+                45,
+                isActive: true,
+                specializationName: "Стрижка",
+                specializationId: HaircutSpecializationId),
+            Service(
+                SecondHaircutBarberServiceId,
+                Guid.CreateVersion7(),
+                "Оформление бороды",
+                1800m,
+                30,
+                isActive: true,
+                category: ServiceCategory.Beard,
+                specializationName: "Борода",
+                specializationId: BeardSpecializationId),
+        ]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        // Группы фильтра идут по алфавиту специализаций, а не в порядке ответа API.
+        Assert.Equal(
+            ["Борода", "Стрижка"],
+            harness.ViewModel.ServiceFilterGroups.Select(group => group.Title));
+
+        await harness.ViewModel.SelectServiceAsync(harness.ViewModel.ServiceOptions[1]);
+
+        Assert.Equal("Фейд", harness.ViewModel.ServiceFieldText);
+
+        // Новый ответ API: прежней услуги больше нет, поэтому и группы, и выбор собираются заново.
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(services:
+        [
+            Service(
+                ColoringBarberServiceId,
+                Guid.CreateVersion7(),
+                "Балаяж",
+                5000m,
+                120,
+                isActive: true,
+                category: ServiceCategory.Coloring,
+                specializationName: "Окрашивание"),
+        ]));
+
+        await harness.ViewModel.RetryLoadCommand.ExecuteAsync(null);
+
+        Assert.Equal(
+            ["Окрашивание"],
+            harness.ViewModel.ServiceFilterGroups.Select(group => group.Title));
+        Assert.Same(harness.ViewModel.AnyServiceOption, harness.ViewModel.SelectedService);
+        Assert.Same(harness.ViewModel.ServiceOptions[0], harness.ViewModel.SelectedService);
+        Assert.Equal("Любая услуга", harness.ViewModel.ServiceFieldText);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_InactiveService_StaysOutOfServiceFilterGroups()
+    {
+        using var harness = new Harness();
+
+        harness.Api.Profile = _ => Task.FromResult(ProfileResponse(services:
+        [
+            Service(
+                BarberServiceId,
+                HairServiceId,
+                "Фейд",
+                2400m,
+                45,
+                isActive: true,
+                specializationName: "Стрижка",
+                specializationId: HaircutSpecializationId),
+            Service(
+                HiddenBarberServiceId,
+                Guid.CreateVersion7(),
+                "Скрытая услуга",
+                1000m,
+                30,
+                isActive: false,
+                specializationName: "Стрижка",
+                specializationId: HaircutSpecializationId),
+        ]));
+
+        await harness.ViewModel.InitializeAsync(ProfileId);
+
+        // Отбор IsActive уже сделал ApplyProfile: выключенная услуга не даёт ни строки, ни группы.
+        var group = Assert.Single(harness.ViewModel.ServiceFilterGroups);
+
+        Assert.Equal("Стрижка", group.Title);
+        Assert.Equal(["Фейд"], group.Select(option => option.Name));
     }
 
     [Fact]
@@ -1857,7 +2013,8 @@ public sealed class BarberCardViewModelTests
         int durationMinutes,
         bool isActive,
         ServiceCategory category = ServiceCategory.Haircut,
-        string specializationName = "Фейд") =>
+        string specializationName = "Фейд",
+        Guid? specializationId = null) =>
         new(
             barberServiceId,
             hairServiceId,
@@ -1867,7 +2024,7 @@ public sealed class BarberCardViewModelTests
             price,
             durationMinutes,
             isActive,
-            ServiceSpecializationId,
+            specializationId ?? ServiceSpecializationId,
             specializationName);
 
     private static BarberProfileSalonResponse Salon(
