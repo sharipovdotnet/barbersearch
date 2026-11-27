@@ -232,7 +232,7 @@ test.describe('клиент переносит визит', () => {
 
     const account = new AccountBookingsPage(page)
     const bookings = await fetchUpcoming(page.request)
-    // Витринный барбер B1 (его неделя 09:00–18:00 задана в сиде) и вторая строка:
+    // Витринный барбер B1 (его неделя 09:00–18:00 задана в сиде) и вторая запись:
     // первая остаётся нетронутой для соседних сценариев, а клиентский аккаунт
     // `mutations` не делят `account-bookings-mutations` (тот работает с `customer`).
     const target = bookings[1]
@@ -248,7 +248,10 @@ test.describe('клиент переносит визит', () => {
     await waitForRows(account, 4)
 
     try {
-      const row = account.rows.nth(1)
+      // Строку ищем по id брони, а не по её позиции: список сгруппирован по месяцам,
+      // и перенос через границу месяца (29 ноября → 1 декабря) переставляет строку в
+      // группу другого месяца. `nth(1)` после этого указывал бы на соседнюю запись.
+      const row = account.row(target.id)
       const dialog = await openRescheduleDialog(row, page)
       const dateInput = dialog.getByLabel('Новая дата')
       const currentDate = await dateInput.inputValue()

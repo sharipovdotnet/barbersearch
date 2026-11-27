@@ -48,6 +48,18 @@ export class AccountBookingsPage {
     return this.panel.locator('li')
   }
 
+  /**
+   * Строка конкретной брони по её id.
+   *
+   * После переноса через границу месяца строка переезжает в группу другого месяца,
+   * и её позиция среди `rows` меняется: `nth(i)` указывал бы уже на чужую запись.
+   * Атрибут `data-booking-id` ставит `BookingRow`, поэтому мутационные сценарии
+   * адресуют строку, а не место в списке.
+   */
+  row(bookingId: string): Locator {
+    return this.panel.locator(`li[data-booking-id="${bookingId}"]`)
+  }
+
   /** Карточка «Ближайшая запись»: hero собирается из первой строки «Предстоящих». */
   get hero(): Locator {
     return this.page

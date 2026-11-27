@@ -59,7 +59,10 @@ export function BookingRow({
   const canReview = canReviewBooking(booking.status) && !isAlreadyReviewed
 
   return (
-    <li className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 px-4 py-3 transition-colors hover:bg-muted/40 sm:grid-cols-[4.5rem_minmax(0,1fr)_5.5rem_auto] sm:items-center sm:gap-x-4">
+    <li
+      data-booking-id={booking.id}
+      className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 px-4 py-3 transition-colors hover:bg-muted/40 sm:grid-cols-[4.5rem_minmax(0,1fr)_5.5rem_auto] sm:items-center sm:gap-x-4"
+    >
       <div className="col-start-1 row-span-2 row-start-1 sm:row-span-1">
         <p className="text-sm font-medium tabular-nums">
           {formatShortDay(booking.startAt, timeZone)}

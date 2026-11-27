@@ -177,3 +177,14 @@ describe('BookingRow, перенос', () => {
     ).not.toBeInTheDocument()
   })
 })
+
+describe('BookingRow, адрес строки', () => {
+  it('помечает строку id брони: E2E ищет запись, а не позицию в списке', () => {
+    renderRow()
+
+    expect(screen.getByRole('listitem')).toHaveAttribute(
+      'data-booking-id',
+      VIEW.booking.id
+    )
+  })
+})
