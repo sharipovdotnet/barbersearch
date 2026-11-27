@@ -1,9 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 
 import { BarberSlots } from '@/components/barber/barber-slots'
-import type { BarberProfile } from '@/lib/catalog'
+import type { BarberProfile, BarberProfileService } from '@/lib/catalog'
 import { recordRequests } from '@/test/msw/requests'
 import { server } from '@/test/msw/server'
 
@@ -75,6 +75,62 @@ const SLOTS = {
 }
 
 /**
+ * Прайс для группировки: две активные услуги «Барберинга», одна активная
+ * «Бороды» и одна выключенная «Афро». Выключенная специализация сортировалась бы
+ * первой, поэтому её отсутствие видно и по группам, и по строкам.
+ */
+const SERVICES: BarberProfileService[] = [
+  {
+    barberServiceId: 'barber-service-fade',
+    hairServiceId: 'hair-service-fade',
+    name: 'Фейд',
+    category: 'Haircut',
+    specializationId: 'specialization-barbering',
+    specializationName: 'Барберинг',
+    defaultDurationMinutes: 45,
+    price: 1500,
+    durationMinutes: 45,
+    isActive: true,
+  },
+  {
+    barberServiceId: 'barber-service-beard',
+    hairServiceId: 'hair-service-beard',
+    name: 'Оформление бороды',
+    category: 'Beard',
+    specializationId: 'specialization-beard',
+    specializationName: 'Борода',
+    defaultDurationMinutes: 30,
+    price: 800,
+    durationMinutes: 30,
+    isActive: true,
+  },
+  {
+    barberServiceId: 'barber-service-classic',
+    hairServiceId: 'hair-service-classic',
+    name: 'Стрижка',
+    category: 'Haircut',
+    specializationId: 'specialization-barbering',
+    specializationName: 'Барберинг',
+    defaultDurationMinutes: 45,
+    price: 1200,
+    durationMinutes: 45,
+    isActive: true,
+  },
+  {
+    barberServiceId: 'barber-service-afro',
+    hairServiceId: 'hair-service-afro',
+    name: 'Афрокудри',
+    category: 'Other',
+    specializationId: 'specialization-afro',
+    specializationName: 'Афро',
+    defaultDurationMinutes: 60,
+    price: 2000,
+    durationMinutes: 60,
+    isActive: false,
+  },
+]
+
+/**
  * «Свободное время» без места приёма.
  *
  * Раньше секция молча исчезала (`return null`); теперь клиент видит объяснение,
@@ -123,5 +179,68 @@ describe('BarberSlots, подпись места в селекте', () => {
     expect(
       screen.getByRole('option', { name: 'Кабинет на Мира · Кабинет' })
     ).toBeInTheDocument()
+  })
+})
+
+/**
+ * «Услуга» сгруппирована по специализациям: нативный `<optgroup>` легче
+ * просмотреть, чем плоский прайс. Выбранное значение — по-прежнему
+ * `hairServiceId`, а «Любая услуга» стоит вне групп.
+ */
+describe('BarberSlots, группировка услуг', () => {
+  it('раскладывает активные услуги по <optgroup>: группы по алфавиту, строки в порядке API', async () => {
+    server.use(
+      http.get(`/api/barbers/${PROFILE_ID}/slots`, () =>
+        HttpResponse.json(SLOTS)
+      )
+    )
+
+    render(
+      <BarberSlots
+        profile={{ ...PROFILE, salons: [SALON], services: SERVICES }}
+      />
+    )
+
+    // Ответ /slots обновляет состояние: дожидаемся его внутри act(), иначе
+    // получили бы предупреждение о состоянии вне act().
+    expect(
+      await screen.findByText('Выберите услугу, чтобы записаться.')
+    ).toBeInTheDocument()
+
+    const select = screen.getByRole('combobox', { name: 'Услуга' })
+    const groups = within(select).getAllByRole('group')
+
+    // «Афро» — выключенная услуга: её группы в селекте нет, хотя по алфавиту
+    // она стояла бы первой.
+    expect(groups.map((group) => group.getAttribute('label'))).toStrictEqual([
+      'Барберинг',
+      'Борода',
+    ])
+
+    const labelsIn = (label: string): (string | null)[] =>
+      within(within(select).getByRole('group', { name: label }))
+        .getAllByRole('option')
+        .map((option) => option.textContent)
+
+    // «Фейд» идёт раньше «Стрижки» в ответе API, хотя по алфавиту наоборот.
+    expect(labelsIn('Барберинг')).toStrictEqual(['Фейд', 'Стрижка'])
+    expect(labelsIn('Борода')).toStrictEqual(['Оформление бороды'])
+
+    expect(
+      within(select).queryByRole('option', { name: 'Афрокудри' })
+    ).not.toBeInTheDocument()
+    expect(
+      within(select).queryByRole('group', { name: 'Афро' })
+    ).not.toBeInTheDocument()
+
+    const options = within(select).getAllByRole('option')
+
+    // Первый пункт — «Любая услуга», и он не входит ни в одну группу.
+    expect(options[0]).toHaveTextContent('Любая услуга')
+    expect(options[0]).toHaveAttribute('value', '')
+    expect(options[0].closest('optgroup')).toBeNull()
+    expect(options.map((option) => option.getAttribute('value'))).toStrictEqual(
+      ['', 'hair-service-fade', 'hair-service-classic', 'hair-service-beard']
+    )
   })
 })
