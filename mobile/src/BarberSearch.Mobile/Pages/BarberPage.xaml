@@ -286,11 +286,33 @@
                                         FontSize="12"
                                         Text="{loc:Translate Key='Услуга'}"
                                         TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}" />
-                                    <Picker
-                                        ItemsSource="{Binding ServiceOptions}"
-                                        SelectedIndexChanged="OnServiceChanged"
-                                        SelectedItem="{Binding SelectedService, Mode=OneWay}"
-                                        ItemDisplayBinding="{Binding DisplayText, x:DataType=vm:BarberServiceOption}" />
+                                    <!--
+                                        В MAUI у Picker нет optgroup, поэтому поле открывает
+                                        отдельный экран со списком, сгруппированным по
+                                        специализациям (BarberCardServiceSelectPage).
+                                    -->
+                                    <Border
+                                        MinimumHeightRequest="44"
+                                        Padding="12,10"
+                                        Stroke="{AppThemeBinding Light={StaticResource Border}, Dark={StaticResource BorderDark}}"
+                                        StrokeShape="RoundRectangle 10">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Tapped="OnServiceFilterTapped" />
+                                        </Border.GestureRecognizers>
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <Label
+                                                FontSize="16"
+                                                LineBreakMode="TailTruncation"
+                                                Text="{Binding ServiceFieldText}"
+                                                VerticalOptions="Center" />
+                                            <Label
+                                                Grid.Column="1"
+                                                FontSize="16"
+                                                Text="▾"
+                                                TextColor="{AppThemeBinding Light={StaticResource MutedForeground}, Dark={StaticResource MutedForegroundDark}}"
+                                                VerticalOptions="Center" />
+                                        </Grid>
+                                    </Border>
                                 </VerticalStackLayout>
                                 <VerticalStackLayout Grid.Column="1" Spacing="2">
                                     <Label

@@ -44,6 +44,12 @@ public partial class AppShell : Shell
 			HairServiceSelectPage.Route,
 			new PageRouteFactory<HairServiceSelectPage>(services));
 
+		// Услуга в «Свободном времени» карточки тоже выбирается отдельным экраном: в MAUI
+		// у Picker нет optgroup, а список группируется по специализациям.
+		Routing.RegisterRoute(
+			BarberCardServiceSelectPage.Route,
+			new PageRouteFactory<BarberCardServiceSelectPage>(services));
+
 		// Просмотр работ открывается поверх карточки: возврат оставляет её на прежнем месте,
 		// а системная кнопка «назад» закрывает просмотр без своего кода.
 		Routing.RegisterRoute(

@@ -270,10 +270,32 @@ public sealed partial class BarberCardViewModel : ObservableObject
     private string _customerNote = string.Empty;
 
     /// <summary>
-    /// Выбранная услуга; <c>null</c> означает пункт «Любая услуга».
+    /// Выбранная услуга; <c>null</c> — только до загрузки профиля. Пункт «Любая услуга» — это
+    /// экземпляр <see cref="AnyServiceOption"/> из <see cref="ServiceOptions"/>, а не <c>null</c>.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ServiceFieldText))]
     private BarberServiceOption? _selectedService;
+
+    /// <summary>
+    /// Подпись поля «Услуга»: название выбранной услуги или «Любая услуга».
+    /// </summary>
+    /// <remarks>
+    /// «Любая услуга» больше не пункт плоского <c>Picker</c>: поле показывает текст выбора, а
+    /// не строку сгруппированного списка, поэтому без выбора оно читается как первый пункт
+    /// селекта веба, а не остаётся пустым.
+    /// </remarks>
+    public string ServiceFieldText => SelectedService?.DisplayText ?? Loc.T("Любая услуга");
+
+    /// <summary>
+    /// Тот же экземпляр «Любой услуги», что лежит в <see cref="ServiceOptions"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="SelectServiceAsync"/> выходит по <c>ReferenceEquals</c> и игнорирует
+    /// <c>null</c>, поэтому новый <see cref="BarberServiceOption.AnyService"/> на каждый тап
+    /// не подошёл бы: экран выбора возвращает именно этот пункт.
+    /// </remarks>
+    public BarberServiceOption AnyServiceOption => ServiceOptions[0];
 
     /// <summary>
     /// Выбранный салон: от него зависят пояс, «сегодня» и сетка.
@@ -322,7 +344,20 @@ public sealed partial class BarberCardViewModel : ObservableObject
     /// <summary>
     /// Пункты выбора услуги: «Любая услуга» плюс активные услуги прайса.
     /// </summary>
+    /// <remarks>
+    /// Источник и для групп фильтра, и для пункта «Любая услуга»; порядок — порядок ответа API.
+    /// </remarks>
     public ObservableCollection<BarberServiceOption> ServiceOptions { get; } = [];
+
+    /// <summary>
+    /// Тот же прайс, разложенный по специализациям для экрана выбора услуги.
+    /// </summary>
+    /// <remarks>
+    /// Группы идут по алфавиту специализаций (русская локаль), строки внутри — в порядке API, а
+    /// «Любая услуга» стоит над списком и в группы не попадает. Раскладку делает чистая
+    /// <see cref="BarberServiceFilterGroups.Build"/>.
+    /// </remarks>
+    public ObservableCollection<BarberServiceFilterGroup> ServiceFilterGroups { get; } = [];
 
     /// <summary>
     /// Салоны мастера вместе с поясами.
@@ -1244,6 +1279,7 @@ public sealed partial class BarberCardViewModel : ObservableObject
         Services.Clear();
         ServiceGroups.Clear();
         ServiceOptions.Clear();
+        ServiceFilterGroups.Clear();
         Salons.Clear();
         Photos.Clear();
         LanguageChips.Clear();
@@ -1291,6 +1327,13 @@ public sealed partial class BarberCardViewModel : ObservableObject
         }
 
         ServiceOptions.Insert(0, BarberServiceOption.AnyService());
+
+        // Группы фильтра собираются из того же списка: «Любая услуга» отсекается внутри
+        // helper'а, поэтому она остаётся над списком, а не отдельной группой.
+        foreach (var group in BarberServiceFilterGroups.Build(ServiceOptions, OtherServicesGroupTitle))
+        {
+            ServiceFilterGroups.Add(group);
+        }
 
         foreach (var salon in profile.Salons)
         {

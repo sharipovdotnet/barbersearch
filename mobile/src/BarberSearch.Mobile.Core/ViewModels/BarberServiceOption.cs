@@ -9,8 +9,8 @@ namespace BarberSearch.Mobile.Core.ViewModels;
 /// Услуга в карточке: строка прайса и пункт выбора.
 /// </summary>
 /// <remarks>
-/// Один и тот же объект живёт в списке «Услуги» и в <c>Picker</c> «Свободное время»: цена
-/// и длительность приходят из одной строки прайса, и расходить им нельзя. Нулевой
+/// Один и тот же объект живёт в списке «Услуги» и в фильтре «Свободное время»: цена и
+/// длительность приходят из одной строки прайса, и расходить им нельзя. Нулевой
 /// <see cref="HairServiceId"/> — синтетический пункт «Любая услуга»: сервер в этом режиме
 /// отдаёт шаг сетки 30 минут и <c>barberServiceId = null</c>, поэтому записаться нельзя.
 /// </remarks>
@@ -21,6 +21,7 @@ public sealed class BarberServiceOption
         string name,
         ServiceCategory category,
         string categoryText,
+        Guid specializationId,
         string specializationName,
         decimal price,
         string priceText,
@@ -31,6 +32,7 @@ public sealed class BarberServiceOption
         Name = name;
         Category = category;
         CategoryText = categoryText;
+        SpecializationId = specializationId;
         SpecializationName = specializationName;
         Price = price;
         PriceText = priceText;
@@ -53,7 +55,7 @@ public sealed class BarberServiceOption
     /// </summary>
     /// <remarks>
     /// Маркер свёрстан текстом, как у пунктов «О мастере»: под заголовком специализации услуги
-    /// читаются перечислением. <see cref="DisplayText"/> для <c>Picker</c> остаётся без маркера,
+    /// читаются перечислением. <see cref="DisplayText"/> для поля выбора остаётся без маркера,
     /// иначе «Любая услуга» и пункты выбора начинались бы с точки.
     /// </remarks>
     public string DisplayName => string.Concat("• ", Name);
@@ -67,6 +69,15 @@ public sealed class BarberServiceOption
     /// Категория для бейджа: «Стрижка», «Борода»; у «Любой услуги» пусто.
     /// </summary>
     public string CategoryText { get; }
+
+    /// <summary>
+    /// Идентификатор специализации услуги; у «Любой услуги» — <see cref="Guid.Empty"/>.
+    /// </summary>
+    /// <remarks>
+    /// Ключ группировки фильтра «Услуга»: одноимённые, но разные специализации остаются
+    /// разными группами, как в вебе (<c>groupBarberServices</c>).
+    /// </remarks>
+    public Guid SpecializationId { get; }
 
     /// <summary>
     /// Специализация услуги: заголовок её группы в прайсе. У «Любой услуги» пусто.
@@ -89,7 +100,7 @@ public sealed class BarberServiceOption
     public string DurationText { get; }
 
     /// <summary>
-    /// Подпись в <c>Picker</c>: настоящее имя услуги или «Любая услуга».
+    /// Подпись в поле выбора и в строке экрана «Услуга»: настоящее имя услуги или «Любая услуга».
     /// </summary>
     public string DisplayText { get; }
 
@@ -106,6 +117,7 @@ public sealed class BarberServiceOption
             text,
             ServiceCategory.Other,
             string.Empty,
+            Guid.Empty,
             string.Empty,
             0m,
             string.Empty,
@@ -127,6 +139,7 @@ public sealed class BarberServiceOption
             service.Name,
             service.Category,
             BarberProfileText.CategoryText(service.Category),
+            service.SpecializationId,
             service.SpecializationName,
             service.Price,
             BarberText.Price(service.Price),
