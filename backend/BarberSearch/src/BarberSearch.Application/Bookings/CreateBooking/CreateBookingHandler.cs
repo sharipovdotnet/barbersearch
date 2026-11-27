@@ -1,10 +1,12 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.Common;
 using BarberSearch.Application.Push.BarberBooking;
 using BarberSearch.Application.Push.BookingCreated;
 using BarberSearch.Application.Salons;
 using BarberSearch.Application.Users;
+using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain;
 using BarberSearch.Domain.Bookings;
@@ -365,13 +367,8 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
                     request.BarberServiceId));
             }
 
-            var salonExists = await _salons.ExistsAsync(request.SalonId, ct);
-            if (salonExists.IsFailure)
-            {
-                return salonExists.Error;
-            }
-
-            if (!salonExists.Value)
+            var salon = await _salons.GetByIdAsync(request.SalonId, ct);
+            if (salon.IsFailure)
             {
                 return new Failure(Error.NotFound(
                     "booking.create.salonNotFound",
@@ -399,6 +396,187 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
                     request.SalonId));
             }
 
+            // Длительность и конец визита задаёт услуга, а не запрос: клиент выбирает
+            // только начало. Поэтому время проверяется тем же расчётом свободных окон,
+            // что отдаёт GET api/barbers/{id}/slots, — иначе в дне мастера появилась бы
+            // щель, которую уже никто не займёт.
+            if (!SalonTimeZone.TryResolve(salon.Value.TimeZoneId, out var timeZone))
+            {
+                _logger.LogError(
+                    "Salon {SalonId} of barber profile {BarberProfileId} has an unresolvable time zone '{TimeZoneId}'; booking create is rejected.",
+                    salon.Value.Id,
+                    request.BarberProfileId,
+                    salon.Value.TimeZoneId);
+
+                return new Failure(Error.Conflict(
+                    "barberSlots.timeZone.unknown",
+                    $"Salon time zone '{salon.Value.TimeZoneId}' cannot be resolved."));
+            }
+
+            var localStart = TimeZoneInfo.ConvertTime(request.StartAt, timeZone);
+            var localDate = DateOnly.FromDateTime(localStart.DateTime);
+
+            // Публичная запись видит только опубликованный профиль — тот же фильтр, что
+            // у публичных слотов; кабинет барбера работает и до публикации, поэтому ему
+            // собственный контекст. Иначе клиент с известными GUID'ами записался бы
+            // к непроверенному мастеру, которому слоты не отдаются.
+            var contextResult = command.ConfirmImmediately
+                ? await _profiles.GetOwnSlotContextAsync(
+                    request.BarberProfileId,
+                    request.SalonId,
+                    service.Value.HairServiceId,
+                    localDate,
+                    ct)
+                : await _profiles.GetSlotContextAsync(
+                    request.BarberProfileId,
+                    request.SalonId,
+                    service.Value.HairServiceId,
+                    localDate,
+                    ct);
+            if (contextResult.IsFailure)
+            {
+                return contextResult.Error;
+            }
+
+            var context = contextResult.Value;
+
+            // Защита от гонки «услугу скрыли между проверкой IsActive и чтением контекста»:
+            // контекст читает только активную строку, поэтому пара обязана совпасть.
+            // Дату не сверяем: её задаёт сам вызов, а репозиторий строит контекст на неё.
+            if (context.SalonId != request.SalonId)
+            {
+                return new Failure(Error.NotFound(
+                    "booking.create.salonNotFound",
+                    $"Salon '{request.SalonId}' is not available for booking on {localDate:yyyy-MM-dd}.",
+                    request.SalonId));
+            }
+
+            if (context.BarberServiceId != request.BarberServiceId)
+            {
+                return new Failure(Error.NotFound(
+                    "booking.create.serviceInactive",
+                    $"""
+                     Barber service '{request.BarberServiceId}' is inactive and cannot be booked.
+                     """,
+                    request.BarberServiceId));
+            }
+
+            if (!context.IsWorkingDay)
+            {
+                return new Failure(Error.Conflict(
+                    ApiErrorCodes.Booking.CreateStartAtOutsideSchedule,
+                    $"The barber does not work on {localDate:yyyy-MM-dd}."));
+            }
+
+            var dayStart = SalonTimeZone.ToUtc(localDate.ToDateTime(TimeOnly.MinValue), timeZone);
+            var dayEnd = SalonTimeZone.ToUtc(localDate.AddDays(1).ToDateTime(TimeOnly.MinValue), timeZone);
+
+            if (dayStart is null || dayEnd is null)
+            {
+                _logger.LogError(
+                    "Local day boundaries for '{Date}' cannot be converted to UTC in time zone '{TimeZoneId}'.",
+                    localDate,
+                    context.TimeZoneId);
+
+                return new Failure(Error.Conflict(
+                    ApiErrorCodes.Booking.CreateStartAtOutsideSchedule,
+                    $"Local day boundaries for '{localDate}' cannot be converted to UTC."));
+            }
+
+            var active = await _repository.GetActiveByBarberAsync(
+                request.BarberProfileId,
+                dayStart.Value,
+                dayEnd.Value,
+                ct);
+            if (active.IsFailure)
+            {
+                return active.Error;
+            }
+
+            var busy = active.Value
+                .Select(booking => new BusyInterval(booking.StartAt, booking.EndAt))
+                .ToList();
+
+            BarberSlotResponse? slot;
+
+            if (command.ConfirmImmediately)
+            {
+                // Ручной путь барбера: время не обязано совпадать с шагом сетки (клиент
+                // пришёл к 10:07), но визит целиком помещается в рабочий день и не
+                // пересекается ни с отпуском, ни с чужой бронью.
+                var fit = SlotGrid.Fit(
+                    localDate,
+                    context.TimeZoneId,
+                    context.StartTime,
+                    context.EndTime,
+                    context.DurationMinutes,
+                    context.TimeOffs,
+                    busy,
+                    request.StartAt,
+                    out slot);
+
+                if (fit == SlotFit.OutsideSchedule)
+                {
+                    return new Failure(Error.Conflict(
+                        ApiErrorCodes.Booking.CreateStartAtOutsideSchedule,
+                        "The requested time is outside the barber's working hours or time off."));
+                }
+
+                if (fit == SlotFit.Overlap)
+                {
+                    return new Failure(Error.Conflict(
+                        ApiErrorCodes.Booking.CreateStartAtOverlap,
+                        "The requested time is already taken."));
+                }
+            }
+            else
+            {
+                // Публичный путь: начало обязано быть стартом из сетки. Клиент мог
+                // сохранить список слотов до чужой записи, поэтому запрос проверяется
+                // заново, а не доверяется присланному времени.
+                slot = SlotGrid
+                    .Legal(
+                        localDate,
+                        context.TimeZoneId,
+                        context.StartTime,
+                        context.EndTime,
+                        context.DurationMinutes,
+                        context.TimeOffs,
+                        busy)
+                    .FirstOrDefault(candidate => candidate.StartAt == request.StartAt);
+
+                if (slot is null)
+                {
+                    // Причина отказа выбирается по тому, что именно мешает: занятое
+                    // время отвечает booking.add.overlap, как и exclusion-ограничение.
+                    var fit = SlotGrid.Fit(
+                        localDate,
+                        context.TimeZoneId,
+                        context.StartTime,
+                        context.EndTime,
+                        context.DurationMinutes,
+                        context.TimeOffs,
+                        busy,
+                        request.StartAt,
+                        out _);
+
+                    return fit switch
+                    {
+                        SlotFit.Overlap => new Failure(Error.Conflict(
+                            ApiErrorCodes.Booking.AddOverlap,
+                            "The requested time is already taken.")),
+                        SlotFit.OutsideSchedule => new Failure(Error.Conflict(
+                            ApiErrorCodes.Booking.CreateStartAtOutsideSchedule,
+                            "The requested time is outside the barber's working hours or time off.")),
+                        _ => new Failure(Error.Conflict(
+                            ApiErrorCodes.Booking.CreateStartAtNotASlot,
+                            "The requested time is not an available slot for this service."))
+                    };
+                }
+            }
+
+            var chosenSlot = slot!;
+
             // У гостя UserId = null, а имя и телефон — снимок контакта в самой брони.
             // Домен проверяет инвариант «клиент или гость» и нормализует контакт.
             var booking = Booking.Create(
@@ -406,8 +584,8 @@ public class CreateBookingHandler : ICommandHandler<Guid, CreateBookingCommand>
                 request.BarberProfileId,
                 request.BarberServiceId,
                 request.SalonId,
-                request.StartAt,
-                request.EndAt,
+                chosenSlot.StartAt,
+                chosenSlot.EndAt,
                 service.Value.Price,
                 idempotencyKey,
                 request.CustomerNote,

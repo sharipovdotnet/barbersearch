@@ -99,6 +99,38 @@ public class BarberSlotsTests
         Assert.Equal(17, result.Value.Slots.Count);
     }
 
+    /// <summary>
+    /// Активная бронь не просто скрывает один старт: свободные окна строятся вокруг неё,
+    /// поэтому следующий визит начинается ровно в её конце (12:40 по Берлину), а первый
+    /// слот дня по-прежнему примыкает к открытию.
+    /// </summary>
+    [Fact]
+    public async Task Slots_AfterBusyBooking_StartNextVisitAtItsEnd()
+    {
+        var bookings = new FakeBookingRepository();
+
+        // 11:10–11:40Z — это 12:10–12:40 по Берлину зимой (CET, UTC+1).
+        var busyStart = new DateTimeOffset(2026, 12, 1, 11, 10, 0, TimeSpan.Zero);
+        var busyEnd = busyStart.AddMinutes(30);
+        bookings.Add(CreateBooking(busyStart));
+
+        var handler = CreateHandler(CreateContext(), bookings);
+
+        var result = await handler.Handle(
+            new GetBarberSlotsQuery(BarberProfileId, Date, null, null),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            new DateTimeOffset(2026, 12, 1, 8, 0, 0, TimeSpan.Zero),
+            result.Value.Slots[0].StartAt);
+        Assert.DoesNotContain(result.Value.Slots, slot => slot.StartAt == busyStart);
+        Assert.Contains(result.Value.Slots, slot => slot.StartAt == busyEnd);
+        Assert.DoesNotContain(
+            result.Value.Slots,
+            slot => slot.StartAt < busyEnd && busyStart < slot.EndAt);
+    }
+
     [Fact]
     public async Task Slots_DayOff_ReturnEmptySlotsButExplicitBounds()
     {
@@ -264,14 +296,14 @@ public class BarberSlotsTests
             hairServiceId,
             timeOffs ?? []);
 
-    private static Booking CreateBooking(DateTimeOffset startAt)
+    private static Booking CreateBooking(DateTimeOffset startAt, int durationMinutes = 30)
         => Booking.Create(
             Guid.CreateVersion7(),
             BarberProfileId,
             Guid.CreateVersion7(),
             SalonId,
             startAt,
-            startAt.AddMinutes(30),
+            startAt.AddMinutes(durationMinutes),
             30m,
             $"key-{Guid.NewGuid()}").Value;
 }

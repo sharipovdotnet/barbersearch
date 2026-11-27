@@ -39,7 +39,6 @@ public sealed class ConcurrentBookingTests
         await app.AuthenticateAsync(email);
 
         var start = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(45).AddHours(12), TimeSpan.Zero);
-        var end = start.AddMinutes(30);
 
         var requests = Enumerable.Range(0, ATTEMPTS)
             .Select(index => new CreateBookingRequest(
@@ -47,7 +46,6 @@ public sealed class ConcurrentBookingTests
                 barber.Service.Id,
                 barber.Salon.Id,
                 start,
-                end,
                 $"concurrent-{index}-{Guid.NewGuid():N}",
                 "concurrent test"))
             .ToArray();

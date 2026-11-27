@@ -55,7 +55,7 @@ public sealed class PushBookingCreatedTests
         var push = new PushTestData(app);
         await push.SeedDeviceTokenAsync(customerId, "integration-device-token");
 
-        var startAt = DateTimeOffset.UtcNow.AddDays(2);
+        var startAt = FutureStart(2);
         var bookingId = await CreateBookingAsync(app, barber, startAt);
 
         var result = await app.RunPushTickAsync();
@@ -115,7 +115,7 @@ public sealed class PushBookingCreatedTests
         await push.SeedDeviceTokenAsync(customerId, "customer-device-token");
         await push.SeedDeviceTokenAsync(barber.User.Id, "barber-device-token");
 
-        var startAt = DateTimeOffset.UtcNow.AddDays(2);
+        var startAt = FutureStart(2);
         var bookingId = await CreateBookingAsync(app, barber, startAt);
 
         var result = await app.RunPushTickAsync();
@@ -164,7 +164,7 @@ public sealed class PushBookingCreatedTests
 
         await app.AuthenticateAsync(barber.User.Email.Value);
 
-        var startAt = DateTimeOffset.UtcNow.AddDays(2);
+        var startAt = FutureStart(2);
         using var created = await app.Client.PostAsJsonAsync(
             "api/barber/bookings",
             new CreateBarberBookingRequest(
@@ -175,7 +175,6 @@ public sealed class PushBookingCreatedTests
                 BarberServiceId: barber.Service.Id,
                 SalonId: barber.Salon.Id,
                 StartAt: startAt,
-                EndAt: startAt.AddMinutes(30),
                 IdempotencyKey: $"push-manual-{Guid.NewGuid():N}",
                 CustomerNote: null));
 
@@ -218,7 +217,7 @@ public sealed class PushBookingCreatedTests
 
         await app.AuthenticateAsync(barber.User.Email.Value);
 
-        var startAt = DateTimeOffset.UtcNow.AddDays(2);
+        var startAt = FutureStart(2);
         using var created = await app.Client.PostAsJsonAsync(
             "api/barber/bookings",
             new CreateBarberBookingRequest(
@@ -229,7 +228,6 @@ public sealed class PushBookingCreatedTests
                 BarberServiceId: barber.Service.Id,
                 SalonId: barber.Salon.Id,
                 StartAt: startAt,
-                EndAt: startAt.AddMinutes(30),
                 IdempotencyKey: $"push-guest-{Guid.NewGuid():N}",
                 CustomerNote: null));
 
@@ -267,7 +265,7 @@ public sealed class PushBookingCreatedTests
         await app.RegisterAsync(email);
         await app.AuthenticateAsync(email);
 
-        var startAt = DateTimeOffset.UtcNow.AddDays(2);
+        var startAt = FutureStart(2);
         await CreateBookingAsync(app, barber, startAt);
 
         var result = await app.RunPushTickAsync();
@@ -278,6 +276,13 @@ public sealed class PushBookingCreatedTests
         Assert.Empty(await push.GetAllNotificationsAsync());
         Assert.Empty(sender.Messages);
     }
+
+    /// <summary>
+    /// Фиксированный час в будущем: сервер строит слоты в поясе салона (Europe/Berlin), и
+    /// произвольное время суток могло бы не совпасть с сеткой или выйти за 23:59.
+    /// </summary>
+    private static DateTimeOffset FutureStart(int days)
+        => DateTimeOffset.UtcNow.Date.AddDays(days).AddHours(10);
 
     private static async Task<Guid> CreateBookingAsync(
         TestApp app,
@@ -291,7 +296,6 @@ public sealed class PushBookingCreatedTests
                 barber.Service.Id,
                 barber.Salon.Id,
                 startAt,
-                startAt.AddMinutes(30),
                 $"push-create-{Guid.NewGuid():N}",
                 "integration test"));
 

@@ -350,7 +350,6 @@ public sealed class CsrfMutationTests
             barber.Service.Id,
             barber.Salon.Id,
             start,
-            start.AddMinutes(30),
             $"csrf-{Guid.NewGuid():N}",
             "csrf test");
     }

@@ -102,6 +102,12 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
     public BarberSlotContext? SlotContext { get; set; }
 
     /// <summary>
+    /// Контекст дня для конкретного профиля: сценарий с двумя барберами (например, скоуп
+    /// гостевого ключа идемпотентности) задаёт расписание каждому, а не только основному.
+    /// </summary>
+    public Dictionary<Guid, BarberSlotContext> SlotContexts { get; } = [];
+
+    /// <summary>
     /// Какое чтение контекста дня вызвал обработчик: <c>visible</c> — публичная видимость
     /// (клиент-владелец), <c>own</c> — кабинет барбера/администратора. Переносу визита важно
     /// не путать эти ветки: у барбера профиль может быть ещё не опубликован.
@@ -572,6 +578,11 @@ public sealed class FakeBarberProfileRepository : IBarberProfileRepository, IFak
         LastSlotContextDate = date;
         LastSlotContextSalonId = salonId;
         LastSlotContextHairServiceId = hairServiceId;
+
+        if (SlotContexts.TryGetValue(barberProfileId, out var context))
+        {
+            return Task.FromResult<Result<BarberSlotContext, Failure>>(context);
+        }
 
         if (SlotContext is not null && SlotContext.BarberProfileId == barberProfileId)
         {

@@ -9,6 +9,7 @@ using BarberSearch.Contracts.Bookings.RescheduleBooking;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Domain.Bookings;
 using BarberSearch.Domain.Users;
+using BarberSearch.Domain.WorkingSchedules;
 using BarberSearch.Infrastructure.Postgresql;
 using CSharpFunctionalExtensions;
 using Microsoft.EntityFrameworkCore;
@@ -380,7 +381,6 @@ public sealed class BookingRescheduleApiTests
                        barber.Service.Id,
                        barber.Salon.Id,
                        originalStart,
-                       originalStart.AddMinutes(30),
                        $"reschedule-audit-{Guid.NewGuid():N}",
                        null)))
         {
@@ -629,11 +629,17 @@ public sealed class BookingRescheduleApiTests
             .Include(barberSalon => barberSalon.WorkingSchedules)
             .FirstAsync(barberSalon => barberSalon.BarberProfileId == barberProfileId);
 
-        foreach (var day in Enum.GetValues<DayOfWeek>())
-        {
-            Require(link.AddWorkingSchedule(day, new TimeOnly(10, 0), new TimeOnly(18, 0)));
-        }
+        // CreateBookableBarberAsync уже задаёт круглосуточную неделю; замена, а не добавление,
+        // иначе домен отклонит второй день недели как дубликат.
+        var days = Enum.GetValues<DayOfWeek>()
+            .Select(day => new WorkingDaySchedule(
+                day,
+                IsDayOff: false,
+                new TimeOnly(10, 0),
+                new TimeOnly(18, 0)))
+            .ToList();
 
+        Require(link.ReplaceWorkingSchedules(days));
         await db.SaveChangesAsync();
     }
 

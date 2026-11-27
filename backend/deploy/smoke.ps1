@@ -638,9 +638,10 @@ try {
     Write-Host '3. booking creation'
 
     # R-04: StartAt must stay inside now + BOOKING_HORIZON_DAYS (90), so the smoke books
-    # 30..79 days ahead instead of the previous 30..329.
+    # 30..79 days ahead instead of the previous 30..329. Since 2026-11-28 the request carries
+    # no endAt: the server derives it from the barber service duration and requires StartAt
+    # to be an offered slot.
     $slotStart = [DateTimeOffset]::UtcNow.Date.AddDays(30 + (Get-Random -Minimum 0 -Maximum 50)).AddHours(10)
-    $slotEnd = $slotStart.AddMinutes(30)
     $idempotencyKey = "deploy-smoke-$([Guid]::NewGuid().ToString('N'))"
 
     $bookingBody = @{
@@ -648,7 +649,6 @@ try {
         barberServiceId = $barberServiceId
         salonId = $salonId
         startAt = $slotStart.ToString('yyyy-MM-ddTHH:mm:ssZ')
-        endAt = $slotEnd.ToString('yyyy-MM-ddTHH:mm:ssZ')
         idempotencyKey = $idempotencyKey
         customerNote = 'deploy smoke'
     } | ConvertTo-Json -Compress

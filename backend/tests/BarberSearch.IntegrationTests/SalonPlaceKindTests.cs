@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BarberSearch.Contracts.BarberSalons.ReplaceWorkingSchedules;
 using BarberSearch.Contracts.Bookings.CreateBooking;
 using BarberSearch.Contracts.Common;
 using BarberSearch.Contracts.Salons.CreateSalon;
@@ -65,6 +66,10 @@ public sealed class SalonPlaceKindTests
             "Home Visit Place",
             PlaceKind.Home,
             isListed: false);
+
+        // Своё место создаётся без расписания; записи нужен рабочий день пары
+        // (барбер, салон), поэтому неделя задаётся явно — 00:00–23:59, как в TestData.
+        await ReplaceWeekAsync(app, barber.ProfileId, salonId);
 
         // Домен: скрытое место не модерируется, но активно — поэтому публичные чтения
         // пропускают его без правки запросов.
@@ -143,7 +148,6 @@ public sealed class SalonPlaceKindTests
                        barberServiceId,
                        salonId,
                        start,
-                       start.AddMinutes(30),
                        $"place-kind-{Guid.NewGuid():N}",
                        "private home visit")))
         {
@@ -272,6 +276,31 @@ public sealed class SalonPlaceKindTests
         string url,
         object body)
         => app.Client.PostAsync(url, JsonContent.Create(body, options: JsonOptions));
+
+    /// <summary>
+    /// Задаёт неделю 00:00–23:59 для пары (барбер, салон) через API: у салона, созданного
+    /// барбером, расписания нет, и создание брони без рабочего дня отклоняется.
+    /// </summary>
+    private static async Task ReplaceWeekAsync(
+        TestApp app,
+        Guid barberProfileId,
+        Guid salonId)
+    {
+        var days = Enum.GetValues<DayOfWeek>()
+            .Select(day => new ReplaceWorkingScheduleDayRequest(
+                day,
+                IsDayOff: false,
+                TimeOnly.MinValue,
+                new TimeOnly(23, 59)))
+            .ToList();
+
+        using var response = await app.Client.PutAsJsonAsync(
+            $"api/barber-profiles/{barberProfileId}/salons/{salonId}/working-schedules",
+            new ReplaceWorkingSchedulesRequest(days),
+            JsonOptions);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
 
     private static async Task<Salon> ReadSalonAsync(TestApp app, Guid salonId)
     {

@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.Bookings.BookingChangeEmail;
 using BarberSearch.Application.Common;
 using BarberSearch.Application.Push.BookingStatus;
@@ -326,24 +327,6 @@ public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBooking
                 $"The barber does not work on {localDate:yyyy-MM-dd}."));
         }
 
-        // Сравнение по абсолютному моменту: строка локали не должна решать, тот ли это слот.
-        var slot = SlotGrid
-            .Legal(
-                localDate,
-                context.TimeZoneId,
-                context.StartTime,
-                context.EndTime,
-                durationMinutes,
-                context.TimeOffs)
-            .FirstOrDefault(candidate => candidate.StartAt == command.StartAt);
-
-        if (slot is null)
-        {
-            return new Failure(Error.Conflict(
-                ApiErrorCodes.Booking.RescheduleSlot,
-                "The requested time is not a legal slot start."));
-        }
-
         var dayStart = SalonTimeZone.ToUtc(localDate.ToDateTime(TimeOnly.MinValue), timeZone);
         var dayEnd = SalonTimeZone.ToUtc(localDate.AddDays(1).ToDateTime(TimeOnly.MinValue), timeZone);
 
@@ -370,14 +353,45 @@ public sealed class RescheduleBookingHandler : ICommandHandler<RescheduleBooking
         }
 
         // Своя бронь слот не занимает: иначе перенос на соседний слот упирался бы в себя же.
-        if (activeResult.Value.Any(other =>
-                other.Id != booking.Id
-                && other.StartAt < slot.EndAt
-                && slot.StartAt < other.EndAt))
+        // Остальные визиты — препятствия для сетки, поэтому перенос проверяется тем же
+        // расчётом свободных окон, что и публичные слоты.
+        var busy = activeResult.Value
+            .Where(other => other.Id != booking.Id)
+            .Select(other => new BusyInterval(other.StartAt, other.EndAt))
+            .ToList();
+
+        // Отдельный код на занятость нужен до проверки сетки: «время занято» и «это не
+        // начало слота» — разные причины отказа, и тест/клиент различают их по коду.
+        var candidateEnd = SalonTimeZone.ToUtc(
+            TimeZoneInfo.ConvertTime(command.StartAt, timeZone).DateTime.AddMinutes(durationMinutes),
+            timeZone);
+
+        if (candidateEnd is not null
+            && busy.Any(interval =>
+                interval.StartAt < candidateEnd.Value && command.StartAt < interval.EndAt))
         {
             return new Failure(Error.Conflict(
                 ApiErrorCodes.Booking.RescheduleOverlap,
                 "The requested time is already taken."));
+        }
+
+        // Сравнение по абсолютному моменту: строка локали не должна решать, тот ли это слот.
+        var slot = SlotGrid
+            .Legal(
+                localDate,
+                context.TimeZoneId,
+                context.StartTime,
+                context.EndTime,
+                durationMinutes,
+                context.TimeOffs,
+                busy)
+            .FirstOrDefault(candidate => candidate.StartAt == command.StartAt);
+
+        if (slot is null)
+        {
+            return new Failure(Error.Conflict(
+                ApiErrorCodes.Booking.RescheduleSlot,
+                "The requested time is not a legal slot start."));
         }
 
         // Конец берётся у слота, а не пересчитывается как start + duration: на дне перевода

@@ -63,7 +63,7 @@ public sealed class PushStaffCustomerTests
         var push = new PushTestData(app);
         await push.SeedDeviceTokenAsync(staffCustomer.Id, DeviceToken);
 
-        var startAt = DateTimeOffset.UtcNow.AddDays(2);
+        var startAt = FutureStart(2);
         var bookingId = await CreateBookingAsync(app, barber, startAt);
 
         var result = await app.RunPushTickAsync();
@@ -118,7 +118,7 @@ public sealed class PushStaffCustomerTests
         var push = new PushTestData(app);
         await push.SeedDeviceTokenAsync(staffCustomer.Id, DeviceToken);
 
-        var startAt = DateTimeOffset.UtcNow.AddDays(2);
+        var startAt = FutureStart(2);
         var bookingId = await CreateBookingAsync(app, barber, startAt);
 
         var result = await app.RunPushTickAsync();
@@ -265,7 +265,6 @@ public sealed class PushStaffCustomerTests
                 barber.Service.Id,
                 barber.Salon.Id,
                 startAt,
-                startAt.AddMinutes(30),
                 $"push-staff-{Guid.NewGuid():N}",
                 "integration test"));
 
@@ -299,6 +298,13 @@ public sealed class PushStaffCustomerTests
                 $"Seeding failed: {string.Join("; ", result.Error.Errors.Select(error => $"{error.Code}: {error.Message}"))}");
         }
     }
+
+    /// <summary>
+    /// Фиксированный час в будущем: сетка слотов строится в поясе салона (Europe/Berlin),
+    /// поэтому произвольное время суток могло бы не совпасть со стартом слота.
+    /// </summary>
+    private static DateTimeOffset FutureStart(int days)
+        => DateTimeOffset.UtcNow.Date.AddDays(days).AddHours(10);
 
     private static Dictionary<string, string?> PushEnabled()
         => new(StringComparer.Ordinal)

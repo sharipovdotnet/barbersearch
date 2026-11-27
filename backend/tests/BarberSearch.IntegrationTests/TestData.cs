@@ -137,6 +137,17 @@ internal sealed class TestData
         Require(profile.AddSalon(salon.Id, isPrimary: true));
         Require(profile.AddService(hairService.Id, price: 45.00m, durationMinutes: 30));
 
+        // Круглосуточное расписание — только для тестов: создание брони с 2026-11-28 требует,
+        // чтобы день был рабочим, а времена в сценариях приходят из UTC-часов и не должны
+        // зависеть от перехода на летнее время. Проверки расписания живут в отдельных тестах
+        // (BarberScheduleTests, ScheduleConflictApiTests), где неделя задаётся явно.
+        var link = profile.Salons.Single();
+
+        foreach (var day in Enum.GetValues<DayOfWeek>())
+        {
+            Require(link.AddWorkingSchedule(day, TimeOnly.MinValue, new TimeOnly(23, 59)));
+        }
+
         db.BarberProfiles.Add(profile);
         await db.SaveChangesAsync();
 

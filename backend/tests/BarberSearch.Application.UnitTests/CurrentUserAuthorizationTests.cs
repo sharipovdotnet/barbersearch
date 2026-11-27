@@ -110,7 +110,6 @@ public class CurrentUserAuthorizationTests
             Guid.CreateVersion7(),
             Guid.CreateVersion7(),
             startAt,
-            startAt.AddHours(1),
             $"key-{Guid.NewGuid()}",
             null);
 

@@ -16,9 +16,9 @@ namespace BarberSearch.Application.BarberProfiles.GetBarberSlots;
 /// Границы дня и рабочего интервала считаются в часовом поясе салона
 /// (<c>Salon.TimeZoneId</c>) и только затем переводятся в UTC — неявного UTC-сдвига нет.
 /// Сама сетка строится <see cref="SlotGrid"/>: переход на летнее время, дедупликация
-/// повторного часа и отпуска живут там, чтобы перенос визита считал слоты тем же кодом.
-/// Здесь остаются только фильтры, зависящие от сценария: прошедшие слоты и занятость
-/// активными бронями (отменённые и завершённые слот не занимают).
+/// повторного часа, отпуска и занятость активными бронями живут там, чтобы перенос визита
+/// считал слоты тем же кодом. Здесь остаётся только фильтр, зависящий от сценария:
+/// прошедшие слоты (отменённые и завершённые слот не занимают — см. <see cref="BusyInterval"/>).
 /// Если услуга задана, в ответ попадают <c>barberServiceId</c> и <c>hairServiceId</c>
 /// той пары, по которой посчитана длительность: именно <c>barberServiceId</c> нужен
 /// для создания брони (R-20).
@@ -172,6 +172,13 @@ public sealed class GetBarberSlotsHandler
 
         var now = _timeProvider.GetUtcNow();
 
+        // Занятость передаётся в сетку, а не вычитается после: сетка строит свободные окна
+        // дня и ставит слоты от их краёв, поэтому чужая бронь не просто скрывает один старт,
+        // а сдвигает шаг так, чтобы следующий визит начинался сразу после неё.
+        var busy = bookingsResult.Value
+            .Select(booking => new BusyInterval(booking.StartAt, booking.EndAt))
+            .ToList();
+
         // Сама сетка — чистая функция SlotGrid: тот же расчёт нужен переносу визита,
         // у которого длительность берётся из брони, а не из текущего прайса.
         var slots = SlotGrid
@@ -181,10 +188,9 @@ public sealed class GetBarberSlotsHandler
                 context.StartTime,
                 context.EndTime,
                 context.DurationMinutes,
-                context.TimeOffs)
+                context.TimeOffs,
+                busy)
             .Where(slot => slot.StartAt > now)
-            .Where(slot => !bookingsResult.Value.Any(booking =>
-                booking.StartAt < slot.EndAt && slot.StartAt < booking.EndAt))
             .ToList();
 
         return response with { Slots = slots };

@@ -1,5 +1,6 @@
 using BarberSearch.Application.Abstractions;
 using BarberSearch.Application.BarberProfiles;
+using BarberSearch.Application.BarberProfiles.GetBarberSlots;
 using BarberSearch.Application.BarberProfiles.ScheduleConflicts;
 using BarberSearch.Application.Common;
 using BarberSearch.Contracts.BarberProfiles.GetBarberSlots;
@@ -231,6 +232,15 @@ public sealed class GetBookingRescheduleSlotsHandler
         }
 
         var horizonEnd = now.AddDays(Constants.BOOKING_HORIZON_DAYS);
+
+        // Своя бронь не занимает свой слот: перенос на то же время разрешён (D15).
+        // Остальные активные визиты — препятствия для сетки: она ставит слоты от краёв
+        // свободных окон, поэтому новый визит примыкает к соседнему, а не оставляет дыру.
+        var busy = activeResult.Value
+            .Where(other => other.Id != booking.Id)
+            .Select(other => new BusyInterval(other.StartAt, other.EndAt))
+            .ToList();
+
         var slots = SlotGrid
             .Legal(
                 date,
@@ -238,12 +248,9 @@ public sealed class GetBookingRescheduleSlotsHandler
                 context.StartTime,
                 context.EndTime,
                 durationMinutes,
-                context.TimeOffs)
+                context.TimeOffs,
+                busy)
             .Where(slot => slot.StartAt > now && slot.StartAt <= horizonEnd)
-            .Where(slot => !activeResult.Value.Any(other =>
-                other.Id != booking.Id
-                && other.StartAt < slot.EndAt
-                && slot.StartAt < other.EndAt))
             .ToList();
 
         return response with { Slots = slots };

@@ -150,13 +150,21 @@ public class BookingRescheduleSlotsTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(45, result.Value.DurationMinutes);
-        Assert.Equal(10, result.Value.Slots.Count);
+        Assert.Equal(11, result.Value.Slots.Count);
         Assert.Equal(
             new DateTimeOffset(2026, 11, 21, 9, 0, 0, TimeSpan.Zero),
             result.Value.Slots[0].StartAt);
         Assert.Equal(
             new DateTimeOffset(2026, 11, 21, 9, 45, 0, TimeSpan.Zero),
             result.Value.Slots[1].StartAt);
+
+        // Последний слот примыкает к закрытию: 17:15 по Берлину вместо «шага от 10:00».
+        Assert.Equal(
+            new DateTimeOffset(2026, 11, 21, 16, 15, 0, TimeSpan.Zero),
+            result.Value.Slots[^1].StartAt);
+        Assert.Equal(
+            new DateTimeOffset(2026, 11, 21, 17, 0, 0, TimeSpan.Zero),
+            result.Value.Slots[^1].EndAt);
     }
 
     [Fact]
@@ -184,6 +192,39 @@ public class BookingRescheduleSlotsTests
         Assert.DoesNotContain(
             result.Value.Slots,
             slot => slot.StartAt == new DateTimeOffset(2026, 11, 21, 11, 0, 0, TimeSpan.Zero));
+    }
+
+    /// <summary>
+    /// Чужая бронь делит день на свободные окна: следующий визит начинается сразу после неё
+    /// (12:40 по Берлину), а не на «круглом» шаге от открытия.
+    /// </summary>
+    [Fact]
+    public async Task Handle_ForeignBooking_ShiftsTheNextSlotToItsEnd()
+    {
+        var booking = CreateBooking();
+        var bookings = AddBooking(booking);
+
+        // 11:10–11:40Z — это 12:10–12:40 по Берлину зимой (CET, UTC+1).
+        var foreignStart = new DateTimeOffset(2026, 11, 21, 11, 10, 0, TimeSpan.Zero);
+        var foreignEnd = foreignStart.AddMinutes(30);
+        bookings.Add(CreateBooking(startAt: foreignStart, userId: Guid.CreateVersion7()));
+
+        var handler = CreateHandler(bookings: bookings);
+
+        var result = await handler.Handle(
+            new GetBookingRescheduleSlotsQuery(booking.Id, Date),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.DoesNotContain(result.Value.Slots, slot => slot.StartAt == foreignStart);
+
+        // 12:40 по Берлину — ровно конец чужого визита.
+        Assert.Contains(
+            result.Value.Slots,
+            slot => slot.StartAt == foreignEnd);
+        Assert.DoesNotContain(
+            result.Value.Slots,
+            slot => slot.StartAt < foreignEnd && foreignStart < slot.EndAt);
     }
 
     [Fact]
